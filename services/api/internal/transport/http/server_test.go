@@ -97,6 +97,51 @@ func TestAssetJSONRoundTrip(t *testing.T) {
 	}
 }
 
+func TestGetAssetByID(t *testing.T) {
+	s, _ := testServer(t)
+	today := time.Now().Format(time.DateOnly)
+	created := request(s, "POST", "/api/v1/assets", `{"name":"Keyboard","price_cents":10000,"purchase_date":"`+today+`"}`)
+	if created.Code != 201 {
+		t.Fatalf("create: %d %s", created.Code, created.Body)
+	}
+	var createdResponse struct {
+		Asset struct {
+			ID string `json:"id"`
+		} `json:"asset"`
+	}
+	if err := json.Unmarshal(created.Body.Bytes(), &createdResponse); err != nil {
+		t.Fatal(err)
+	}
+
+	found := request(s, "GET", "/api/v1/assets/"+createdResponse.Asset.ID, "")
+	if found.Code != 200 {
+		t.Fatalf("get: %d %s", found.Code, found.Body)
+	}
+	var response struct {
+		Asset map[string]json.RawMessage `json:"asset"`
+	}
+	if err := json.Unmarshal(found.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if string(response.Asset["id"]) != `"`+createdResponse.Asset.ID+`"` {
+		t.Fatalf("id mismatch: %s", found.Body)
+	}
+	if string(response.Asset["name"]) != `"Keyboard"` || string(response.Asset["price_cents"]) != "10000" {
+		t.Fatalf("payload mismatch: %s", found.Body)
+	}
+
+	missing := request(s, "GET", "/api/v1/assets/does-not-exist", "")
+	if missing.Code != 404 {
+		t.Fatalf("missing: got %d %s, want 404", missing.Code, missing.Body)
+	}
+	var failure struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(missing.Body.Bytes(), &failure); err != nil || failure.Error == "" {
+		t.Fatalf("expected JSON error: %s", missing.Body)
+	}
+}
+
 func TestInvalidAssetRequests(t *testing.T) {
 	s, _ := testServer(t)
 	cases := []struct{ name, method, path, body string }{

@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"errors"
 	"time"
 
 	"github.com/moyin1004/suirenx/services/api/internal/domain"
@@ -43,6 +44,19 @@ func (r *GormAssetRepository) List(status *domain.AssetStatus) ([]domain.Asset, 
 		assets = append(assets, record.toDomain())
 	}
 	return assets, nil
+}
+
+func (r *GormAssetRepository) Get(id string) (*domain.Asset, error) {
+	var record AssetRecord
+	err := r.db.Where("id = ?", id).First(&record).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	asset := record.toDomain()
+	return &asset, nil
 }
 
 func (r *GormAssetRepository) Create(asset *domain.Asset) error {

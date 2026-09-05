@@ -47,3 +47,19 @@ func CreateAsset(_ context.Context, c *app.RequestContext) {
 	}
 	c.JSON(consts.StatusCreated, &model.CreateAssetResponse{Asset: toAPIAsset(asset)})
 }
+
+// GetAsset handles the get RPC declared in asset.proto.
+// @router /api/v1/assets/:id [GET]
+func GetAsset(_ context.Context, c *app.RequestContext) {
+	var req model.GetAssetRequest
+	if err := c.BindAndValidate(&req); err != nil {
+		c.JSON(consts.StatusBadRequest, map[string]string{"error": "invalid request path"})
+		return
+	}
+	asset, err := assetService(c).Get(req.Id)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(consts.StatusOK, &model.GetAssetResponse{Asset: toAPIAsset(asset)})
+}

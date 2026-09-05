@@ -1,10 +1,12 @@
 package service
 
 import (
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/moyin1004/suirenx/services/api/internal/domain"
+	"github.com/moyin1004/suirenx/services/api/internal/repository"
 )
 
 type memoryAssetRepository struct {
@@ -22,6 +24,15 @@ func (r *memoryAssetRepository) List(status *domain.AssetStatus) ([]domain.Asset
 		}
 	}
 	return assets, nil
+}
+
+func (r *memoryAssetRepository) Get(id string) (*domain.Asset, error) {
+	for i := range r.assets {
+		if r.assets[i].ID == id {
+			return &r.assets[i], nil
+		}
+	}
+	return nil, repository.ErrNotFound
 }
 
 func (r *memoryAssetRepository) Create(asset *domain.Asset) error {
@@ -53,6 +64,36 @@ func TestCreateCalculatesDailyCost(t *testing.T) {
 	}
 	if asset.DailyCostCents != 2000 {
 		t.Fatalf("daily cost = %d, want 2000", asset.DailyCostCents)
+	}
+}
+
+func TestGetReturnsAssetAndNotFound(t *testing.T) {
+	repo := &memoryAssetRepository{}
+	s := NewAssetService(repo)
+	s.now = func() time.Time { return time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC) }
+
+	created, err := s.Create(CreateAssetInput{
+		Name:         "Keyboard",
+		PriceCents:   10000,
+		PurchaseDate: "2026-09-01",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.Get(created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != created.ID || got.Name != "Keyboard" {
+		t.Fatalf("unexpected asset: %+v", got)
+	}
+	if got.HeldDays != 5 || got.DailyCostCents != 2000 {
+		t.Fatalf("derived values: held=%d daily=%d", got.HeldDays, got.DailyCostCents)
+	}
+
+	if _, err := s.Get("missing-id"); !errors.Is(err, ErrAssetNotFound) {
+		t.Fatalf("missing id: got %v, want ErrAssetNotFound", err)
 	}
 }
 

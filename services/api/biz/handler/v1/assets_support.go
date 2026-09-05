@@ -39,6 +39,8 @@ func writeError(c *app.RequestContext, err error) {
 	if errors.Is(err, service.ErrInvalidName) || errors.Is(err, service.ErrInvalidPrice) ||
 		errors.Is(err, service.ErrInvalidPurchaseDate) || errors.Is(err, service.ErrInvalidStatus) {
 		status = consts.StatusBadRequest
+	} else if errors.Is(err, service.ErrAssetNotFound) {
+		status = consts.StatusNotFound
 	}
 	message := err.Error()
 	if status == consts.StatusInternalServerError {

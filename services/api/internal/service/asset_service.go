@@ -17,6 +17,7 @@ var (
 	ErrInvalidPrice        = errors.New("price must not be negative")
 	ErrInvalidPurchaseDate = errors.New("purchase date must use YYYY-MM-DD")
 	ErrInvalidStatus       = errors.New("invalid asset status")
+	ErrAssetNotFound       = errors.New("asset not found")
 )
 
 type AssetView struct {
@@ -67,6 +68,17 @@ func (s *AssetService) List(status string) ([]AssetView, error) {
 		views = append(views, s.toView(asset))
 	}
 	return views, nil
+}
+
+func (s *AssetService) Get(id string) (AssetView, error) {
+	asset, err := s.repository.Get(id)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return AssetView{}, ErrAssetNotFound
+		}
+		return AssetView{}, fmt.Errorf("get asset: %w", err)
+	}
+	return s.toView(*asset), nil
 }
 
 func (s *AssetService) Create(input CreateAssetInput) (AssetView, error) {

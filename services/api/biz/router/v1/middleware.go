@@ -30,3 +30,13 @@ func _createassetMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _assetsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _getassetMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
