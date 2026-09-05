@@ -1,32 +1,28 @@
 package io.suirenx.feature.assets
 
-import io.suirenx.core.domain.BackendRepository
-import io.suirenx.core.model.BackendSettings
-import kotlinx.coroutines.flow.MutableStateFlow
 import io.suirenx.core.domain.AssetRepository
-import io.suirenx.core.domain.CreateAssetUseCase
+import io.suirenx.core.domain.BackendRepository
 import io.suirenx.core.domain.GetAssetsUseCase
 import io.suirenx.core.model.Asset
 import io.suirenx.core.model.AssetStatus
+import io.suirenx.core.model.BackendSettings
 import io.suirenx.core.model.NewAsset
+import java.time.LocalDate
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
-import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import java.time.LocalDate
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AssetsViewModelTest {
@@ -35,66 +31,12 @@ class AssetsViewModelTest {
     @Before fun setUp() = Dispatchers.setMain(dispatcher)
     @After fun tearDown() = Dispatchers.resetMain()
 
-    @Test fun preventsDuplicateSavesAndRefreshesAllAssets() = runTest(dispatcher) {
-        val repo = FakeRepository()
-        repo.pending = CompletableDeferred()
-        val vm = AssetsViewModel(GetAssetsUseCase(repo), CreateAssetUseCase(repo), FakeBackends(), AssetChangeNotifier())
-        advanceUntilIdle()
-        vm.onFilterSelected(AssetFilter.Retired)
-        advanceUntilIdle()
-        vm.openCreateForm()
-        vm.onNameChanged("Keyboard")
-        vm.onPriceChanged("19.99")
-        vm.saveAsset()
-        vm.saveAsset()
-        vm.dismissCreateForm()
-        runCurrent()
-        assertTrue(vm.uiState.value.form!!.isSaving)
-        assertEquals(1, repo.createCalls)
-        repo.pending!!.complete(Unit)
-        advanceUntilIdle()
-        assertNull(vm.uiState.value.form)
-        assertEquals(AssetFilter.All, vm.uiState.value.selectedFilter)
-        assertEquals(1999L, vm.uiState.value.assets.single().priceCents)
-    }
-
-    @Test fun failedSaveRetainsInputAndAllowsRetry() = runTest(dispatcher) {
-        val repo = FakeRepository().apply { fail = true }
-        val vm = AssetsViewModel(GetAssetsUseCase(repo), CreateAssetUseCase(repo), FakeBackends(), AssetChangeNotifier())
-        advanceUntilIdle()
-        vm.openCreateForm()
-        vm.onNameChanged("Keyboard")
-        vm.onPriceChanged("19.99")
-        vm.saveAsset()
-        advanceUntilIdle()
-        assertEquals("Keyboard", vm.uiState.value.form!!.name)
-        assertEquals("19.99", vm.uiState.value.form!!.price)
-        assertFalse(vm.uiState.value.form!!.isSaving)
-        assertNotNull(vm.uiState.value.form!!.errorMessage)
-        repo.fail = false
-        vm.saveAsset()
-        advanceUntilIdle()
-        assertNull(vm.uiState.value.form)
-        assertEquals(2, repo.createCalls)
-    }
-
-    @Test fun invalidInputNeverCallsRepository() = runTest(dispatcher) {
-        val repo = FakeRepository()
-        val vm = AssetsViewModel(GetAssetsUseCase(repo), CreateAssetUseCase(repo), FakeBackends(), AssetChangeNotifier())
-        advanceUntilIdle()
-        vm.openCreateForm()
-        vm.saveAsset()
-        advanceUntilIdle()
-        assertEquals(0, repo.createCalls)
-        assertNotNull(vm.uiState.value.form!!.errorMessage)
-    }
-
     @Test fun overviewCoversAllAssetsButDailyCostOnlyActive() = runTest(dispatcher) {
         val repo = FakeRepository().apply {
             seed(Asset("a1", "MacBook", 1_000_000, LocalDate.now(), AssetStatus.Active, "", 10, 5_000))
             seed(Asset("a2", "Kindle", 300_000, LocalDate.now(), AssetStatus.Retired, "", 300, 1_000))
         }
-        val vm = AssetsViewModel(GetAssetsUseCase(repo), CreateAssetUseCase(repo), FakeBackends(), AssetChangeNotifier())
+        val vm = AssetsViewModel(GetAssetsUseCase(repo), FakeBackends(), AssetChangeNotifier())
         advanceUntilIdle()
 
         val overview = vm.uiState.value.overview
@@ -111,7 +53,7 @@ class AssetsViewModelTest {
             seed(Asset("a2", "Two", 200, LocalDate.now(), AssetStatus.Active, "", 1, 200))
             seed(Asset("a3", "Three", 300, LocalDate.now(), AssetStatus.Retired, "", 1, 300))
         }
-        val vm = AssetsViewModel(GetAssetsUseCase(repo), CreateAssetUseCase(repo), FakeBackends(), AssetChangeNotifier())
+        val vm = AssetsViewModel(GetAssetsUseCase(repo), FakeBackends(), AssetChangeNotifier())
         advanceUntilIdle()
         val callsAfterLoad = repo.listCalls
 
@@ -133,7 +75,7 @@ class AssetsViewModelTest {
             seed(Asset("a1", "One", 100, LocalDate.now(), AssetStatus.Active, "", 1, 100))
         }
         val notifier = AssetChangeNotifier()
-        val vm = AssetsViewModel(GetAssetsUseCase(repo), CreateAssetUseCase(repo), FakeBackends(), notifier)
+        val vm = AssetsViewModel(GetAssetsUseCase(repo), FakeBackends(), notifier)
         advanceUntilIdle()
         assertEquals(1, vm.uiState.value.assets.size)
 
@@ -143,22 +85,22 @@ class AssetsViewModelTest {
         assertEquals(2, vm.uiState.value.assets.size)
     }
 
-    @Test fun switchingBackendCancelsSaveAndClearsDraft() = runTest(dispatcher) {
-        val repo = FakeRepository().apply { pending = CompletableDeferred() }
+    @Test fun switchingBackendReloadsAndResetsFilter() = runTest(dispatcher) {
+        val repo = FakeRepository()
         val backends = FakeBackends()
-        val vm = AssetsViewModel(GetAssetsUseCase(repo), CreateAssetUseCase(repo), backends, AssetChangeNotifier())
+        val vm = AssetsViewModel(GetAssetsUseCase(repo), backends, AssetChangeNotifier())
         advanceUntilIdle()
-        vm.openCreateForm()
-        vm.onNameChanged("Old server asset")
-        vm.onPriceChanged("20")
-        vm.saveAsset()
-        runCurrent()
+        val callsAfterFirstLoad = repo.listCalls
+        vm.onFilterSelected(AssetFilter.Retired)
+        advanceUntilIdle()
+
         backends.settings.value = BackendSettings(activeUrl = "https://second.example/")
-        runCurrent()
-        assertNull(vm.uiState.value.form)
-        repo.pending!!.complete(Unit)
         advanceUntilIdle()
-        assertTrue(vm.uiState.value.assets.isEmpty())
+
+        // Switching backend cancels the old state and reloads from scratch.
+        assertTrue(repo.listCalls > callsAfterFirstLoad)
+        assertEquals(AssetFilter.All, vm.uiState.value.selectedFilter)
+        assertFalse(vm.uiState.value.isLoading)
     }
 
     private class FakeBackends : BackendRepository {
@@ -177,6 +119,11 @@ class AssetsViewModelTest {
         private val assets = mutableListOf<Asset>()
 
         fun seed(asset: Asset) { assets += asset }
+
+        fun replace(asset: Asset) {
+            assets.removeAll { it.id == asset.id }
+            assets += asset
+        }
 
         override suspend fun getAssets(status: AssetStatus?): Result<List<Asset>> {
             listCalls++

@@ -1,5 +1,6 @@
 package io.suirenx.feature.assets
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,27 +11,26 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -48,32 +48,22 @@ import java.util.Locale
 fun AssetDetailRoute(
     assetId: String,
     onBack: () -> Unit,
+    onEdit: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: AssetDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     LaunchedEffect(assetId) { viewModel.load(assetId) }
+    BackHandler { onBack() }
     AssetDetailScreen(
         state = state,
         onBack = onBack,
         onRetry = viewModel::retry,
-        onEdit = viewModel::openEdit,
+        onEdit = onEdit,
         modifier = modifier,
     )
-    state.form?.let { form ->
-        AssetFormDialog(
-            title = stringResource(R.string.edit_asset_title),
-            state = form,
-            onNameChanged = viewModel::onEditNameChanged,
-            onPriceChanged = viewModel::onEditPriceChanged,
-            onPurchaseDateChanged = viewModel::onEditPurchaseDateChanged,
-            onSave = viewModel::saveEdit,
-            onDismiss = viewModel::dismissEdit,
-        )
-    }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AssetDetailScreen(
     state: AssetDetailUiState,
@@ -85,44 +75,103 @@ fun AssetDetailScreen(
     Scaffold(
         modifier = modifier,
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                title = { Text("资产详情") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                actions = {
-                    if (state.asset != null) {
-                        IconButton(onClick = onEdit) {
-                            Icon(Icons.Outlined.Edit, contentDescription = "编辑资产")
-                        }
-                    }
-                },
-            )
-        },
     ) { innerPadding ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding),
-            contentAlignment = Alignment.Center,
+                .padding(innerPadding)
+                .verticalScroll(rememberScrollState()),
         ) {
+            DetailTopBar(
+                editEnabled = state.asset != null,
+                onBack = onBack,
+                onEdit = onEdit,
+            )
             when {
-                state.isLoading -> CircularProgressIndicator()
-                state.errorMessage != null -> Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
+                state.isLoading -> Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(320.dp),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Text(
-                        state.errorMessage,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Button(onClick = onRetry) { Text("重试") }
+                    CircularProgressIndicator()
+                }
+                state.errorMessage != null && state.asset == null -> Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(320.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            state.errorMessage,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Button(onClick = onRetry) { Text("重试") }
+                    }
                 }
                 state.asset != null -> AssetDetailContent(state.asset)
             }
+        }
+    }
+}
+
+@Composable
+private fun DetailTopBar(
+    editEnabled: Boolean,
+    onBack: () -> Unit,
+    onEdit: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CircleBarButton(
+            onClick = onBack,
+            contentDescription = "关闭",
+        ) {
+            Icon(
+                imageVector = Icons.Default.Close,
+                contentDescription = null,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+        Spacer(Modifier.weight(1f))
+        if (editEnabled) {
+            CircleBarButton(
+                onClick = onEdit,
+                contentDescription = "编辑资产",
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Edit,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CircleBarButton(
+    onClick: () -> Unit,
+    contentDescription: String,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        modifier = modifier.size(44.dp),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            content()
         }
     }
 }
@@ -132,31 +181,28 @@ private fun AssetDetailContent(asset: Asset, modifier: Modifier = Modifier) {
     val currency = NumberFormat.getCurrencyInstance(Locale.CHINA)
     Column(
         modifier = modifier
-            .fillMaxSize()
+            .fillMaxWidth()
             .padding(horizontal = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Spacer(Modifier.height(24.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Surface(
-                shape = RoundedCornerShape(28.dp),
-                color = MaterialTheme.colorScheme.surface,
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Devices,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .padding(20.dp)
-                        .size(48.dp),
-                )
-            }
-            Spacer(Modifier.size(16.dp))
-            Column {
-                Text(asset.name, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(6.dp))
-                StatusChip(asset.status)
-            }
+        Spacer(Modifier.height(20.dp))
+        Surface(
+            shape = RoundedCornerShape(36.dp),
+            color = MaterialTheme.colorScheme.surface,
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Devices,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .padding(28.dp)
+                    .size(64.dp),
+            )
         }
+        Spacer(Modifier.height(18.dp))
+        Text(asset.name, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(10.dp))
+        StatusChip(asset.status)
         Spacer(Modifier.height(28.dp))
         InfoCard(
             rows = listOf(
@@ -166,6 +212,7 @@ private fun AssetDetailContent(asset: Asset, modifier: Modifier = Modifier) {
                 "日均成本" to "${currency.format(asset.dailyCostCents / 100.0)}/天",
             ),
         )
+        Spacer(Modifier.height(24.dp))
     }
 }
 

@@ -1,10 +1,9 @@
 package io.suirenx.feature.assets
 
-import io.suirenx.feature.assets.AssetsViewModelTest.FakeRepository
 import io.suirenx.core.domain.GetAssetUseCase
-import io.suirenx.core.domain.UpdateAssetUseCase
 import io.suirenx.core.model.Asset
 import io.suirenx.core.model.AssetStatus
+import io.suirenx.feature.assets.AssetsViewModelTest.FakeRepository
 import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -45,7 +44,7 @@ class AssetDetailViewModelTest {
 
     @Test fun loadShowsAssetOnSuccess() = runTest(dispatcher) {
         val repo = FakeRepository().apply { seed(sampleAsset) }
-        val vm = AssetDetailViewModel(GetAssetUseCase(repo), UpdateAssetUseCase(repo), AssetChangeNotifier())
+        val vm = AssetDetailViewModel(GetAssetUseCase(repo), AssetChangeNotifier())
 
         assertTrue(vm.uiState.value.isLoading)
         vm.load("asset-1")
@@ -60,7 +59,7 @@ class AssetDetailViewModelTest {
 
     @Test fun blankIdIsIgnoredAndKeepsInitialState() = runTest(dispatcher) {
         val repo = FakeRepository().apply { seed(sampleAsset) }
-        val vm = AssetDetailViewModel(GetAssetUseCase(repo), UpdateAssetUseCase(repo), AssetChangeNotifier())
+        val vm = AssetDetailViewModel(GetAssetUseCase(repo), AssetChangeNotifier())
 
         vm.load(" ")
         advanceUntilIdle()
@@ -75,7 +74,7 @@ class AssetDetailViewModelTest {
             seed(sampleAsset)
             fail = true
         }
-        val vm = AssetDetailViewModel(GetAssetUseCase(repo), UpdateAssetUseCase(repo), AssetChangeNotifier())
+        val vm = AssetDetailViewModel(GetAssetUseCase(repo), AssetChangeNotifier())
 
         vm.load("asset-1")
         advanceUntilIdle()
@@ -96,7 +95,7 @@ class AssetDetailViewModelTest {
 
     @Test fun reloadForAlreadyLoadedIdIsSkipped() = runTest(dispatcher) {
         val repo = FakeRepository().apply { seed(sampleAsset) }
-        val vm = AssetDetailViewModel(GetAssetUseCase(repo), UpdateAssetUseCase(repo), AssetChangeNotifier())
+        val vm = AssetDetailViewModel(GetAssetUseCase(repo), AssetChangeNotifier())
 
         vm.load("asset-1")
         advanceUntilIdle()
@@ -109,82 +108,47 @@ class AssetDetailViewModelTest {
         assertNull(vm.uiState.value.errorMessage)
     }
 
-    @Test fun editPrefillsFormAndSaveUpdatesAssetAndNotifies() = runTest(dispatcher) {
+    @Test fun changeNotifierSilentlyRefreshesLoadedAsset() = runTest(dispatcher) {
         val repo = FakeRepository().apply { seed(sampleAsset) }
         val notifier = AssetChangeNotifier()
-        val vm = AssetDetailViewModel(GetAssetUseCase(repo), UpdateAssetUseCase(repo), notifier)
-        val notifications = mutableListOf<Unit>()
-        // Unconfined so the collector subscribes immediately at launch (replay=0
-        // SharedFlow would otherwise miss emissions that happen before subscription).
+        val vm = AssetDetailViewModel(GetAssetUseCase(repo), notifier)
+
+        vm.load("asset-1")
+        advanceUntilIdle()
+        assertEquals("MacBook Pro", vm.uiState.value.asset?.name)
+
+        val states = mutableListOf<AssetDetailUiState>()
+        // Unconfined so the collector subscribes immediately (StateFlow replays
+        // the current value) and records every state the silent refresh emits.
         backgroundScope.launch(UnconfinedTestDispatcher(dispatcher.scheduler)) {
-            notifier.events.toList(notifications)
+            vm.uiState.toList(states)
         }
 
-        vm.load("asset-1")
-        advanceUntilIdle()
-        vm.openEdit()
-
-        val form = vm.uiState.value.form
-        assertNotNull(form)
-        assertEquals("MacBook Pro", form!!.name)
-        assertEquals("16999.00", form.price)
-        assertEquals("2026-01-01", form.purchaseDate)
-
-        vm.onEditNameChanged("MacBook Pro M5")
-        vm.onEditPriceChanged("18999")
-        vm.saveEdit()
+        repo.replace(sampleAsset.copy(name = "MacBook Pro M5"))
+        notifier.notifyAssetChanged()
         advanceUntilIdle()
 
-        assertNull(vm.uiState.value.form)
-        val updated = vm.uiState.value.asset
-        assertEquals("MacBook Pro M5", updated?.name)
-        assertEquals(1_899_900L, updated?.priceCents)
-        assertEquals(1, notifications.size)
-        assertEquals(1, repo.updateCalls)
+        assertEquals("MacBook Pro M5", vm.uiState.value.asset?.name)
+        // A background refresh must never flip the screen into its loading state.
+        assertTrue(states.none { it.isLoading })
     }
 
-    @Test fun failedEditKeepsFormInputAndShowsError() = runTest(dispatcher) {
+    @Test fun silentRefreshFailureKeepsVisibleAsset() = runTest(dispatcher) {
         val repo = FakeRepository().apply { seed(sampleAsset) }
-        val vm = AssetDetailViewModel(GetAssetUseCase(repo), UpdateAssetUseCase(repo), AssetChangeNotifier())
+        val notifier = AssetChangeNotifier()
+        val vm = AssetDetailViewModel(GetAssetUseCase(repo), notifier)
 
         vm.load("asset-1")
         advanceUntilIdle()
+
         repo.fail = true
-        vm.openEdit()
-        vm.onEditNameChanged("New Name")
-        vm.saveEdit()
+        notifier.notifyAssetChanged()
         advanceUntilIdle()
 
-        val form = vm.uiState.value.form
-        assertNotNull(form)
-        assertFalse(form!!.isSaving)
-        assertEquals("New Name", form.name)
-        assertNotNull(form.errorMessage)
-        // The loaded asset stays untouched after a failed save.
+        // The background refresh failed: keep the cached asset, show neither
+        // spinner nor error on the already-rendered detail screen.
         assertEquals("MacBook Pro", vm.uiState.value.asset?.name)
-    }
-
-    @Test fun invalidEditInputNeverCallsRepository() = runTest(dispatcher) {
-        val repo = FakeRepository().apply { seed(sampleAsset) }
-        val vm = AssetDetailViewModel(GetAssetUseCase(repo), UpdateAssetUseCase(repo), AssetChangeNotifier())
-
-        vm.load("asset-1")
-        advanceUntilIdle()
-        vm.openEdit()
-        vm.onEditNameChanged("   ")
-        vm.saveEdit()
-        advanceUntilIdle()
-
-        assertNotNull(vm.uiState.value.form!!.errorMessage)
-        assertEquals(0, repo.updateCalls)
-        assertEquals("MacBook Pro", vm.uiState.value.asset?.name)
-    }
-
-    @Test fun editCannotOpenBeforeAssetLoads() = runTest(dispatcher) {
-        val repo = FakeRepository().apply { seed(sampleAsset) }
-        val vm = AssetDetailViewModel(GetAssetUseCase(repo), UpdateAssetUseCase(repo), AssetChangeNotifier())
-
-        vm.openEdit()
-        assertNull(vm.uiState.value.form)
+        assertFalse(vm.uiState.value.isLoading)
+        assertNull(vm.uiState.value.errorMessage)
     }
 }

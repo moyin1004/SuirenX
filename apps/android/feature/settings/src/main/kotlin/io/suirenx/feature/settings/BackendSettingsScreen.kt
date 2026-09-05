@@ -20,7 +20,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,7 +41,6 @@ fun BackendSettingsScreen(
     onSave: () -> Unit,
     onSelect: (String) -> Unit,
     onRetry: () -> Unit,
-    onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val configured = state.settings?.activeUrl != null
@@ -53,7 +51,6 @@ fun BackendSettingsScreen(
         ) {
             item {
                 Spacer(Modifier.height(16.dp))
-                if (configured) TextButton(onClick = onBack) { Text("返回资产") }
                 Text(if (configured) "后端设置" else "连接你的后端", style = MaterialTheme.typography.headlineLarge)
                 Spacer(Modifier.height(12.dp))
                 Text(
@@ -115,7 +112,8 @@ fun BackendSettingsScreen(
                     }
                 }
             }
-            item { Spacer(Modifier.height(20.dp)) }
+            // Bottom space clears the floating capsule tab bar in the settings tab.
+            item { Spacer(Modifier.height(100.dp)) }
         }
     }
 }
@@ -124,7 +122,7 @@ fun BackendSettingsScreen(
 @Composable
 private fun SetupPreview() {
     SuirenXTheme {
-        BackendSettingsScreen(BackendUiState(settings = BackendSettings()), {}, {}, {}, {}, {}, {})
+        BackendSettingsScreen(BackendUiState(settings = BackendSettings()), {}, {}, {}, {}, {})
     }
 }
 
@@ -134,7 +132,7 @@ private fun SettingsPreview() {
     SuirenXTheme {
         BackendSettingsScreen(
             BackendUiState(settings = BackendSettings(listOf(BackendServer("https://api.example.com/", "我的服务")), "https://api.example.com/")),
-            {}, {}, {}, {}, {}, {},
+            {}, {}, {}, {}, {},
         )
     }
 }

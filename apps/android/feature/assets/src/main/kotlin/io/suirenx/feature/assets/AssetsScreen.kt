@@ -14,33 +14,23 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.outlined.AutoGraph
 import androidx.compose.material.icons.outlined.Devices
-import androidx.compose.material.icons.outlined.FavoriteBorder
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -51,7 +41,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -67,7 +56,6 @@ import java.util.Locale
 
 @Composable
 fun AssetsRoute(
-    onOpenSettings: () -> Unit,
     onAssetClick: (String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: AssetsViewModel = hiltViewModel(),
@@ -77,22 +65,9 @@ fun AssetsRoute(
         state = state,
         onFilterSelected = viewModel::onFilterSelected,
         onRefresh = viewModel::refresh,
-        onAddAsset = viewModel::openCreateForm,
-        onOpenSettings = onOpenSettings,
         onAssetClick = onAssetClick,
         modifier = modifier,
     )
-    state.form?.let { form ->
-        AssetFormDialog(
-            title = stringResource(R.string.create_asset_title),
-            state = form,
-            onNameChanged = viewModel::onNameChanged,
-            onPriceChanged = viewModel::onPriceChanged,
-            onPurchaseDateChanged = viewModel::onPurchaseDateChanged,
-            onSave = viewModel::saveAsset,
-            onDismiss = viewModel::dismissCreateForm,
-        )
-    }
 }
 
 @Composable
@@ -100,53 +75,47 @@ fun AssetsScreen(
     state: AssetsUiState,
     onFilterSelected: (AssetFilter) -> Unit,
     onRefresh: () -> Unit,
-    onAddAsset: () -> Unit,
-    onOpenSettings: () -> Unit,
     onAssetClick: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Scaffold(
-        modifier = modifier,
-        containerColor = MaterialTheme.colorScheme.background,
-        bottomBar = { AssetBottomBar(onOpenSettings) },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = onAddAsset,
-                shape = CircleShape,
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.size(72.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "新增资产",
-                    modifier = Modifier.size(34.dp),
+    // One scrolling container: the overview card scrolls away while the filter
+    // chips stay pinned, mirroring the 有数-style collapsing overview.
+    LazyColumn(
+        modifier = modifier
+            .fillMaxSize()
+            .statusBarsPadding(),
+        contentPadding = PaddingValues(top = 18.dp, bottom = 120.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
+    ) {
+        item {
+            Header(onRefresh = onRefresh, modifier = Modifier.padding(horizontal = 20.dp))
+        }
+        if (state.assets.isNotEmpty()) {
+            item {
+                AssetOverviewCard(
+                    overview = state.overview,
+                    modifier = Modifier.padding(horizontal = 20.dp),
                 )
             }
-        },
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 20.dp),
-        ) {
-            Spacer(Modifier.height(18.dp))
-            Header(onRefresh = onRefresh)
-            Spacer(Modifier.height(20.dp))
-            if (state.assets.isNotEmpty()) {
-                AssetOverviewCard(state.overview)
-                Spacer(Modifier.height(20.dp))
+        }
+        stickyHeader {
+            FilterChips(selected = state.selectedFilter, onSelected = onFilterSelected)
+        }
+        when {
+            state.isLoading -> item {
+                LoadingState(Modifier.fillParentMaxSize())
             }
-            FilterRow(state.selectedFilter, onFilterSelected)
-            Spacer(Modifier.height(20.dp))
-
-            when {
-                state.isLoading -> LoadingState()
-                state.errorMessage != null -> ErrorState(state.errorMessage, onRefresh)
-                state.assets.isEmpty() -> EmptyState()
-                state.visibleAssets.isEmpty() -> FilteredEmptyState()
-                else -> AssetGrid(state.visibleAssets, onAssetClick)
+            state.errorMessage != null -> item {
+                ErrorState(state.errorMessage, onRefresh, Modifier.fillParentMaxSize())
+            }
+            state.assets.isEmpty() -> item {
+                EmptyState(Modifier.fillParentMaxSize())
+            }
+            state.visibleAssets.isEmpty() -> item {
+                FilteredEmptyState(Modifier.fillParentMaxSize())
+            }
+            else -> items(state.visibleAssets.chunked(2), key = { row -> row.first().id }) { rowAssets ->
+                AssetRow(rowAssets, onAssetClick)
             }
         }
     }
@@ -170,28 +139,34 @@ private fun Header(onRefresh: () -> Unit, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun FilterRow(
+private fun FilterChips(
     selected: AssetFilter,
     onSelected: (AssetFilter) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    LazyRow(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    // Opaque background so cards scrolling underneath stay hidden behind the pinned chips.
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.background,
     ) {
-        items(AssetFilter.entries) { filter ->
-            val isSelected = filter == selected
-            Surface(
-                onClick = { onSelected(filter) },
-                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-                contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                shape = RoundedCornerShape(24.dp),
-            ) {
-                Text(
-                    text = filter.label,
-                    modifier = Modifier.padding(horizontal = 22.dp, vertical = 12.dp),
-                    fontSize = 16.sp,
-                )
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            items(AssetFilter.entries) { filter ->
+                val isSelected = filter == selected
+                Surface(
+                    onClick = { onSelected(filter) },
+                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                    contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    shape = RoundedCornerShape(24.dp),
+                ) {
+                    Text(
+                        text = filter.label,
+                        modifier = Modifier.padding(horizontal = 22.dp, vertical = 12.dp),
+                        fontSize = 16.sp,
+                    )
+                }
             }
         }
     }
@@ -316,16 +291,30 @@ private fun OverviewBar(overview: AssetOverview, modifier: Modifier = Modifier) 
     }
 }
 
+// Full-screen state items sit below the header/overview in the LazyColumn; reserving
+// bottom space keeps their centered content clear of the floating capsule tab bar.
+@Composable
+private fun StateContentBox(modifier: Modifier, content: @Composable () -> Unit) {
+    Box(
+        modifier
+            .fillMaxSize()
+            .padding(bottom = 120.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        content()
+    }
+}
+
 @Composable
 private fun LoadingState(modifier: Modifier = Modifier) {
-    Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    StateContentBox(modifier) {
         CircularProgressIndicator()
     }
 }
 
 @Composable
 private fun ErrorState(message: String, onRetry: () -> Unit, modifier: Modifier = Modifier) {
-    Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    StateContentBox(modifier) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(12.dp))
@@ -336,30 +325,39 @@ private fun ErrorState(message: String, onRetry: () -> Unit, modifier: Modifier 
 
 @Composable
 private fun EmptyState(modifier: Modifier = Modifier) {
-    Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    StateContentBox(modifier) {
         Text("还没有资产，点击 + 添加第一件")
     }
 }
 
 @Composable
 private fun FilteredEmptyState(modifier: Modifier = Modifier) {
-    Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    StateContentBox(modifier) {
         Text("该状态下暂无资产", color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
 @Composable
-private fun AssetGrid(assets: List<Asset>, onAssetClick: (String) -> Unit, modifier: Modifier = Modifier) {
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
-        modifier = modifier,
+private fun AssetRow(
+    assets: List<Asset>,
+    onAssetClick: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(bottom = 100.dp),
     ) {
-        items(assets, key = Asset::id) { asset ->
-            AssetCard(asset, onClick = { onAssetClick(asset.id) })
+        assets.forEach { asset ->
+            AssetCard(
+                asset = asset,
+                onClick = { onAssetClick(asset.id) },
+                modifier = Modifier.weight(1f),
+            )
         }
+        // Keep the lone card of the last row at the same width as the two-column cards.
+        if (assets.size == 1) Spacer(Modifier.weight(1f))
     }
 }
 
@@ -403,7 +401,7 @@ private fun AssetCard(asset: Asset, onClick: () -> Unit, modifier: Modifier = Mo
                 )
             }
             Spacer(Modifier.height(28.dp))
-            Text(asset.name, fontSize = 21.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+            Text(asset.name, fontSize = 17.sp, fontWeight = FontWeight.Medium, maxLines = 1)
             Spacer(Modifier.height(8.dp))
             Text(
                 text = "${currency.format(asset.priceCents / 100.0)}  |  ${asset.heldDays} 天",
@@ -417,16 +415,6 @@ private fun AssetCard(asset: Asset, onClick: () -> Unit, modifier: Modifier = Mo
                 fontWeight = FontWeight.Bold,
             )
         }
-    }
-}
-
-@Composable
-private fun AssetBottomBar(onOpenSettings: () -> Unit, modifier: Modifier = Modifier) {
-    NavigationBar(modifier = modifier, containerColor = MaterialTheme.colorScheme.surface) {
-        NavigationBarItem(true, {}, { Icon(Icons.Default.Home, null) }, label = { Text("资产") })
-        NavigationBarItem(false, {}, { Icon(Icons.Outlined.FavoriteBorder, null) }, label = { Text("心愿") })
-        NavigationBarItem(false, {}, { Icon(Icons.Outlined.AutoGraph, null) }, label = { Text("趋势") })
-        NavigationBarItem(false, onOpenSettings, { Icon(Icons.Outlined.Settings, null) }, label = { Text("设置") })
     }
 }
 
@@ -445,10 +433,7 @@ private fun AssetsScreenPreview() {
             ),
             onFilterSelected = {},
             onRefresh = {},
-            onAddAsset = {},
-            onOpenSettings = {},
             onAssetClick = {},
         )
     }
 }
-

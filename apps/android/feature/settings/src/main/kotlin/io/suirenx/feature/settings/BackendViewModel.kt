@@ -6,9 +6,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import io.suirenx.core.domain.BackendRepository
 import io.suirenx.core.model.BackendSettings
 import javax.inject.Inject
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -25,8 +23,6 @@ data class BackendUiState(
 class BackendViewModel @Inject constructor(private val repository: BackendRepository) : ViewModel() {
     val uiState: StateFlow<BackendUiState>
         field = MutableStateFlow(BackendUiState())
-    val enterApp: SharedFlow<Unit>
-        field = MutableSharedFlow(extraBufferCapacity = 1)
 
     init {
         viewModelScope.launch {
@@ -40,18 +36,17 @@ class BackendViewModel @Inject constructor(private val repository: BackendReposi
     fun onNameChanged(value: String) { uiState.update { it.copy(name = value, error = null) } }
     fun save() {
         val state = uiState.value
-        perform(enter = true) { repository.saveAndSelect(state.address, state.name) }
+        perform { repository.saveAndSelect(state.address, state.name) }
     }
-    fun select(url: String) = perform(enter = true) { repository.select(url) }
+    fun select(url: String) = perform { repository.select(url) }
 
-    private fun perform(enter: Boolean = false, action: suspend () -> Result<Unit>) {
+    private fun perform(action: suspend () -> Result<Unit>) {
         if (uiState.value.busy) return
         uiState.update { it.copy(busy = true, error = null) }
         viewModelScope.launch {
             action().fold(
                 onSuccess = {
-                    uiState.update { state -> state.copy(busy = false, address = if (enter) "" else state.address, name = if (enter) "" else state.name) }
-                    if (enter) enterApp.emit(Unit)
+                    uiState.update { it.copy(busy = false, address = "", name = "") }
                 },
                 onFailure = { error ->
                     uiState.update { it.copy(busy = false, error = error.message ?: "无法读取或保存地址，请重试") }

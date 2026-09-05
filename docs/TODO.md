@@ -88,3 +88,5 @@
 
 - [x] 生成 Gradle Wrapper，并完成 Android Debug APK 构建。
 
+- [x] 模仿「有数」App 的交互重构：详情/编辑/新建页改为全屏浮起转场（slideInVertically 350ms + fade，底层页面不动），表单为独立全屏页（左上 X 白圆钮、居中标题、右上黑色 ✓ 圆钮，成功后随导航关闭并锁定防重复提交）；首页重构为悬浮胶囊底栏（资产/心愿/趋势/设置 4 Tab + 黑色圆形 FAB，内层 NavHost 用 saveState/restoreState 保持各 Tab 状态与滚动位置），心愿/趋势为占位页，设置并入 Tab；列表总览卡随滚动滚出、筛选 chips 用 stickyHeader 吸顶常驻；资产卡标题字号收敛为 17sp；表单逻辑从详情 VM 拆出为独立 AssetFormViewModel（SavedStateHandle 读取 id 区分新建/编辑），详情 VM 改为监听 AssetChangeNotifier 静默刷新（不闪 loading、失败保留旧数据）；加载/错误/空态内容统一避让悬浮底栏（bottom 120dp）。2026-09-05 模拟器端到端验证：新建落库后总览 11/11、总资产 ¥41,419.99；编辑改名后详情静默刷新、返回列表卡片名同步；Tab 切换后筛选态与滚动位置保持；chips 本地过滤与空态文案正确；App 图标为黑底 #191919 + 荧光绿 #82E600 火苗 adaptive icon。单元测试 18 例（含 AssetFormViewModelTest 5 例、详情静默刷新 2 例）与 assembleDebug 全绿。
+
