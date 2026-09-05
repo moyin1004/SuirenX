@@ -40,3 +40,8 @@ func _getassetMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _updateassetMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

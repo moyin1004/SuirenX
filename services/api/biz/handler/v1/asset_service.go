@@ -63,3 +63,21 @@ func GetAsset(_ context.Context, c *app.RequestContext) {
 	}
 	c.JSON(consts.StatusOK, &model.GetAssetResponse{Asset: toAPIAsset(asset)})
 }
+
+// UpdateAsset handles the update RPC declared in asset.proto.
+// @router /api/v1/assets/:id [PUT]
+func UpdateAsset(_ context.Context, c *app.RequestContext) {
+	var req model.UpdateAssetRequest
+	if err := c.BindAndValidate(&req); err != nil {
+		c.JSON(consts.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	asset, err := assetService(c).Update(service.UpdateAssetInput{
+		ID: req.Id, Name: req.Name, PriceCents: req.PriceCents, PurchaseDate: req.PurchaseDate,
+	})
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(consts.StatusOK, &model.UpdateAssetResponse{Asset: toAPIAsset(asset)})
+}

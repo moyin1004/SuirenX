@@ -40,6 +40,13 @@ type CreateAssetInput struct {
 	ImageURL     string `json:"image_url"`
 }
 
+type UpdateAssetInput struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	PriceCents   int64  `json:"price_cents"`
+	PurchaseDate string `json:"purchase_date"`
+}
+
 type AssetService struct {
 	repository repository.AssetRepository
 	now        func() time.Time
@@ -82,16 +89,9 @@ func (s *AssetService) Get(id string) (AssetView, error) {
 }
 
 func (s *AssetService) Create(input CreateAssetInput) (AssetView, error) {
-	name := strings.TrimSpace(input.Name)
-	if name == "" {
-		return AssetView{}, ErrInvalidName
-	}
-	if input.PriceCents < 0 {
-		return AssetView{}, ErrInvalidPrice
-	}
-	purchaseDate, err := time.Parse(time.DateOnly, input.PurchaseDate)
+	name, purchaseDate, err := validateEditable(input.Name, input.PriceCents, input.PurchaseDate)
 	if err != nil {
-		return AssetView{}, ErrInvalidPurchaseDate
+		return AssetView{}, err
 	}
 
 	asset := domain.Asset{
@@ -106,6 +106,45 @@ func (s *AssetService) Create(input CreateAssetInput) (AssetView, error) {
 		return AssetView{}, fmt.Errorf("create asset: %w", err)
 	}
 	return s.toView(asset), nil
+}
+
+// Update replaces the editable fields of an existing asset. Status, retirement
+// and image are managed by separate flows and are never touched here.
+func (s *AssetService) Update(input UpdateAssetInput) (AssetView, error) {
+	name, purchaseDate, err := validateEditable(input.Name, input.PriceCents, input.PurchaseDate)
+	if err != nil {
+		return AssetView{}, err
+	}
+
+	asset := domain.Asset{
+		ID:           input.ID,
+		Name:         name,
+		PriceCents:   input.PriceCents,
+		PurchaseDate: purchaseDate,
+	}
+	if err := s.repository.Update(&asset); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return AssetView{}, ErrAssetNotFound
+		}
+		return AssetView{}, fmt.Errorf("update asset: %w", err)
+	}
+	return s.toView(asset), nil
+}
+
+// validateEditable enforces the shared rules for the user-editable fields.
+func validateEditable(rawName string, priceCents int64, rawPurchaseDate string) (string, time.Time, error) {
+	name := strings.TrimSpace(rawName)
+	if name == "" {
+		return "", time.Time{}, ErrInvalidName
+	}
+	if priceCents < 0 {
+		return "", time.Time{}, ErrInvalidPrice
+	}
+	purchaseDate, err := time.Parse(time.DateOnly, rawPurchaseDate)
+	if err != nil {
+		return "", time.Time{}, ErrInvalidPurchaseDate
+	}
+	return name, purchaseDate, nil
 }
 
 func (s *AssetService) SeedExamples() error {

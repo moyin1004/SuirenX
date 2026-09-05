@@ -69,6 +69,27 @@ func (r *GormAssetRepository) Create(asset *domain.Asset) error {
 	return nil
 }
 
+func (r *GormAssetRepository) Update(asset *domain.Asset) error {
+	result := r.db.Model(&AssetRecord{}).Where("id = ?", asset.ID).
+		Updates(map[string]interface{}{
+			"name":          asset.Name,
+			"price_cents":   asset.PriceCents,
+			"purchase_date": asset.PurchaseDate,
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	fresh, err := r.Get(asset.ID)
+	if err != nil {
+		return err
+	}
+	*asset = *fresh
+	return nil
+}
+
 func (r *GormAssetRepository) Count() (int64, error) {
 	var count int64
 	err := r.db.Model(&AssetRecord{}).Count(&count).Error

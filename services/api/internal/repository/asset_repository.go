@@ -13,5 +13,6 @@ type AssetRepository interface {
 	List(status *domain.AssetStatus) ([]domain.Asset, error)
 	Get(id string) (*domain.Asset, error)
 	Create(asset *domain.Asset) error
+	Update(asset *domain.Asset) error
 	Count() (int64, error)
 }

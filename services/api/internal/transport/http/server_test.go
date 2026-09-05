@@ -142,6 +142,97 @@ func TestGetAssetByID(t *testing.T) {
 	}
 }
 
+func TestUpdateAssetByID(t *testing.T) {
+	s, _ := testServer(t)
+	today := time.Now().Format(time.DateOnly)
+	created := request(s, "POST", "/api/v1/assets", `{"name":"Keyboard","price_cents":10000,"purchase_date":"`+today+`"}`)
+	if created.Code != 201 {
+		t.Fatalf("create: %d %s", created.Code, created.Body)
+	}
+	var createdResponse struct {
+		Asset struct {
+			ID string `json:"id"`
+		} `json:"asset"`
+	}
+	if err := json.Unmarshal(created.Body.Bytes(), &createdResponse); err != nil {
+		t.Fatal(err)
+	}
+
+	// Two days ago keeps held-days derived values deterministic regardless of run date.
+	purchaseDate := time.Now().AddDate(0, 0, -2).Format(time.DateOnly)
+	updated := request(s, "PUT", "/api/v1/assets/"+createdResponse.Asset.ID,
+		`{"name":" Mechanical Keyboard ","price_cents":20000,"purchase_date":"`+purchaseDate+`"}`)
+	if updated.Code != 200 {
+		t.Fatalf("update: %d %s", updated.Code, updated.Body)
+	}
+	var response struct {
+		Asset map[string]json.RawMessage `json:"asset"`
+	}
+	if err := json.Unmarshal(updated.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	for key, want := range map[string]string{
+		"id":               `"` + createdResponse.Asset.ID + `"`,
+		"name":             `"Mechanical Keyboard"`,
+		"price_cents":      "20000",
+		"purchase_date":    `"` + purchaseDate + `"`,
+		"status":           `"ACTIVE"`,
+		"held_days":        "3",
+		"daily_cost_cents": "6667",
+	} {
+		if string(response.Asset[key]) != want {
+			t.Errorf("%s: got %s, want %s", key, response.Asset[key], want)
+		}
+	}
+
+	// The change is persisted and visible through GET.
+	found := request(s, "GET", "/api/v1/assets/"+createdResponse.Asset.ID, "")
+	if found.Code != 200 || !strings.Contains(found.Body.String(), `"name":"Mechanical Keyboard"`) ||
+		!strings.Contains(found.Body.String(), `"price_cents":20000`) {
+		t.Fatalf("get after update: %d %s", found.Code, found.Body)
+	}
+
+	missing := request(s, "PUT", "/api/v1/assets/does-not-exist",
+		`{"name":"Keyboard","price_cents":10000,"purchase_date":"`+today+`"}`)
+	if missing.Code != 404 {
+		t.Fatalf("missing: got %d %s, want 404", missing.Code, missing.Body)
+	}
+	var failure struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(missing.Body.Bytes(), &failure); err != nil || failure.Error == "" {
+		t.Fatalf("expected JSON error: %s", missing.Body)
+	}
+
+	for _, tc := range []struct{ name, body string }{
+		{"malformed", "{"},
+		{"empty", "{}"},
+		{"blank name", `{"name":"  ","price_cents":10000,"purchase_date":"2026-09-03"}`},
+		{"negative price", `{"name":"A","price_cents":-1,"purchase_date":"2026-09-03"}`},
+		{"invalid date", `{"name":"A","price_cents":10000,"purchase_date":"09/03/2026"}`},
+	} {
+		t.Run("invalid "+tc.name, func(t *testing.T) {
+			got := request(s, "PUT", "/api/v1/assets/"+createdResponse.Asset.ID, tc.body)
+			if got.Code != 400 {
+				t.Fatalf("got %d: %s", got.Code, got.Body)
+			}
+			var bad struct {
+				Error string `json:"error"`
+			}
+			if err := json.Unmarshal(got.Body.Bytes(), &bad); err != nil || bad.Error == "" {
+				t.Fatalf("expected JSON error: %s", got.Body)
+			}
+		})
+	}
+
+	// Rejected updates must not mutate the stored asset.
+	after := request(s, "GET", "/api/v1/assets/"+createdResponse.Asset.ID, "")
+	if !strings.Contains(after.Body.String(), `"name":"Mechanical Keyboard"`) ||
+		!strings.Contains(after.Body.String(), `"price_cents":20000`) {
+		t.Fatalf("asset mutated by rejected update: %s", after.Body)
+	}
+}
+
 func TestInvalidAssetRequests(t *testing.T) {
 	s, _ := testServer(t)
 	cases := []struct{ name, method, path, body string }{
@@ -178,9 +269,13 @@ func TestInvalidAssetRequests(t *testing.T) {
 func TestDatabaseErrors(t *testing.T) {
 	s, closeDB := testServer(t)
 	closeDB()
-	for _, method := range []string{"GET", "POST"} {
-		t.Run(method, func(t *testing.T) {
-			got := request(s, method, "/api/v1/assets", `{"name":"A","price_cents":100,"purchase_date":"2026-09-05"}`)
+	for _, tc := range []struct{ method, path string }{
+		{"GET", "/api/v1/assets"},
+		{"POST", "/api/v1/assets"},
+		{"PUT", "/api/v1/assets/does-not-exist"},
+	} {
+		t.Run(tc.method, func(t *testing.T) {
+			got := request(s, tc.method, tc.path, `{"name":"A","price_cents":100,"purchase_date":"2026-09-05"}`)
 			if got.Code != 500 || got.Body.String() != `{"error":"internal server error"}` {
 				t.Fatalf("database error: %d %s", got.Code, got.Body)
 			}

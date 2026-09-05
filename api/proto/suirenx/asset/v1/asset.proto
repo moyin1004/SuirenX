@@ -48,6 +48,18 @@ message CreateAssetResponse {
   Asset asset = 1;
 }
 
+// Full replacement of the editable fields; status and image are managed elsewhere.
+message UpdateAssetRequest {
+  string id = 1 [(api.path) = "id"];
+  string name = 2 [(api.body) = "name"];
+  int64 price_cents = 3 [(api.body) = "price_cents"];
+  string purchase_date = 4 [(api.body) = "purchase_date"];
+}
+
+message UpdateAssetResponse {
+  Asset asset = 1;
+}
+
 service AssetService {
   rpc ListAssets(ListAssetsRequest) returns (ListAssetsResponse) {
     option (api.get) = "/api/v1/assets";
@@ -59,5 +71,9 @@ service AssetService {
 
   rpc CreateAsset(CreateAssetRequest) returns (CreateAssetResponse) {
     option (api.post) = "/api/v1/assets";
+  }
+
+  rpc UpdateAsset(UpdateAssetRequest) returns (UpdateAssetResponse) {
+    option (api.put) = "/api/v1/assets/:id";
   }
 }

@@ -24,6 +24,7 @@ func Register(r *server.Hertz) {
 			_v1.GET("/assets", append(_listassetsMw(), v1.ListAssets)...)
 			_assets := _v1.Group("/assets", _assetsMw()...)
 			_assets.GET("/:id", append(_getassetMw(), v1.GetAsset)...)
+			_assets.PUT("/:id", append(_updateassetMw(), v1.UpdateAsset)...)
 			_v1.POST("/assets", append(_createassetMw(), v1.CreateAsset)...)
 		}
 	}
