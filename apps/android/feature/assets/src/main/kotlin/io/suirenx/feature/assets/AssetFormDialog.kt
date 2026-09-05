@@ -23,7 +23,8 @@ import androidx.compose.ui.unit.dp
 import io.suirenx.core.ui.theme.SuirenXTheme
 
 @Composable
-fun CreateAssetDialog(
+fun AssetFormDialog(
+    title: String,
     state: AssetFormState,
     onNameChanged: (String) -> Unit,
     onPriceChanged: (String) -> Unit,
@@ -35,7 +36,7 @@ fun CreateAssetDialog(
     AlertDialog(
         modifier = modifier,
         onDismissRequest = { if (!state.isSaving) onDismiss() },
-        title = { Text(stringResource(R.string.create_asset_title)) },
+        title = { Text(title) },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -93,9 +94,10 @@ fun CreateAssetDialog(
 @Preview(showBackground = true)
 @Preview(showBackground = true, uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
 @Composable
-private fun CreateAssetDialogPreview() {
+private fun AssetFormDialogPreview() {
     SuirenXTheme {
-        CreateAssetDialog(
+        AssetFormDialog(
+            title = "编辑资产",
             state = AssetFormState(name = "机械键盘", price = "899.00", purchaseDate = "2026-09-05"),
             onNameChanged = {}, onPriceChanged = {}, onPurchaseDateChanged = {}, onSave = {}, onDismiss = {},
         )

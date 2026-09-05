@@ -3,6 +3,7 @@ package io.suirenx.core.data.repository
 import io.suirenx.core.data.network.AssetApiProvider
 import io.suirenx.core.data.network.AssetDto
 import io.suirenx.core.data.network.CreateAssetRequest
+import io.suirenx.core.data.network.UpdateAssetRequest
 import io.suirenx.core.domain.AssetRepository
 import io.suirenx.core.model.Asset
 import io.suirenx.core.model.AssetStatus
@@ -17,6 +18,18 @@ class DefaultAssetRepository @Inject constructor(
     override suspend fun createAsset(asset: NewAsset): Result<Asset> = try {
         val response = api.current().createAsset(
             CreateAssetRequest(asset.name, asset.priceCents, asset.purchaseDate.toString()),
+        )
+        Result.success(response.asset.toDomain())
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: Exception) {
+        Result.failure(error)
+    }
+
+    override suspend fun updateAsset(id: String, asset: NewAsset): Result<Asset> = try {
+        val response = api.current().updateAsset(
+            id,
+            UpdateAssetRequest(asset.name, asset.priceCents, asset.purchaseDate.toString()),
         )
         Result.success(response.asset.toDomain())
     } catch (error: CancellationException) {

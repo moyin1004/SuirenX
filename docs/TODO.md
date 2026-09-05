@@ -12,7 +12,7 @@
 
 - [x] 新增资产详情页与真实导航；浮动 `+` 已接入新增表单。2026-09-05 完成：新增 `GET /api/v1/assets/:id`（proto + hz 重生成，repository/service/handler 全链路，404 返回 JSON 错误）；Android 侧 app 模块拥有 NavHost（`assets` 与 `assets/{id}` 两个目的地，路由常量集中定义），卡片点击进入详情、TopAppBar 返回；详情页只读展示名称/状态/价格/购买日期/持有天数/日均成本，含加载与错误重试态。导航内的 ViewModel 改用 `hilt-navigation-compose` 的 `hiltViewModel()`（NavBackStackEntry 无 Hilt 默认工厂，普通 `viewModel()` 会启动崩溃）。验证：`go test ./...`、protoc 描述符、`./gradlew test`（新增 AssetDetailViewModelTest 4 例）、assembleDebug 全绿；模拟器端到端通过列表→详情→返回、离线错误态→恢复后重试成功。
 
-- [ ] 增加编辑资产接口与界面。
+- [x] 增加编辑资产接口与界面。2026-09-05 完成：服务端新增 `PUT /api/v1/assets/:id`（proto + hz 重生成；repository `Update` 用 map 仅更新 name/price_cents/purchase_date，`RowsAffected==0` 映射 404，成功后回读重算派生值；service 抽出共享 `validateEditable`，Create/Update 复用；400/404/500 错误映射走既有 `writeError`）。Android 侧新增 `UpdateAssetUseCase` 与 `AssetChangeNotifier`（@Singleton SharedFlow，跨导航作用域广播资产变更，列表 VM 收到即自动刷新）；表单弹窗通用化为 `AssetFormDialog`，新增/编辑复用；详情页 TopAppBar 右上角铅笔入口，弹窗预填名称/金额（分→元两位小数）/日期，保存中锁定输入与关闭，失败保留输入并提示；编辑范围仅 name/price/date，状态与退役信息不触碰。列表页新增「资产总览」卡：总资产（服役中+已退役价格之和）、日均成本（仅服役中 daily_cost 之和）、服役中/已退役计数与比例条；筛选 chips 改本地过滤（一次拉全量），总览始终全局。验证：`go test ./...`、protoc 描述符、`./gradlew testDebugUnitTest`（新增总览聚合/本地筛选/notifier 刷新/编辑预填保存/失败保留/非法输入不触网等 7 例）、assembleDebug 全绿；curl 冒烟 PUT 200/404/400；模拟器端到端通过总览卡数字勾稽、筛选空态、详情预填、保存落库（updated_at 变更）、返回列表自动刷新。
 
 - [ ] 增加“服役中 / 已退役”状态切换接口与界面，记录退役日期。
 
@@ -30,7 +30,7 @@
 
 - [ ] 搜索、排序、分类和组合筛选。
 
-- [ ] 资产总额、月度变化和日均成本统计。
+- [ ] 资产总额、月度变化和日均成本统计。（资产总额与日均成本合计已由列表页「资产总览」卡覆盖，2026-09-05；月度变化趋势与图表待做）
 
 - [ ] 价格、购买渠道、保修期、备注和标签字段。
 

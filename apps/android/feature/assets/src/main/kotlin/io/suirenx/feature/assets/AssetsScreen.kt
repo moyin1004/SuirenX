@@ -1,11 +1,14 @@
 package io.suirenx.feature.assets
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -45,6 +48,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -76,7 +83,8 @@ fun AssetsRoute(
         modifier = modifier,
     )
     state.form?.let { form ->
-        CreateAssetDialog(
+        AssetFormDialog(
+            title = stringResource(R.string.create_asset_title),
             state = form,
             onNameChanged = viewModel::onNameChanged,
             onPriceChanged = viewModel::onPriceChanged,
@@ -126,6 +134,10 @@ fun AssetsScreen(
             Spacer(Modifier.height(18.dp))
             Header(onRefresh = onRefresh)
             Spacer(Modifier.height(20.dp))
+            if (state.assets.isNotEmpty()) {
+                AssetOverviewCard(state.overview)
+                Spacer(Modifier.height(20.dp))
+            }
             FilterRow(state.selectedFilter, onFilterSelected)
             Spacer(Modifier.height(20.dp))
 
@@ -133,7 +145,8 @@ fun AssetsScreen(
                 state.isLoading -> LoadingState()
                 state.errorMessage != null -> ErrorState(state.errorMessage, onRefresh)
                 state.assets.isEmpty() -> EmptyState()
-                else -> AssetGrid(state.assets, onAssetClick)
+                state.visibleAssets.isEmpty() -> FilteredEmptyState()
+                else -> AssetGrid(state.visibleAssets, onAssetClick)
             }
         }
     }
@@ -185,6 +198,125 @@ private fun FilterRow(
 }
 
 @Composable
+private fun AssetOverviewCard(overview: AssetOverview, modifier: Modifier = Modifier) {
+    val currency = NumberFormat.getCurrencyInstance(Locale.CHINA)
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(28.dp),
+        color = MaterialTheme.colorScheme.surface,
+    ) {
+        Column(Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("资产总览", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.weight(1f))
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                ) {
+                    Text(
+                        text = "服役中 ${overview.activeCount}/${overview.totalCount}",
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Spacer(Modifier.height(18.dp))
+            Row {
+                Column(Modifier.weight(1f)) {
+                    Text("总资产", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = currency.format(overview.totalPriceCents / 100.0),
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                    )
+                }
+                Column(Modifier.weight(1f)) {
+                    Text("日均成本", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = "${currency.format(overview.totalDailyCostCents / 100.0)}/天",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                    )
+                }
+            }
+            Spacer(Modifier.height(18.dp))
+            DashedDivider()
+            Spacer(Modifier.height(14.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                LegendDot(MaterialTheme.colorScheme.secondary)
+                Spacer(Modifier.size(6.dp))
+                Text("服役中 ${overview.activeCount}", fontSize = 13.sp)
+                Spacer(Modifier.weight(1f))
+                LegendDot(MaterialTheme.colorScheme.outline)
+                Spacer(Modifier.size(6.dp))
+                Text("已退役 ${overview.retiredCount}", fontSize = 13.sp)
+            }
+            Spacer(Modifier.height(10.dp))
+            OverviewBar(overview)
+        }
+    }
+}
+
+@Composable
+private fun DashedDivider(modifier: Modifier = Modifier) {
+    val color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+    Canvas(modifier
+        .fillMaxWidth()
+        .height(1.dp)) {
+        drawLine(
+            color = color,
+            start = Offset(0f, 0f),
+            end = Offset(size.width, 0f),
+            strokeWidth = 2f,
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f), 0f),
+        )
+    }
+}
+
+@Composable
+private fun LegendDot(color: Color, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .size(8.dp)
+            .clip(CircleShape)
+            .background(color),
+    )
+}
+
+@Composable
+private fun OverviewBar(overview: AssetOverview, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(8.dp)
+            .clip(RoundedCornerShape(4.dp)),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        if (overview.activeCount > 0) {
+            Box(
+                Modifier
+                    .weight(overview.activeCount.toFloat())
+                    .fillMaxHeight()
+                    .background(MaterialTheme.colorScheme.secondary),
+            )
+        }
+        if (overview.retiredCount > 0) {
+            Box(
+                Modifier
+                    .weight(overview.retiredCount.toFloat())
+                    .fillMaxHeight()
+                    .background(MaterialTheme.colorScheme.outline),
+            )
+        }
+    }
+}
+
+@Composable
 private fun LoadingState(modifier: Modifier = Modifier) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         CircularProgressIndicator()
@@ -206,6 +338,13 @@ private fun ErrorState(message: String, onRetry: () -> Unit, modifier: Modifier 
 private fun EmptyState(modifier: Modifier = Modifier) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text("还没有资产，点击 + 添加第一件")
+    }
+}
+
+@Composable
+private fun FilteredEmptyState(modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text("该状态下暂无资产", color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -301,6 +440,7 @@ private fun AssetsScreenPreview() {
                 assets = listOf(
                     Asset("1", "MacBook Pro", 1_699_900, LocalDate.now(), AssetStatus.Active, "", 133, 12_781),
                     Asset("2", "荣耀 Magic8 Pro", 659_900, LocalDate.now(), AssetStatus.Active, "", 176, 3_749),
+                    Asset("3", "Kindle", 49_900, LocalDate.now(), AssetStatus.Retired, "", 420, 119),
                 ),
             ),
             onFilterSelected = {},

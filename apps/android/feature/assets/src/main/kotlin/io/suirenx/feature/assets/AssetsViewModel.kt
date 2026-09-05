@@ -24,19 +24,48 @@ enum class AssetFilter(val label: String, val status: AssetStatus?) {
     Retired("已退役", AssetStatus.Retired),
 }
 
+data class AssetOverview(
+    val totalPriceCents: Long,
+    val totalDailyCostCents: Long,
+    val activeCount: Int,
+    val retiredCount: Int,
+) {
+    val totalCount: Int = activeCount + retiredCount
+}
+
 data class AssetsUiState(
     val assets: List<Asset> = emptyList(),
     val selectedFilter: AssetFilter = AssetFilter.All,
     val isLoading: Boolean = true,
     val errorMessage: String? = null,
     val form: AssetFormState? = null,
-)
+) {
+    // The overview always covers every asset, even while a status chip filters the grid.
+    val overview: AssetOverview
+        get() = AssetOverview(
+            totalPriceCents = assets.sumOf { it.priceCents },
+            // Retired assets no longer accrue daily cost.
+            totalDailyCostCents = assets
+                .filter { it.status == AssetStatus.Active }
+                .sumOf { it.dailyCostCents },
+            activeCount = assets.count { it.status == AssetStatus.Active },
+            retiredCount = assets.count { it.status == AssetStatus.Retired },
+        )
+
+    // Filtering happens locally; the full list is fetched once so the overview
+    // and every chip share the same source of truth.
+    val visibleAssets: List<Asset>
+        get() = selectedFilter.status
+            ?.let { status -> assets.filter { it.status == status } }
+            ?: assets
+}
 
 @HiltViewModel
 class AssetsViewModel @Inject constructor(
     private val getAssets: GetAssetsUseCase,
     private val createAsset: CreateAssetUseCase,
     private val backends: BackendRepository,
+    private val changeNotifier: AssetChangeNotifier,
 ) : ViewModel() {
     val uiState: StateFlow<AssetsUiState>
         field = MutableStateFlow(AssetsUiState())
@@ -53,6 +82,9 @@ class AssetsViewModel @Inject constructor(
                 uiState.value = AssetsUiState(isLoading = url != null)
                 if (url != null) refresh()
             }
+        }
+        viewModelScope.launch {
+            changeNotifier.events.collect { refresh() }
         }
     }
 
@@ -115,14 +147,13 @@ class AssetsViewModel @Inject constructor(
     fun onFilterSelected(filter: AssetFilter) {
         if (filter == uiState.value.selectedFilter) return
         uiState.update { it.copy(selectedFilter = filter) }
-        refresh()
     }
 
     fun refresh() {
         refreshJob?.cancel()
         refreshJob = viewModelScope.launch {
             uiState.update { it.copy(isLoading = true, errorMessage = null) }
-            val result = getAssets(uiState.value.selectedFilter.status)
+            val result = getAssets(null)
             ensureActive()
             result.fold(
                 onSuccess = { assets ->
@@ -140,4 +171,3 @@ class AssetsViewModel @Inject constructor(
         }
     }
 }
-

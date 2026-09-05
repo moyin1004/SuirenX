@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.Devices
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -29,6 +30,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -55,8 +57,20 @@ fun AssetDetailRoute(
         state = state,
         onBack = onBack,
         onRetry = viewModel::retry,
+        onEdit = viewModel::openEdit,
         modifier = modifier,
     )
+    state.form?.let { form ->
+        AssetFormDialog(
+            title = stringResource(R.string.edit_asset_title),
+            state = form,
+            onNameChanged = viewModel::onEditNameChanged,
+            onPriceChanged = viewModel::onEditPriceChanged,
+            onPurchaseDateChanged = viewModel::onEditPurchaseDateChanged,
+            onSave = viewModel::saveEdit,
+            onDismiss = viewModel::dismissEdit,
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -65,6 +79,7 @@ fun AssetDetailScreen(
     state: AssetDetailUiState,
     onBack: () -> Unit,
     onRetry: () -> Unit,
+    onEdit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -76,6 +91,13 @@ fun AssetDetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    }
+                },
+                actions = {
+                    if (state.asset != null) {
+                        IconButton(onClick = onEdit) {
+                            Icon(Icons.Outlined.Edit, contentDescription = "编辑资产")
+                        }
                     }
                 },
             )
@@ -201,6 +223,7 @@ private fun AssetDetailScreenPreview() {
             ),
             onBack = {},
             onRetry = {},
+            onEdit = {},
         )
     }
 }
