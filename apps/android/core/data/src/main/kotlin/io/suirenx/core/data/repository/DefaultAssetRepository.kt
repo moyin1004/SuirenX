@@ -33,6 +33,14 @@ class DefaultAssetRepository @Inject constructor(
     } catch (error: Exception) {
         Result.failure(error)
     }
+
+    override suspend fun getAsset(id: String): Result<Asset> = try {
+        Result.success(api.current().getAsset(id).asset.toDomain())
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: Exception) {
+        Result.failure(error)
+    }
 }
 
 private fun AssetDto.toDomain() = Asset(

@@ -49,8 +49,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import io.suirenx.core.model.Asset
 import io.suirenx.core.model.AssetStatus
 import io.suirenx.core.ui.theme.SuirenXTheme
@@ -61,8 +61,9 @@ import java.util.Locale
 @Composable
 fun AssetsRoute(
     onOpenSettings: () -> Unit,
+    onAssetClick: (String) -> Unit,
     modifier: Modifier = Modifier,
-    viewModel: AssetsViewModel = viewModel(),
+    viewModel: AssetsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     AssetsScreen(
@@ -71,6 +72,7 @@ fun AssetsRoute(
         onRefresh = viewModel::refresh,
         onAddAsset = viewModel::openCreateForm,
         onOpenSettings = onOpenSettings,
+        onAssetClick = onAssetClick,
         modifier = modifier,
     )
     state.form?.let { form ->
@@ -92,6 +94,7 @@ fun AssetsScreen(
     onRefresh: () -> Unit,
     onAddAsset: () -> Unit,
     onOpenSettings: () -> Unit,
+    onAssetClick: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -130,7 +133,7 @@ fun AssetsScreen(
                 state.isLoading -> LoadingState()
                 state.errorMessage != null -> ErrorState(state.errorMessage, onRefresh)
                 state.assets.isEmpty() -> EmptyState()
-                else -> AssetGrid(state.assets)
+                else -> AssetGrid(state.assets, onAssetClick)
             }
         }
     }
@@ -207,7 +210,7 @@ private fun EmptyState(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun AssetGrid(assets: List<Asset>, modifier: Modifier = Modifier) {
+private fun AssetGrid(assets: List<Asset>, onAssetClick: (String) -> Unit, modifier: Modifier = Modifier) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
         modifier = modifier,
@@ -216,15 +219,16 @@ private fun AssetGrid(assets: List<Asset>, modifier: Modifier = Modifier) {
         contentPadding = PaddingValues(bottom = 100.dp),
     ) {
         items(assets, key = Asset::id) { asset ->
-            AssetCard(asset)
+            AssetCard(asset, onClick = { onAssetClick(asset.id) })
         }
     }
 }
 
 @Composable
-private fun AssetCard(asset: Asset, modifier: Modifier = Modifier) {
+private fun AssetCard(asset: Asset, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val currency = NumberFormat.getCurrencyInstance(Locale.CHINA)
     Card(
+        onClick = onClick,
         modifier = modifier.height(224.dp),
         shape = RoundedCornerShape(28.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -303,6 +307,7 @@ private fun AssetsScreenPreview() {
             onRefresh = {},
             onAddAsset = {},
             onOpenSettings = {},
+            onAssetClick = {},
         )
     }
 }

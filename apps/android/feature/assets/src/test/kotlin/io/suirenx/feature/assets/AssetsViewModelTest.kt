@@ -113,14 +113,23 @@ class AssetsViewModelTest {
         override suspend fun select(url: String) = Result.success(Unit)
     }
 
-    private class FakeRepository : AssetRepository {
+    internal class FakeRepository : AssetRepository {
         var createCalls = 0
         var fail = false
         var pending: CompletableDeferred<Unit>? = null
         private val assets = mutableListOf<Asset>()
 
+        fun seed(asset: Asset) { assets += asset }
+
         override suspend fun getAssets(status: AssetStatus?) =
             Result.success(assets.filter { status == null || it.status == status })
+
+        override suspend fun getAsset(id: String): Result<Asset> {
+            if (fail) return Result.failure(IllegalStateException("offline"))
+            return assets.firstOrNull { it.id == id }
+                ?.let { Result.success(it) }
+                ?: Result.failure(NoSuchElementException("asset $id not found"))
+        }
 
         override suspend fun createAsset(asset: NewAsset): Result<Asset> {
             createCalls++

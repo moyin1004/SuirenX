@@ -10,7 +10,7 @@
 
 - [x] Android 新增资产表单，并接入 `POST /api/v1/assets`；包含金额/日期校验、防重复提交、失败重试和成功刷新。
 
-- [ ] 新增资产详情页与真实导航；浮动 `+` 已接入新增表单。
+- [x] 新增资产详情页与真实导航；浮动 `+` 已接入新增表单。2026-09-05 完成：新增 `GET /api/v1/assets/:id`（proto + hz 重生成，repository/service/handler 全链路，404 返回 JSON 错误）；Android 侧 app 模块拥有 NavHost（`assets` 与 `assets/{id}` 两个目的地，路由常量集中定义），卡片点击进入详情、TopAppBar 返回；详情页只读展示名称/状态/价格/购买日期/持有天数/日均成本，含加载与错误重试态。导航内的 ViewModel 改用 `hilt-navigation-compose` 的 `hiltViewModel()`（NavBackStackEntry 无 Hilt 默认工厂，普通 `viewModel()` 会启动崩溃）。验证：`go test ./...`、protoc 描述符、`./gradlew test`（新增 AssetDetailViewModelTest 4 例）、assembleDebug 全绿；模拟器端到端通过列表→详情→返回、离线错误态→恢复后重试成功。
 
 - [ ] 增加编辑资产接口与界面。
 

@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 import retrofit2.http.Body
 import retrofit2.http.POST
 import retrofit2.http.GET
+import retrofit2.http.Path
 import retrofit2.http.Query
 
 interface AssetApi {
@@ -13,6 +14,9 @@ interface AssetApi {
 
     @GET("api/v1/assets")
     suspend fun getAssets(@Query("status") status: String? = null): AssetListResponse
+
+    @GET("api/v1/assets/{id}")
+    suspend fun getAsset(@Path("id") id: String): GetAssetResponse
 }
 
 @Serializable
@@ -42,3 +46,6 @@ data class CreateAssetRequest(
 
 @Serializable
 data class CreateAssetResponse(val asset: AssetDto)
+
+@Serializable
+data class GetAssetResponse(val asset: AssetDto)
