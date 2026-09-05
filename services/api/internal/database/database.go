@@ -1,11 +1,12 @@
 package database
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
-	"github.com/moyin1004/suirenx/services/api/internal/repository"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -20,7 +21,19 @@ func Open(path string) (*gorm.DB, error) {
 		return nil, fmt.Errorf("connect sqlite: %w", err)
 	}
 
-	if err := db.AutoMigrate(&repository.AssetRecord{}); err != nil {
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("get database connection: %w", err)
+	}
+	migrations, err := loadMigrations(migrationFiles)
+	if err != nil {
+		sqlDB.Close()
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := migrate(ctx, sqlDB, migrations); err != nil {
+		sqlDB.Close()
 		return nil, fmt.Errorf("migrate database: %w", err)
 	}
 	return db, nil

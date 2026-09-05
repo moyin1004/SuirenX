@@ -49,9 +49,11 @@ repository boundaries.
 - Store money as integer cents (`int64`/`Long`), never floating point.
 - Exchange date-only values as `YYYY-MM-DD` and timestamps as RFC 3339.
 - An active asset's held days include both its purchase day and today.
-- Keep SQLite-specific behavior inside the GORM repository.
-- Do not rely on GORM `AutoMigrate` for production schema changes; replace it
-  with versioned migrations before the first distributable release.
+- Keep SQLite-specific behavior in the database/migration infrastructure and
+  GORM repository, outside business services.
+- Schema changes use numbered SQL files in `services/api/internal/database/migrations`.
+  Never call GORM `AutoMigrate` or modify an applied migration; append the next
+  migration and test both upgrade and failure rollback.
 - Runtime databases under `services/api/data` are local artifacts and must not
   be committed.
 

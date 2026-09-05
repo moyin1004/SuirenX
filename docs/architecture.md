@@ -34,3 +34,30 @@ Use Hertz JSON rendering, not canonical protojson encoding.
 - Monetary values are integer cents.
 - Dates crossing the API boundary use ISO 8601 strings.
 - Database-specific queries remain inside repository implementations.
+
+## Versioned database migrations
+
+`database.Open` runs the SQL files embedded from `internal/database/migrations`
+before the server accepts requests. Versions are consecutive integers starting
+at 1 with no fixed digit width (001, 002, ... 999, 1000); the loader orders
+files by numeric version, so growing past 999 needs no rename. `schema_migrations`
+records the version, filename, SHA-256 of the exact SQL bytes, and UTC
+application time. Applied files are immutable; append a new file for subsequent
+changes. There is no runtime GORM AutoMigrate or model-driven schema diff. SQL
+scripts must contain transaction-compatible SQLite DDL/DML without
+BEGIN/COMMIT/ROLLBACK, VACUUM, or connection-level PRAGMA statements.
+
+One SQLite `BEGIN IMMEDIATE` transaction serializes startup (five-second busy
+wait) and commits all pending SQL and history rows together. An error rolls back
+the pending batch and aborts startup; it never leaves half-applied changes. The
+migration phase has a 30-second context timeout. Unknown/newer history, gaps,
+renamed files or changed checksums abort startup rather than guessing a repair.
+
+The early-development snapshots were squashed into a single `001_init.sql`
+baseline. Databases created before that baseline (no migration history, or
+history from the pre-squash 001-003 files) are not adopted: applying the
+baseline fails and the batch rolls back, so startup aborts instead of silently
+serving a mismatched schema. Development databases are recreated from `data/`;
+real data is restored through a backup.
+
+Operational steps and backup-based recovery are in [database-migrations.md](database-migrations.md).

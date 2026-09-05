@@ -70,6 +70,12 @@ curl -X POST http://localhost:8888/api/v1/assets \
   -d '{"name":"机械键盘","price_cents":89900,"purchase_date":"2026-09-05","image_url":""}'
 ```
 
+## 数据库升级
+
+API 启动时按编号执行内置 SQL 迁移，迁移记录保存在 `schema_migrations`。
+升级前备份数据库；新增表结构变更须添加新迁移文件，不能修改已执行的迁移。
+详见[迁移与恢复说明](docs/database-migrations.md)。
+
 ## 运行 Android
 
 1. 用 Android Studio 打开仓库根目录。
