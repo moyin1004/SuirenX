@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package suirenx.asset.v1;
+
+option go_package = "github.com/moyin1004/suirenx/services/api/biz/model/suirenx/asset/v1;assetv1";
+
+import "api.proto";
+
+message Asset {
+  string id = 1;
+  string name = 2;
+  int64 price_cents = 3;
+  string purchase_date = 4;
+  // HTTP JSON status: ACTIVE or RETIRED.
+  string status = 5;
+  string image_url = 6;
+  int32 held_days = 7;
+  int64 daily_cost_cents = 8;
+  string created_at = 9;
+  string updated_at = 10;
+}
+
+message ListAssetsRequest {
+  // Optional HTTP query filter: ACTIVE or RETIRED (case-insensitive).
+  string status = 1 [(api.query) = "status"];
+}
+
+message ListAssetsResponse {
+  repeated Asset assets = 1;
+}
+
+message CreateAssetRequest {
+  string name = 1 [(api.body) = "name"];
+  int64 price_cents = 2 [(api.body) = "price_cents"];
+  string purchase_date = 3 [(api.body) = "purchase_date"];
+  string image_url = 4 [(api.body) = "image_url"];
+}
+
+message CreateAssetResponse {
+  Asset asset = 1;
+}
+
+service AssetService {
+  rpc ListAssets(ListAssetsRequest) returns (ListAssetsResponse) {
+    option (api.get) = "/api/v1/assets";
+  }
+
+  rpc CreateAsset(CreateAssetRequest) returns (CreateAssetResponse) {
+    option (api.post) = "/api/v1/assets";
+  }
+}
