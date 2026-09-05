@@ -1,0 +1,22 @@
+import com.android.build.api.dsl.ApplicationExtension
+import org.gradle.api.Plugin
+import org.gradle.api.Project
+import org.gradle.kotlin.dsl.configure
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.dsl.KotlinAndroidProjectExtension
+
+class SuirenXAndroidApplicationPlugin : Plugin<Project> {
+    override fun apply(target: Project) = with(target) {
+        pluginManager.apply("com.android.application")
+        pluginManager.apply("org.jetbrains.kotlin.android")
+        extensions.configure<ApplicationExtension> {
+            configureSuirenXAndroid()
+        }
+        extensions.configure<KotlinAndroidProjectExtension> {
+            compilerOptions {
+                jvmTarget.set(JvmTarget.JVM_17)
+                freeCompilerArgs.add("-Xexplicit-backing-fields")
+            }
+        }
+    }
+}

@@ -1,5 +1,7 @@
 # Gradle files
 .gradle/
+.kotlin/
+.trae/
 build/
 
 # Local configuration file (sdk path, etc)
@@ -22,6 +24,14 @@ output-metadata.json
 misc.xml
 deploymentTargetDropDown.xml
 render.experimental.xml
+
+# Go / backend runtime
+services/api/bin/
+services/api/data/
+
+# Local environment
+.env
+.DS_Store
 
 # Keystore files
 *.jks
