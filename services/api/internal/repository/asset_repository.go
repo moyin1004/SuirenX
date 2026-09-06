@@ -10,9 +10,11 @@ import (
 var ErrNotFound = errors.New("asset not found")
 
 type AssetRepository interface {
-	List(status *domain.AssetStatus) ([]domain.Asset, error)
+	List(status *domain.AssetStatus, archived *bool) ([]domain.Asset, error)
 	Get(id string) (*domain.Asset, error)
 	Create(asset *domain.Asset) error
 	Update(asset *domain.Asset) error
+	UpdateStatus(asset *domain.Asset) error
+	UpdateArchive(asset *domain.Asset) error
 	Count() (int64, error)
 }

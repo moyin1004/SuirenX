@@ -13,14 +13,20 @@ import (
 )
 
 var (
-	ErrInvalidName         = errors.New("asset name is required")
-	ErrInvalidPrice        = errors.New("price must not be negative")
-	ErrInvalidPurchaseDate = errors.New("purchase date must use YYYY-MM-DD")
-	ErrInvalidStatus       = errors.New("invalid asset status")
-	ErrAssetNotFound       = errors.New("asset not found")
+	ErrInvalidName          = errors.New("asset name is required")
+	ErrInvalidPrice         = errors.New("price must not be negative")
+	ErrInvalidPurchaseDate  = errors.New("purchase date must use YYYY-MM-DD")
+	ErrInvalidStatus        = errors.New("invalid asset status")
+	ErrInvalidRetiredDate   = errors.New("retired date must use YYYY-MM-DD, be between purchase date and today, and be empty for ACTIVE")
+	ErrInvalidScope         = errors.New("scope must be CURRENT, ARCHIVED, or ALL")
+	ErrInvalidArchiveAction = errors.New("action must be ARCHIVE or RESTORE")
+	ErrAssetArchived        = errors.New("restore archived asset before editing")
+	ErrAssetNotFound        = errors.New("asset not found")
 )
 
 type AssetView struct {
+	ArchivedAt     string `json:"archived_at"`
+	RetiredDate    string `json:"retired_date"`
 	ID             string `json:"id"`
 	Name           string `json:"name"`
 	PriceCents     int64  `json:"price_cents"`
@@ -47,6 +53,12 @@ type UpdateAssetInput struct {
 	PurchaseDate string `json:"purchase_date"`
 }
 
+type UpdateAssetStatusInput struct {
+	ID          string
+	Status      string
+	RetiredDate string
+}
+
 type AssetService struct {
 	repository repository.AssetRepository
 	now        func() time.Time
@@ -57,6 +69,22 @@ func NewAssetService(repository repository.AssetRepository) *AssetService {
 }
 
 func (s *AssetService) List(status string) ([]AssetView, error) {
+	return s.ListScope(status, "")
+}
+
+func (s *AssetService) ListScope(status, scope string) ([]AssetView, error) {
+	var archived *bool
+	switch scope {
+	case "", "CURRENT":
+		value := false
+		archived = &value
+	case "ARCHIVED":
+		value := true
+		archived = &value
+	case "ALL":
+	default:
+		return nil, ErrInvalidScope
+	}
 	var filter *domain.AssetStatus
 	if status != "" {
 		parsed := domain.AssetStatus(strings.ToUpper(status))
@@ -66,7 +94,7 @@ func (s *AssetService) List(status string) ([]AssetView, error) {
 		filter = &parsed
 	}
 
-	assets, err := s.repository.List(filter)
+	assets, err := s.repository.List(filter, archived)
 	if err != nil {
 		return nil, fmt.Errorf("list assets: %w", err)
 	}
@@ -116,6 +144,20 @@ func (s *AssetService) Update(input UpdateAssetInput) (AssetView, error) {
 		return AssetView{}, err
 	}
 
+	current, err := s.repository.Get(input.ID)
+	if errors.Is(err, repository.ErrNotFound) {
+		return AssetView{}, ErrAssetNotFound
+	}
+	if err != nil {
+		return AssetView{}, fmt.Errorf("get asset for update: %w", err)
+	}
+	if current.ArchivedAt != nil {
+		return AssetView{}, ErrAssetArchived
+	}
+	if current.RetiredAt != nil && purchaseDate.After(*current.RetiredAt) {
+		return AssetView{}, ErrInvalidRetiredDate
+	}
+
 	asset := domain.Asset{
 		ID:           input.ID,
 		Name:         name,
@@ -129,6 +171,78 @@ func (s *AssetService) Update(input UpdateAssetInput) (AssetView, error) {
 		return AssetView{}, fmt.Errorf("update asset: %w", err)
 	}
 	return s.toView(asset), nil
+}
+
+// UpdateStatus sets the requested lifecycle state; repeating the same request is
+// safe. Reactivation resumes held-day calculation from the original purchase day.
+func (s *AssetService) UpdateStatus(input UpdateAssetStatusInput) (AssetView, error) {
+	status := domain.AssetStatus(input.Status)
+	if !status.Valid() {
+		return AssetView{}, ErrInvalidStatus
+	}
+	var retiredAt *time.Time
+	if status == domain.AssetStatusRetired {
+		date, err := time.Parse(time.DateOnly, input.RetiredDate)
+		today, _ := time.Parse(time.DateOnly, s.now().Format(time.DateOnly))
+		if err != nil || date.After(today) {
+			return AssetView{}, ErrInvalidRetiredDate
+		}
+		retiredAt = &date
+	} else if input.RetiredDate != "" {
+		return AssetView{}, ErrInvalidRetiredDate
+	}
+	asset, err := s.repository.Get(input.ID)
+	if errors.Is(err, repository.ErrNotFound) {
+		return AssetView{}, ErrAssetNotFound
+	}
+	if err != nil {
+		return AssetView{}, fmt.Errorf("get asset for status update: %w", err)
+	}
+	if asset.ArchivedAt != nil {
+		return AssetView{}, ErrAssetArchived
+	}
+	if retiredAt != nil && retiredAt.Before(asset.PurchaseDate) {
+		return AssetView{}, ErrInvalidRetiredDate
+	}
+	asset.Status = status
+	asset.RetiredAt = retiredAt
+	if err := s.repository.UpdateStatus(asset); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return AssetView{}, ErrAssetNotFound
+		}
+		return AssetView{}, fmt.Errorf("update asset status: %w", err)
+	}
+	return s.toView(*asset), nil
+}
+
+// UpdateArchive preserves lifecycle and financial fields. Archived assets remain
+// recoverable indefinitely and can be read by ID.
+func (s *AssetService) UpdateArchive(id, action string) (AssetView, error) {
+	if action != "ARCHIVE" && action != "RESTORE" {
+		return AssetView{}, ErrInvalidArchiveAction
+	}
+	asset, err := s.repository.Get(id)
+	if errors.Is(err, repository.ErrNotFound) {
+		return AssetView{}, ErrAssetNotFound
+	}
+	if err != nil {
+		return AssetView{}, fmt.Errorf("get asset for archive update: %w", err)
+	}
+	if action == "ARCHIVE" {
+		if asset.ArchivedAt == nil {
+			now := s.now()
+			asset.ArchivedAt = &now
+		}
+	} else {
+		asset.ArchivedAt = nil
+	}
+	if err := s.repository.UpdateArchive(asset); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return AssetView{}, ErrAssetNotFound
+		}
+		return AssetView{}, fmt.Errorf("update asset archive: %w", err)
+	}
+	return s.toView(*asset), nil
 }
 
 // validateEditable enforces the shared rules for the user-editable fields.
@@ -167,7 +281,13 @@ func (s *AssetService) SeedExamples() error {
 
 func (s *AssetService) toView(asset domain.Asset) AssetView {
 	end := s.now()
-	if asset.RetiredAt != nil {
+	retiredDate := ""
+	archivedAt := ""
+	if asset.ArchivedAt != nil {
+		archivedAt = asset.ArchivedAt.Format(time.RFC3339)
+	}
+	if asset.Status == domain.AssetStatusRetired && asset.RetiredAt != nil {
+		retiredDate = asset.RetiredAt.Format(time.DateOnly)
 		end = *asset.RetiredAt
 	}
 	endDate := time.Date(end.Year(), end.Month(), end.Day(), 0, 0, 0, 0, time.UTC)
@@ -182,6 +302,8 @@ func (s *AssetService) toView(asset domain.Asset) AssetView {
 	}
 
 	return AssetView{
+		RetiredDate:    retiredDate,
+		ArchivedAt:     archivedAt,
 		ID:             asset.ID,
 		Name:           asset.Name,
 		PriceCents:     asset.PriceCents,

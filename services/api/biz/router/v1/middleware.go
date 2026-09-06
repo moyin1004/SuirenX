@@ -45,3 +45,23 @@ func _updateassetMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _assets0Mw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _idMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _updateassetstatusMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _updateassetarchiveMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

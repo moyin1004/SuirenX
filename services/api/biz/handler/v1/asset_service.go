@@ -18,7 +18,7 @@ func ListAssets(_ context.Context, c *app.RequestContext) {
 		c.JSON(consts.StatusBadRequest, map[string]string{"error": "invalid request query"})
 		return
 	}
-	assets, err := assetService(c).List(req.Status)
+	assets, err := assetService(c).ListScope(req.Status, req.Scope)
 	if err != nil {
 		writeError(c, err)
 		return
@@ -80,4 +80,38 @@ func UpdateAsset(_ context.Context, c *app.RequestContext) {
 		return
 	}
 	c.JSON(consts.StatusOK, &model.UpdateAssetResponse{Asset: toAPIAsset(asset)})
+}
+
+// UpdateAssetStatus handles lifecycle changes declared in asset.proto.
+// @router /api/v1/assets/:id/status [PUT]
+func UpdateAssetStatus(_ context.Context, c *app.RequestContext) {
+	var req model.UpdateAssetStatusRequest
+	if err := c.BindAndValidate(&req); err != nil {
+		c.JSON(consts.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	asset, err := assetService(c).UpdateStatus(service.UpdateAssetStatusInput{
+		ID: req.Id, Status: req.Status, RetiredDate: req.RetiredDate,
+	})
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(consts.StatusOK, &model.UpdateAssetStatusResponse{Asset: toAPIAsset(asset)})
+}
+
+// UpdateAssetArchive handles reversible archiving declared in asset.proto.
+// @router /api/v1/assets/:id/archive [PUT]
+func UpdateAssetArchive(_ context.Context, c *app.RequestContext) {
+	var req model.UpdateAssetArchiveRequest
+	if err := c.BindAndValidate(&req); err != nil {
+		c.JSON(consts.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	asset, err := assetService(c).UpdateArchive(req.Id, req.Action)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(consts.StatusOK, &model.UpdateAssetArchiveResponse{Asset: toAPIAsset(asset)})
 }

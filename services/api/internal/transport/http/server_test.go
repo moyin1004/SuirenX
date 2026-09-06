@@ -282,3 +282,187 @@ func TestDatabaseErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestAssetStatusRoundTrip(t *testing.T) {
+	s, closeDB := testServer(t)
+	created := request(s, "POST", "/api/v1/assets", `{"name":"Keyboard","price_cents":10000,"purchase_date":"2020-01-01","image_url":"image"}`)
+	var response struct {
+		Asset service.AssetView `json:"asset"`
+	}
+	if created.Code != 201 {
+		t.Fatalf("create: %d %s", created.Code, created.Body)
+	}
+	if err := json.Unmarshal(created.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	path := "/api/v1/assets/" + response.Asset.ID
+	if !strings.Contains(created.Body.String(), `"retired_date":""`) {
+		t.Fatal("missing explicit empty retirement date")
+	}
+	for _, body := range []string{
+		`{`, `{}`, `{"status":1}`, `{"status":"UNKNOWN"}`, `{"status":"retired","retired_date":"2020-01-03"}`,
+		`{"status":"RETIRED"}`, `{"status":"RETIRED","retired_date":"2020-02-30"}`,
+		`{"status":"RETIRED","retired_date":"2019-12-31"}`,
+		`{"status":"RETIRED","retired_date":"` + time.Now().AddDate(0, 0, 1).Format(time.DateOnly) + `"}`,
+		`{"status":"ACTIVE","retired_date":"2020-01-03"}`,
+	} {
+		got := request(s, "PUT", path+"/status", body)
+		if got.Code != 400 || !strings.Contains(got.Body.String(), `"error":`) {
+			t.Fatalf("invalid %s: %d %s", body, got.Code, got.Body)
+		}
+	}
+	for i := 0; i < 2; i++ {
+		retired := request(s, "PUT", path+"/status", `{"status":"RETIRED","retired_date":"2020-01-03"}`)
+		if retired.Code != 200 {
+			t.Fatalf("retire: %d %s", retired.Code, retired.Body)
+		}
+		if err := json.Unmarshal(retired.Body.Bytes(), &response); err != nil {
+			t.Fatal(err)
+		}
+		if response.Asset.Status != "RETIRED" || response.Asset.RetiredDate != "2020-01-03" || response.Asset.HeldDays != 3 || response.Asset.DailyCostCents != 3333 || response.Asset.ImageURL != "image" || response.Asset.Name != "Keyboard" {
+			t.Fatalf("retired: %+v", response.Asset)
+		}
+	}
+	found := request(s, "GET", path, "")
+	if found.Code != 200 || !strings.Contains(found.Body.String(), `"retired_date":"2020-01-03"`) {
+		t.Fatalf("not persisted: %s", found.Body)
+	}
+	retiredList := request(s, "GET", "/api/v1/assets?status=RETIRED", "")
+	if !strings.Contains(retiredList.Body.String(), `"retired_date":"2020-01-03"`) {
+		t.Fatal(retiredList.Body)
+	}
+	activeList := request(s, "GET", "/api/v1/assets?status=ACTIVE", "")
+	if activeList.Body.String() != `{"assets":[]}` {
+		t.Fatal(activeList.Body)
+	}
+	invalidEdit := request(s, "PUT", path, `{"name":"Edited","price_cents":0,"purchase_date":"2020-01-04"}`)
+	if invalidEdit.Code != 400 {
+		t.Fatalf("edit after retirement: %d %s", invalidEdit.Code, invalidEdit.Body)
+	}
+	active := request(s, "PUT", path+"/status", `{"status":"ACTIVE","retired_date":""}`)
+	if active.Code != 200 {
+		t.Fatalf("reactivate: %d %s", active.Code, active.Body)
+	}
+	if err := json.Unmarshal(active.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Asset.Status != "ACTIVE" || response.Asset.RetiredDate != "" || response.Asset.HeldDays <= 3 || response.Asset.PriceCents != 10000 {
+		t.Fatalf("reactivated: %+v", response.Asset)
+	}
+	found = request(s, "GET", path, "")
+	if !strings.Contains(found.Body.String(), `"retired_date":""`) {
+		t.Fatal("retirement date was not cleared in database")
+	}
+	missing := request(s, "PUT", "/api/v1/assets/missing/status", `{"status":"ACTIVE"}`)
+	if missing.Code != 404 || !strings.Contains(missing.Body.String(), `"error":`) {
+		t.Fatalf("missing: %d %s", missing.Code, missing.Body)
+	}
+	closeDB()
+	failure := request(s, "PUT", path+"/status", `{"status":"ACTIVE"}`)
+	if failure.Code != 500 || failure.Body.String() != `{"error":"internal server error"}` {
+		t.Fatalf("db error: %d %s", failure.Code, failure.Body)
+	}
+}
+
+func TestAssetArchiveRoundTrip(t *testing.T) {
+	s, closeDB := testServer(t)
+	created := request(s, "POST", "/api/v1/assets", `{"name":"Archive test","price_cents":1200,"purchase_date":"2020-01-01"}`)
+	var response struct {
+		Asset service.AssetView `json:"asset"`
+	}
+	if created.Code != 201 {
+		t.Fatal(created.Body)
+	}
+	if err := json.Unmarshal(created.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	path := "/api/v1/assets/" + response.Asset.ID
+	if !strings.Contains(created.Body.String(), `"archived_at":""`) {
+		t.Fatal("missing explicit empty archive timestamp")
+	}
+	retired := request(s, "PUT", path+"/status", `{"status":"RETIRED","retired_date":"2020-01-03"}`)
+	if retired.Code != 200 {
+		t.Fatal(retired.Body)
+	}
+	for _, body := range []string{`{`, `{}`, `{"action":true}`, `{"action":"DELETE"}`} {
+		got := request(s, "PUT", path+"/archive", body)
+		if got.Code != 400 || !strings.Contains(got.Body.String(), `"error":`) {
+			t.Fatalf("invalid: %d %s", got.Code, got.Body)
+		}
+	}
+	firstStamp := ""
+	for i := 0; i < 2; i++ {
+		got := request(s, "PUT", path+"/archive", `{"action":"ARCHIVE"}`)
+		if got.Code != 200 {
+			t.Fatalf("archive: %d %s", got.Code, got.Body)
+		}
+		if err := json.Unmarshal(got.Body.Bytes(), &response); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := time.Parse(time.RFC3339, response.Asset.ArchivedAt); err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			firstStamp = response.Asset.ArchivedAt
+		} else if response.Asset.ArchivedAt != firstStamp {
+			t.Fatal("duplicate archive changed timestamp")
+		}
+	}
+	for _, query := range []string{"", "?scope=CURRENT", "?status=RETIRED"} {
+		got := request(s, "GET", "/api/v1/assets"+query, "")
+		if got.Code != 200 || got.Body.String() != `{"assets":[]}` {
+			t.Fatalf("default includes archive: %s", got.Body)
+		}
+	}
+	for _, query := range []string{"?scope=ARCHIVED", "?scope=ALL", "?scope=ARCHIVED&status=RETIRED"} {
+		got := request(s, "GET", "/api/v1/assets"+query, "")
+		if got.Code != 200 || !strings.Contains(got.Body.String(), `"archived_at":"`+firstStamp+`"`) {
+			t.Fatalf("archive missing: %s", got.Body)
+		}
+	}
+	if got := request(s, "GET", "/api/v1/assets?scope=INVALID", ""); got.Code != 400 {
+		t.Fatalf("invalid scope: %d", got.Code)
+	}
+	for _, tc := range []struct{ suffix, body string }{
+		{"", `{"name":"Changed","price_cents":0,"purchase_date":"2020-01-01"}`},
+		{"/status", `{"status":"ACTIVE"}`},
+	} {
+		got := request(s, "PUT", path+tc.suffix, tc.body)
+		if got.Code != 409 {
+			t.Fatalf("archived write: %d %s", got.Code, got.Body)
+		}
+	}
+	got := request(s, "GET", path, "")
+	if got.Code != 200 {
+		t.Fatal("archive not readable")
+	}
+	for i := 0; i < 2; i++ {
+		restored := request(s, "PUT", path+"/archive", `{"action":"RESTORE"}`)
+		if restored.Code != 200 {
+			t.Fatal(restored.Body)
+		}
+		if err := json.Unmarshal(restored.Body.Bytes(), &response); err != nil {
+			t.Fatal(err)
+		}
+		if response.Asset.ArchivedAt != "" || response.Asset.Status != "RETIRED" || response.Asset.RetiredDate != "2020-01-03" || response.Asset.Name != "Archive test" || response.Asset.PriceCents != 1200 || response.Asset.HeldDays != 3 {
+			t.Fatalf("restore changed fields: %+v", response.Asset)
+		}
+	}
+	current := request(s, "GET", "/api/v1/assets", "")
+	if !strings.Contains(current.Body.String(), `"name":"Archive test"`) {
+		t.Fatal("restoration not persisted")
+	}
+	archived := request(s, "GET", "/api/v1/assets?scope=ARCHIVED", "")
+	if archived.Body.String() != `{"assets":[]}` {
+		t.Fatal(archived.Body)
+	}
+	missing := request(s, "PUT", "/api/v1/assets/missing/archive", `{"action":"RESTORE"}`)
+	if missing.Code != 404 {
+		t.Fatalf("missing: %d", missing.Code)
+	}
+	closeDB()
+	failed := request(s, "PUT", path+"/archive", `{"action":"ARCHIVE"}`)
+	if failed.Code != 500 || failed.Body.String() != `{"error":"internal server error"}` {
+		t.Fatalf("db error: %d %s", failed.Code, failed.Body)
+	}
+}

@@ -49,11 +49,17 @@ repository boundaries.
 - Store money as integer cents (`int64`/`Long`), never floating point.
 - Exchange date-only values as `YYYY-MM-DD` and timestamps as RFC 3339.
 - An active asset's held days include both its purchase day and today.
+- Retirement uses `retired_date` (`YYYY-MM-DD`, empty for active assets); held
+  days include the retirement day. Retirement dates must be between purchase
+  day and today. Reactivation clears the date and resumes counting from purchase.
 - Keep SQLite-specific behavior in the database/migration infrastructure and
   GORM repository, outside business services.
 - Schema changes use numbered SQL files in `services/api/internal/database/migrations`.
   Never call GORM `AutoMigrate` or modify an applied migration; append the next
   migration and test both upgrade and failure rollback.
+- Archive is reversible and independent of lifecycle status. Archived assets
+  are excluded from default lists and totals, remain readable, and must be
+  restored before editing. Never auto-delete archived records.
 - Runtime databases under `services/api/data` are local artifacts and must not
   be committed.
 

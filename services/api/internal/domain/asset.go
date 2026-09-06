@@ -19,6 +19,7 @@ type Asset struct {
 	PriceCents   int64
 	PurchaseDate time.Time
 	RetiredAt    *time.Time
+	ArchivedAt   *time.Time
 	Status       AssetStatus
 	ImageURL     string
 	CreatedAt    time.Time

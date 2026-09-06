@@ -3,13 +3,15 @@ package database
 import (
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/moyin1004/suirenx/services/api/internal/repository"
 )
 
-// The baseline schema must satisfy the GORM repository end to end: a row
-// inserted through SQL is readable through GORM and after reopening.
-func TestBaselineSchemaPersistsAcrossReopen(t *testing.T) {
+// The baseline schema must satisfy the GORM repository end to end: the archive
+// column persists across reopening, and restoring returns the asset to the
+// current list.
+func TestBaselineSchemaPersistsArchiveAcrossReopen(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "baseline.db")
 
 	db, err := Open(path)
@@ -27,8 +29,13 @@ func TestBaselineSchemaPersistsAcrossReopen(t *testing.T) {
 
 	repo := repository.NewGormAssetRepository(db)
 	asset, err := repo.Get("legacy")
-	if err != nil || asset.Name != "Keyboard" || asset.PriceCents != 10000 {
+	if err != nil || asset.Name != "Keyboard" || asset.PriceCents != 10000 || asset.ArchivedAt != nil {
 		t.Fatalf("baseline read: %+v %v", asset, err)
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	asset.ArchivedAt = &now
+	if err = repo.UpdateArchive(asset); err != nil {
+		t.Fatal(err)
 	}
 	if err = conn.Close(); err != nil {
 		t.Fatal(err)
@@ -45,7 +52,16 @@ func TestBaselineSchemaPersistsAcrossReopen(t *testing.T) {
 	defer reopenedConn.Close()
 	repo = repository.NewGormAssetRepository(reopened)
 	asset, err = repo.Get("legacy")
-	if err != nil || asset.Name != "Keyboard" || asset.PriceCents != 10000 {
+	if err != nil || asset.ArchivedAt == nil || !asset.ArchivedAt.Equal(now) {
 		t.Fatalf("reopen: %+v %v", asset, err)
+	}
+	asset.ArchivedAt = nil
+	if err = repo.UpdateArchive(asset); err != nil {
+		t.Fatal(err)
+	}
+	current := false
+	assets, err := repo.List(nil, &current)
+	if err != nil || len(assets) != 1 || assets[0].PriceCents != 10000 {
+		t.Fatalf("restore: %+v %v", assets, err)
 	}
 }

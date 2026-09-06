@@ -35,6 +35,37 @@ Use Hertz JSON rendering, not canonical protojson encoding.
 - Dates crossing the API boundary use ISO 8601 strings.
 - Database-specific queries remain inside repository implementations.
 
+## Asset lifecycle
+
+`PUT /api/v1/assets/:id/status` accepts `status` (`ACTIVE` / `RETIRED`) and
+`retired_date`. Retiring requires a `YYYY-MM-DD` date between purchase day and
+server-local today, inclusive. Reactivation requires an empty date and clears
+the stored retirement value. Repeating a request yields the same lifecycle
+state. Every asset response includes `retired_date`, empty while active.
+
+Held days include both endpoints: purchase through today for active assets,
+purchase through retirement for retired assets. Reactivation counts from the
+original purchase date, including the intervening retired period; this version
+does not maintain a history of service periods. The overview includes all asset
+prices but sums daily costs only for active assets. Editing a retired asset
+cannot move its purchase date beyond retirement.
+
+## Reversible archive
+
+Archive is independent of `ACTIVE` / `RETIRED`. `PUT /api/v1/assets/:id/archive`
+requires `action: "ARCHIVE"` or `action: "RESTORE"`; retries preserve the first
+archive timestamp. Responses always include `archived_at` (RFC 3339 when
+archived, empty otherwise). No automatic expiration or permanent deletion is
+implemented. Restoring preserves price, purchase date, service status and
+retirement date; archiving does not pause the held-day calculation.
+
+`GET /api/v1/assets` defaults to non-archived assets. `scope=CURRENT`,
+`scope=ARCHIVED`, and `scope=ALL` select visibility independently of `status`.
+Android loads `ALL` for local filters but excludes archived records from all
+everyday filters and the overview. Archived detail is readable by ID and only
+offers restoration; editing and lifecycle writes return HTTP 409 until restored.
+The nullable archive column is introduced by versioned SQL migration 002.
+
 ## Versioned database migrations
 
 `database.Open` runs the SQL files embedded from `internal/database/migrations`

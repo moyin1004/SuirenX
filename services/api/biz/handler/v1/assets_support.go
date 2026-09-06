@@ -30,15 +30,17 @@ func toAPIAsset(asset service.AssetView) *model.Asset {
 		Id: asset.ID, Name: asset.Name, PriceCents: asset.PriceCents,
 		PurchaseDate: asset.PurchaseDate, Status: asset.Status, ImageUrl: asset.ImageURL,
 		HeldDays: int32(asset.HeldDays), DailyCostCents: asset.DailyCostCents,
-		CreatedAt: asset.CreatedAt, UpdatedAt: asset.UpdatedAt,
+		CreatedAt: asset.CreatedAt, UpdatedAt: asset.UpdatedAt, RetiredDate: asset.RetiredDate, ArchivedAt: asset.ArchivedAt,
 	}
 }
 
 func writeError(c *app.RequestContext, err error) {
 	status := consts.StatusInternalServerError
-	if errors.Is(err, service.ErrInvalidName) || errors.Is(err, service.ErrInvalidPrice) ||
-		errors.Is(err, service.ErrInvalidPurchaseDate) || errors.Is(err, service.ErrInvalidStatus) {
+	if errors.Is(err, service.ErrInvalidScope) || errors.Is(err, service.ErrInvalidArchiveAction) || errors.Is(err, service.ErrInvalidName) || errors.Is(err, service.ErrInvalidPrice) ||
+		errors.Is(err, service.ErrInvalidRetiredDate) || errors.Is(err, service.ErrInvalidPurchaseDate) || errors.Is(err, service.ErrInvalidStatus) {
 		status = consts.StatusBadRequest
+	} else if errors.Is(err, service.ErrAssetArchived) {
+		status = consts.StatusConflict
 	} else if errors.Is(err, service.ErrAssetNotFound) {
 		status = consts.StatusNotFound
 	}

@@ -18,11 +18,19 @@ message Asset {
   int64 daily_cost_cents = 8;
   string created_at = 9;
   string updated_at = 10;
+  // YYYY-MM-DD for retired assets; empty string while active.
+  string retired_date = 11;
+  // RFC 3339 timestamp; empty string when not archived.
+  string archived_at = 12;
+  // Stable built-in icon key. Legacy assets default to devices.
+  string icon_key = 13;
 }
 
 message ListAssetsRequest {
   // Optional HTTP query filter: ACTIVE or RETIRED (case-insensitive).
   string status = 1 [(api.query) = "status"];
+  // CURRENT (default), ARCHIVED, or ALL. Independent of lifecycle status.
+  string scope = 2 [(api.query) = "scope"];
 }
 
 message ListAssetsResponse {
@@ -42,6 +50,9 @@ message CreateAssetRequest {
   int64 price_cents = 2 [(api.body) = "price_cents"];
   string purchase_date = 3 [(api.body) = "purchase_date"];
   string image_url = 4 [(api.body) = "image_url"];
+  // devices, laptop, phone, tablet, headphones, watch, camera, gamepad,
+  // book, keyboard, bicycle, home. Empty defaults to devices.
+  string icon_key = 5 [(api.body) = "icon_key"];
 }
 
 message CreateAssetResponse {
@@ -54,13 +65,45 @@ message UpdateAssetRequest {
   string name = 2 [(api.body) = "name"];
   int64 price_cents = 3 [(api.body) = "price_cents"];
   string purchase_date = 4 [(api.body) = "purchase_date"];
+  // Same keys as CreateAsset; omitted/empty preserves the existing icon.
+  string icon_key = 5 [(api.body) = "icon_key"];
 }
 
 message UpdateAssetResponse {
   Asset asset = 1;
 }
 
+message UpdateAssetStatusRequest {
+  string id = 1 [(api.path) = "id"];
+  // Exact HTTP JSON status: ACTIVE or RETIRED.
+  string status = 2 [(api.body) = "status"];
+  // Required for RETIRED, between purchase date and today inclusive; empty for ACTIVE.
+  string retired_date = 3 [(api.body) = "retired_date"];
+}
+
+message UpdateAssetStatusResponse {
+  Asset asset = 1;
+}
+
+message UpdateAssetArchiveRequest {
+  string id = 1 [(api.path) = "id"];
+  // ARCHIVE or RESTORE. Required; repeated requests are safe.
+  string action = 2 [(api.body) = "action"];
+}
+
+message UpdateAssetArchiveResponse {
+  Asset asset = 1;
+}
+
 service AssetService {
+  rpc UpdateAssetArchive(UpdateAssetArchiveRequest) returns (UpdateAssetArchiveResponse) {
+    option (api.put) = "/api/v1/assets/:id/archive";
+  }
+
+  rpc UpdateAssetStatus(UpdateAssetStatusRequest) returns (UpdateAssetStatusResponse) {
+    option (api.put) = "/api/v1/assets/:id/status";
+  }
+
   rpc ListAssets(ListAssetsRequest) returns (ListAssetsResponse) {
     option (api.get) = "/api/v1/assets";
   }
