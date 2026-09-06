@@ -386,7 +386,7 @@ private fun AssetCard(asset: Asset, onClick: () -> Unit, modifier: Modifier = Mo
                     contentAlignment = Alignment.Center,
                 ) {
                     Surface(
-                        color = if (asset.status == AssetStatus.Active) {
+                        color = if (!asset.isArchived && asset.status == AssetStatus.Active) {
                             MaterialTheme.colorScheme.secondary
                         } else {
                             MaterialTheme.colorScheme.outline
@@ -396,7 +396,11 @@ private fun AssetCard(asset: Asset, onClick: () -> Unit, modifier: Modifier = Mo
                 }
                 Spacer(Modifier.size(6.dp))
                 Text(
-                    text = if (asset.status == AssetStatus.Active) "服役中" else "已退役",
+                    text = when {
+                        asset.isArchived -> "已归档"
+                        asset.status == AssetStatus.Active -> "服役中"
+                        else -> "已退役"
+                    },
                     fontSize = 12.sp,
                 )
             }

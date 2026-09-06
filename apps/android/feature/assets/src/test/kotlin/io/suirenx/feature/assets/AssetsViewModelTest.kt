@@ -3,6 +3,9 @@ package io.suirenx.feature.assets
 import io.suirenx.core.domain.AssetRepository
 import io.suirenx.core.domain.BackendRepository
 import io.suirenx.core.domain.GetAssetsUseCase
+import io.suirenx.core.domain.GetAssetUseCase
+import io.suirenx.core.domain.UpdateAssetArchiveUseCase
+import io.suirenx.core.domain.UpdateAssetStatusUseCase
 import io.suirenx.core.model.Asset
 import io.suirenx.core.model.AssetStatus
 import io.suirenx.core.model.BackendSettings
@@ -103,6 +106,63 @@ class AssetsViewModelTest {
         assertFalse(vm.uiState.value.isLoading)
     }
 
+    @Test fun retiringFromDetailRefreshesActiveFilterAndOverview() = runTest(dispatcher) {
+        val asset = Asset("a1", "Keyboard", 10000, LocalDate.of(2020, 1, 1), AssetStatus.Active, "", 5, 2000)
+        val repo = FakeRepository().apply { seed(asset) }
+        val notifier = AssetChangeNotifier()
+        val list = AssetsViewModel(GetAssetsUseCase(repo), FakeBackends(), notifier)
+        val detail = AssetDetailViewModel(GetAssetUseCase(repo), notifier, UpdateAssetStatusUseCase(repo), UpdateAssetArchiveUseCase(repo))
+        detail.load(asset.id)
+        advanceUntilIdle()
+        list.onFilterSelected(AssetFilter.Active)
+        assertEquals(1, list.uiState.value.visibleAssets.size)
+        detail.openStatusDialog()
+        detail.changeRetiredDate("2020-01-03")
+        detail.saveStatus()
+        advanceUntilIdle()
+        assertEquals(AssetFilter.Active, list.uiState.value.selectedFilter)
+        assertTrue(list.uiState.value.visibleAssets.isEmpty())
+        assertEquals(0, list.uiState.value.overview.activeCount)
+        assertEquals(1, list.uiState.value.overview.retiredCount)
+        assertEquals(10000L, list.uiState.value.overview.totalPriceCents)
+        assertEquals(0L, list.uiState.value.overview.totalDailyCostCents)
+        detail.openStatusDialog()
+        detail.saveStatus()
+        advanceUntilIdle()
+        assertEquals(1, list.uiState.value.visibleAssets.size)
+        assertEquals(1, list.uiState.value.overview.activeCount)
+        assertEquals(2000L, list.uiState.value.overview.totalDailyCostCents)
+    }
+
+    @Test fun archiveFilterAndOverviewRefreshAfterArchiveAndRestore() = runTest(dispatcher) {
+        val asset = Asset("a1", "Keyboard", 10000, LocalDate.of(2020, 1, 1), AssetStatus.Active, "", 5, 2000)
+        val repo = FakeRepository().apply { seed(asset) }
+        val notifier = AssetChangeNotifier()
+        val list = AssetsViewModel(GetAssetsUseCase(repo), FakeBackends(), notifier)
+        val detail = AssetDetailViewModel(GetAssetUseCase(repo), notifier, UpdateAssetStatusUseCase(repo), UpdateAssetArchiveUseCase(repo))
+        detail.load(asset.id)
+        advanceUntilIdle()
+        detail.openArchiveDialog()
+        detail.saveArchive()
+        advanceUntilIdle()
+        assertTrue(list.uiState.value.visibleAssets.isEmpty())
+        assertEquals(0L, list.uiState.value.overview.totalPriceCents)
+        assertEquals(0L, list.uiState.value.overview.totalDailyCostCents)
+        assertEquals(0, list.uiState.value.overview.totalCount)
+        list.onFilterSelected(AssetFilter.Archived)
+        assertEquals(1, list.uiState.value.visibleAssets.size)
+        assertEquals(0L, list.uiState.value.overview.totalPriceCents)
+        detail.openArchiveDialog()
+        detail.saveArchive()
+        advanceUntilIdle()
+        assertEquals(AssetFilter.Archived, list.uiState.value.selectedFilter)
+        assertTrue(list.uiState.value.visibleAssets.isEmpty())
+        assertEquals(10000L, list.uiState.value.overview.totalPriceCents)
+        assertEquals(2000L, list.uiState.value.overview.totalDailyCostCents)
+        list.onFilterSelected(AssetFilter.All)
+        assertEquals(listOf(asset), list.uiState.value.visibleAssets)
+    }
+
     private class FakeBackends : BackendRepository {
         override val settings = MutableStateFlow<BackendSettings?>(BackendSettings(activeUrl = "https://first.example/"))
         override suspend fun initialize() = Result.success(Unit)
@@ -113,6 +173,8 @@ class AssetsViewModelTest {
     internal class FakeRepository : AssetRepository {
         var createCalls = 0
         var updateCalls = 0
+        var statusCalls = 0
+        var archiveCalls = 0
         var listCalls = 0
         var fail = false
         var pending: CompletableDeferred<Unit>? = null
@@ -125,9 +187,9 @@ class AssetsViewModelTest {
             assets += asset
         }
 
-        override suspend fun getAssets(status: AssetStatus?): Result<List<Asset>> {
+        override suspend fun getAssets(status: AssetStatus?, includeArchived: Boolean): Result<List<Asset>> {
             listCalls++
-            return Result.success(assets.filter { status == null || it.status == status })
+            return Result.success(assets.filter { (status == null || it.status == status) && (includeArchived || !it.isArchived) })
         }
 
         override suspend fun getAsset(id: String): Result<Asset> {
@@ -148,6 +210,28 @@ class AssetsViewModelTest {
             )
             assets += saved
             return Result.success(saved)
+        }
+
+        override suspend fun updateAssetArchive(id: String, archive: Boolean): Result<Asset> {
+            archiveCalls++
+            pending?.await()
+            if (fail) return Result.failure(IllegalStateException("offline"))
+            val index = assets.indexOfFirst { it.id == id }
+            if (index < 0) return Result.failure(NoSuchElementException("missing"))
+            val updated = assets[index].copy(archivedAt = if (archive) java.time.Instant.now() else null)
+            assets[index] = updated
+            return Result.success(updated)
+        }
+
+        override suspend fun updateAssetStatus(id: String, status: AssetStatus, retiredDate: LocalDate?): Result<Asset> {
+            statusCalls++
+            pending?.await()
+            if (fail) return Result.failure(IllegalStateException("offline"))
+            val index = assets.indexOfFirst { it.id == id }
+            if (index < 0) return Result.failure(NoSuchElementException("asset $id not found"))
+            val updated = assets[index].copy(status = status, retiredDate = retiredDate)
+            assets[index] = updated
+            return Result.success(updated)
         }
 
         override suspend fun updateAsset(id: String, asset: NewAsset): Result<Asset> {

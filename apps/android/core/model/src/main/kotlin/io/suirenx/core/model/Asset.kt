@@ -1,6 +1,7 @@
 package io.suirenx.core.model
 
 import java.time.LocalDate
+import java.time.Instant
 
 enum class AssetStatus {
     Active,
@@ -16,5 +17,9 @@ data class Asset(
     val imageUrl: String,
     val heldDays: Int,
     val dailyCostCents: Long,
-)
+    val retiredDate: LocalDate? = null,
+    val archivedAt: Instant? = null,
+) {
+    val isArchived: Boolean get() = archivedAt != null
+}
 

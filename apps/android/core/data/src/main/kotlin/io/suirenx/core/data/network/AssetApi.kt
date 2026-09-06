@@ -10,11 +10,17 @@ import retrofit2.http.Path
 import retrofit2.http.Query
 
 interface AssetApi {
+    @PUT("api/v1/assets/{id}/archive")
+    suspend fun updateAssetArchive(@Path("id") id: String, @Body request: UpdateAssetArchiveRequest): UpdateAssetArchiveResponse
+
+    @PUT("api/v1/assets/{id}/status")
+    suspend fun updateAssetStatus(@Path("id") id: String, @Body request: UpdateAssetStatusRequest): UpdateAssetStatusResponse
+
     @POST("api/v1/assets")
     suspend fun createAsset(@Body request: CreateAssetRequest): CreateAssetResponse
 
     @GET("api/v1/assets")
-    suspend fun getAssets(@Query("status") status: String? = null): AssetListResponse
+    suspend fun getAssets(@Query("status") status: String? = null, @Query("scope") scope: String? = null): AssetListResponse
 
     @GET("api/v1/assets/{id}")
     suspend fun getAsset(@Path("id") id: String): GetAssetResponse
@@ -38,6 +44,8 @@ data class AssetDto(
     @SerialName("image_url") val imageUrl: String = "",
     @SerialName("held_days") val heldDays: Int,
     @SerialName("daily_cost_cents") val dailyCostCents: Long,
+    @SerialName("retired_date") val retiredDate: String = "",
+    @SerialName("archived_at") val archivedAt: String = "",
 )
 
 
@@ -63,3 +71,18 @@ data class UpdateAssetResponse(val asset: AssetDto)
 
 @Serializable
 data class GetAssetResponse(val asset: AssetDto)
+
+@Serializable
+data class UpdateAssetStatusRequest(
+    val status: String,
+    @SerialName("retired_date") val retiredDate: String,
+)
+
+@Serializable
+data class UpdateAssetStatusResponse(val asset: AssetDto)
+
+@Serializable
+data class UpdateAssetArchiveRequest(val action: String)
+
+@Serializable
+data class UpdateAssetArchiveResponse(val asset: AssetDto)
