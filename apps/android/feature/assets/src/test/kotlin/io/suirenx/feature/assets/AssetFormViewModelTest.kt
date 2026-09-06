@@ -42,6 +42,7 @@ class AssetFormViewModelTest {
         imageUrl = "",
         heldDays = 133,
         dailyCostCents = 12_781,
+        iconKey = "laptop",
     )
 
     private fun viewModel(
@@ -71,6 +72,7 @@ class AssetFormViewModelTest {
             notifier.events.toList(changeEvents)
         }
 
+        vm.onIconSelected("book")
         vm.onNameChanged("Kindle")
         vm.onPriceChanged("899.50")
         vm.save()
@@ -96,6 +98,7 @@ class AssetFormViewModelTest {
         assertEquals("MacBook Pro", loaded.name)
         assertEquals("16999.00", loaded.price)
         assertEquals("2026-01-01", loaded.purchaseDate)
+        assertEquals("laptop", loaded.iconKey)
 
         val savedEvents = mutableListOf<Unit>()
         backgroundScope.launch(UnconfinedTestDispatcher(dispatcher.scheduler)) {
@@ -134,6 +137,7 @@ class AssetFormViewModelTest {
             vm.saved.toList(savedEvents)
         }
 
+        vm.onIconSelected("book")
         vm.onNameChanged("Kindle")
         vm.onPriceChanged("899.50")
         vm.save()
@@ -143,6 +147,7 @@ class AssetFormViewModelTest {
         assertFalse(failed.isSaving)
         assertEquals("Kindle", failed.name)
         assertEquals("899.50", failed.price)
+        assertEquals("book", failed.iconKey)
         assertEquals("保存失败，请检查网络和服务后重试", failed.errorMessage)
         assertEquals(1, repo.createCalls)
         assertEquals(0, savedEvents.size)
@@ -169,5 +174,34 @@ class AssetFormViewModelTest {
         // A form that could not prefill must not dispatch a blind update.
         assertEquals(0, repo.updateCalls)
         assertEquals(0, repo.createCalls)
+    }
+
+    @Test fun iconSelectionCancelsOrSavesAndIsLockedDuringSave() = runTest(dispatcher) {
+        val repo = FakeRepository().apply { seed(sampleAsset) }
+        val vm = viewModel(repo, savedState = SavedStateHandle(mapOf("id" to sampleAsset.id)))
+        advanceUntilIdle()
+        vm.openIconPicker()
+        assertTrue(vm.uiState.value.isIconPickerOpen)
+        vm.closeIconPicker()
+        assertEquals("laptop", vm.uiState.value.iconKey)
+        vm.openIconPicker()
+        vm.onIconSelected("camera")
+        assertFalse(vm.uiState.value.isIconPickerOpen)
+        vm.save()
+        vm.onIconSelected("phone")
+        advanceUntilIdle()
+        assertEquals("camera", vm.uiState.value.iconKey)
+        assertEquals("camera", repo.getAsset(sampleAsset.id).getOrThrow().iconKey)
+    }
+
+    @Test fun createPersistsSelectedIcon() = runTest(dispatcher) {
+        val repo = FakeRepository()
+        val vm = viewModel(repo)
+        vm.onNameChanged("Camera")
+        vm.onPriceChanged("100")
+        vm.onIconSelected("camera")
+        vm.save()
+        advanceUntilIdle()
+        assertEquals("camera", repo.getAsset("created").getOrThrow().iconKey)
     }
 }

@@ -28,6 +28,8 @@ data class AssetFormUiState(
     val purchaseDate: String = LocalDate.now().toString(),
     val isSaving: Boolean = false,
     val errorMessage: String? = null,
+    val iconKey: String = "devices",
+    val isIconPickerOpen: Boolean = false,
 )
 
 /**
@@ -65,6 +67,7 @@ class AssetFormViewModel @Inject constructor(
                                 name = asset.name,
                                 price = BigDecimal(asset.priceCents).movePointLeft(2).toPlainString(),
                                 purchaseDate = asset.purchaseDate.toString(),
+                                iconKey = asset.iconKey,
                             )
                         }
                     },
@@ -74,6 +77,12 @@ class AssetFormViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    fun openIconPicker() = update { it.copy(isIconPickerOpen = true) }
+    fun closeIconPicker() = update { it.copy(isIconPickerOpen = false) }
+    fun onIconSelected(key: String) = update {
+        it.copy(iconKey = key, isIconPickerOpen = false, errorMessage = null)
     }
 
     fun onNameChanged(value: String) = update { it.copy(name = value, errorMessage = null) }
@@ -90,7 +99,7 @@ class AssetFormViewModel @Inject constructor(
         val state = uiState.value
         if (state.isSaving || state.isLoading || state.loadError) return
         val draft = try {
-            AssetFormState(state.name, state.price, state.purchaseDate).toNewAsset()
+            AssetFormState(state.name, state.price, state.purchaseDate, iconKey = state.iconKey).toNewAsset()
         } catch (error: IllegalArgumentException) {
             uiState.update { it.copy(errorMessage = error.message) }
             return

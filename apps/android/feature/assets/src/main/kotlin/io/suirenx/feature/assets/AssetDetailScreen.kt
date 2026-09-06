@@ -18,7 +18,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -42,6 +41,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.suirenx.core.model.Asset
+import io.suirenx.core.ui.icon.MaterialSymbol
 import io.suirenx.core.model.AssetStatus
 import io.suirenx.core.ui.theme.SuirenXTheme
 import java.text.NumberFormat
@@ -304,17 +304,16 @@ private fun AssetDetailContent(asset: Asset, modifier: Modifier = Modifier) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Spacer(Modifier.height(20.dp))
+        val iconOption = assetIconOption(asset.iconKey)
         Surface(
             shape = RoundedCornerShape(36.dp),
-            color = MaterialTheme.colorScheme.surface,
+            color = iconOption.containerColor,
         ) {
-            Icon(
-                imageVector = Icons.Outlined.Devices,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .padding(28.dp)
-                    .size(64.dp),
+            MaterialSymbol(
+                glyph = iconOption.glyph,
+                tint = iconOption.contentColor,
+                modifier = Modifier.padding(28.dp),
+                size = 64.dp,
             )
         }
         Spacer(Modifier.height(18.dp))

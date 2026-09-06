@@ -11,6 +11,7 @@ data class AssetFormState(
     val purchaseDate: String = LocalDate.now().toString(),
     val isSaving: Boolean = false,
     val errorMessage: String? = null,
+    val iconKey: String = "devices",
 )
 
 internal fun AssetFormState.toNewAsset(): NewAsset {
@@ -32,5 +33,5 @@ internal fun AssetFormState.toNewAsset(): NewAsset {
     } catch (_: DateTimeParseException) {
         throw IllegalArgumentException("请输入有效日期，格式为 YYYY-MM-DD")
     }
-    return NewAsset(name.trim(), cents, date)
+    return NewAsset(name.trim(), cents, date, iconKey)
 }

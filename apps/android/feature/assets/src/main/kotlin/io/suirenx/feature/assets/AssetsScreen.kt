@@ -23,7 +23,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -372,11 +371,9 @@ private fun AssetCard(asset: Asset, onClick: () -> Unit, modifier: Modifier = Mo
     ) {
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Outlined.Devices,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(42.dp),
+                AssetCategoryIcon(
+                    option = assetIconOption(asset.iconKey),
+                    modifier = Modifier.size(46.dp),
                 )
                 Spacer(Modifier.weight(1f))
                 Box(

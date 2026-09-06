@@ -206,7 +206,7 @@ class AssetsViewModelTest {
             val saved = Asset(
                 id = "created", name = asset.name, priceCents = asset.priceCents,
                 purchaseDate = asset.purchaseDate, status = AssetStatus.Active,
-                imageUrl = "", heldDays = 1, dailyCostCents = asset.priceCents,
+                imageUrl = "", heldDays = 1, dailyCostCents = asset.priceCents, iconKey = asset.iconKey,
             )
             assets += saved
             return Result.success(saved)
@@ -243,6 +243,7 @@ class AssetsViewModelTest {
                 name = asset.name.trim(),
                 priceCents = asset.priceCents,
                 purchaseDate = asset.purchaseDate,
+                iconKey = asset.iconKey,
                 dailyCostCents = asset.priceCents,
             )
             assets[index] = updated

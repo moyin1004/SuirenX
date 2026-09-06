@@ -19,7 +19,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -44,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.suirenx.core.ui.icon.MaterialSymbol
 import io.suirenx.core.ui.theme.SuirenXTheme
 
 @Composable
@@ -60,6 +60,9 @@ fun AssetFormRoute(
         onNameChanged = viewModel::onNameChanged,
         onPriceChanged = viewModel::onPriceChanged,
         onPurchaseDateChanged = viewModel::onPurchaseDateChanged,
+        onOpenIconPicker = viewModel::openIconPicker,
+        onCloseIconPicker = viewModel::closeIconPicker,
+        onIconSelected = viewModel::onIconSelected,
         onSave = viewModel::save,
         onClose = onClose,
         modifier = modifier,
@@ -74,8 +77,14 @@ fun AssetFormScreen(
     onPurchaseDateChanged: (String) -> Unit,
     onSave: () -> Unit,
     onClose: () -> Unit,
+    onOpenIconPicker: () -> Unit,
+    onCloseIconPicker: () -> Unit,
+    onIconSelected: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    if (state.isIconPickerOpen) {
+        AssetIconPicker(state.iconKey, onIconSelected, onCloseIconPicker)
+    }
     Scaffold(
         modifier = modifier,
         containerColor = MaterialTheme.colorScheme.background,
@@ -107,7 +116,7 @@ fun AssetFormScreen(
                         Button(onClick = onClose) { Text("关闭") }
                     }
                 }
-                else -> FormBody(state, onNameChanged, onPriceChanged, onPurchaseDateChanged)
+                else -> FormBody(state, onNameChanged, onPriceChanged, onPurchaseDateChanged, onOpenIconPicker)
             }
         }
     }
@@ -183,6 +192,7 @@ private fun FormBody(
     onNameChanged: (String) -> Unit,
     onPriceChanged: (String) -> Unit,
     onPurchaseDateChanged: (String) -> Unit,
+    onOpenIconPicker: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -195,18 +205,25 @@ private fun FormBody(
     ) {
         Spacer(Modifier.height(8.dp))
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            val iconOption = assetIconOption(state.iconKey)
             Surface(
+                onClick = onOpenIconPicker,
+                enabled = !state.isSaving,
                 shape = RoundedCornerShape(32.dp),
-                color = MaterialTheme.colorScheme.surface,
+                color = iconOption.containerColor,
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.Devices,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .padding(26.dp)
-                        .size(56.dp),
-                )
+                Column(
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    MaterialSymbol(
+                        glyph = iconOption.glyph,
+                        tint = iconOption.contentColor,
+                        size = 48.dp,
+                    )
+                    Text("更换图标", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
         OutlinedTextField(
@@ -263,6 +280,9 @@ private fun AssetFormScreenPreview() {
             onPurchaseDateChanged = {},
             onSave = {},
             onClose = {},
+            onOpenIconPicker = {},
+            onCloseIconPicker = {},
+            onIconSelected = {},
         )
     }
 }

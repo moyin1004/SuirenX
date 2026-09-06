@@ -42,7 +42,7 @@ class DefaultAssetRepository @Inject constructor(
 
     override suspend fun createAsset(asset: NewAsset): Result<Asset> = try {
         val response = api.current().createAsset(
-            CreateAssetRequest(asset.name, asset.priceCents, asset.purchaseDate.toString()),
+            CreateAssetRequest(asset.name, asset.priceCents, asset.purchaseDate.toString(), asset.iconKey),
         )
         Result.success(response.asset.toDomain())
     } catch (error: CancellationException) {
@@ -54,7 +54,7 @@ class DefaultAssetRepository @Inject constructor(
     override suspend fun updateAsset(id: String, asset: NewAsset): Result<Asset> = try {
         val response = api.current().updateAsset(
             id,
-            UpdateAssetRequest(asset.name, asset.priceCents, asset.purchaseDate.toString()),
+            UpdateAssetRequest(asset.name, asset.priceCents, asset.purchaseDate.toString(), asset.iconKey),
         )
         Result.success(response.asset.toDomain())
     } catch (error: CancellationException) {
@@ -92,6 +92,7 @@ private fun AssetDto.toDomain() = Asset(
     dailyCostCents = dailyCostCents,
     retiredDate = retiredDate.takeIf { it.isNotEmpty() }?.let(LocalDate::parse),
     archivedAt = archivedAt.takeIf { it.isNotEmpty() }?.let(Instant::parse),
+    iconKey = iconKey.ifEmpty { "devices" },
 )
 
 private fun AssetStatus.toApiValue() = when (this) {

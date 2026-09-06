@@ -19,6 +19,7 @@ data class Asset(
     val dailyCostCents: Long,
     val retiredDate: LocalDate? = null,
     val archivedAt: Instant? = null,
+    val iconKey: String = "devices",
 ) {
     val isArchived: Boolean get() = archivedAt != null
 }

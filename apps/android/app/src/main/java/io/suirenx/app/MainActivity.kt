@@ -27,13 +27,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.outlined.AutoGraph
-import androidx.compose.material.icons.outlined.FavoriteBorder
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -42,8 +35,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -55,6 +48,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import dagger.hilt.android.AndroidEntryPoint
+import io.suirenx.core.ui.icon.MaterialSymbol
 import io.suirenx.core.ui.theme.SuirenXTheme
 import io.suirenx.feature.assets.AssetDetailRoute
 import io.suirenx.feature.assets.AssetFormRoute
@@ -157,12 +151,13 @@ private fun SuirenXApp() {
 private enum class HomeTab(
     val route: String,
     val label: String,
-    val icon: ImageVector,
+    // Material Symbols Rounded codepoints; see core/ui MaterialSymbol.
+    val glyph: String,
 ) {
-    Assets("tab/assets", "资产", Icons.Filled.Home),
-    Wishes("tab/wishes", "心愿", Icons.Outlined.FavoriteBorder),
-    Trends("tab/trends", "趋势", Icons.Outlined.AutoGraph),
-    Settings("tab/settings", "设置", Icons.Outlined.Settings),
+    Assets("tab/assets", "资产", "\uE9B2"), // home
+    Wishes("tab/wishes", "心愿", "\uE87E"), // favorite
+    Trends("tab/trends", "趋势", "\uE4FB"), // auto_graph
+    Settings("tab/settings", "设置", "\uE8B8"), // settings
 }
 
 @Composable
@@ -188,14 +183,14 @@ private fun MainScaffold(
             }
             composable(HomeTab.Wishes.route) {
                 PlaceholderTab(
-                    icon = Icons.Outlined.FavoriteBorder,
+                    glyph = HomeTab.Wishes.glyph,
                     title = "心愿清单",
                     hint = "想入手的东西，先记在这里",
                 )
             }
             composable(HomeTab.Trends.route) {
                 PlaceholderTab(
-                    icon = Icons.Outlined.AutoGraph,
+                    glyph = HomeTab.Trends.glyph,
                     title = "趋势",
                     hint = "资产变化趋势，敬请期待",
                 )
@@ -244,7 +239,7 @@ private fun FloatingTabBar(
             modifier = Modifier.weight(1f),
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 5.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -253,6 +248,7 @@ private fun FloatingTabBar(
                         tab = tab,
                         selected = currentRoute == tab.route,
                         onClick = { onTabSelected(tab) },
+                        modifier = Modifier.weight(1f),
                     )
                 }
             }
@@ -263,13 +259,14 @@ private fun FloatingTabBar(
             color = MaterialTheme.colorScheme.primary,
             contentColor = MaterialTheme.colorScheme.onPrimary,
             shadowElevation = 10.dp,
-            modifier = Modifier.size(56.dp),
+            modifier = Modifier.size(52.dp),
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Default.Add,
+                MaterialSymbol(
+                    glyph = "\uE145", // add
                     contentDescription = "新增资产",
-                    modifier = Modifier.size(28.dp),
+                    filled = true,
+                    size = 28.dp,
                 )
             }
         }
@@ -277,17 +274,22 @@ private fun FloatingTabBar(
 }
 
 @Composable
-private fun TabItem(tab: HomeTab, selected: Boolean, onClick: () -> Unit) {
+private fun TabItem(
+    tab: HomeTab,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val contentColor = if (selected) {
         MaterialTheme.colorScheme.onSurface
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant
     }
     Column(
-        modifier = Modifier
+        modifier = modifier
             .clip(CircleShape)
             .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
@@ -297,14 +299,19 @@ private fun TabItem(tab: HomeTab, selected: Boolean, onClick: () -> Unit) {
                 .background(
                     if (selected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent,
                 )
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .size(width = 44.dp, height = 30.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                imageVector = tab.icon,
+            // Filled glyph for the selected tab; compensate for the gear's
+            // optical size to keep the four tabs visually balanced.
+            MaterialSymbol(
+                glyph = tab.glyph,
                 contentDescription = tab.label,
                 tint = contentColor,
-                modifier = Modifier.size(22.dp),
+                filled = selected,
+                size = 22.dp,
+                modifier = Modifier
+                    .scale(if (tab == HomeTab.Settings) 1.1f else 1f),
             )
         }
         Text(text = tab.label, fontSize = 11.sp, color = contentColor)
@@ -313,7 +320,7 @@ private fun TabItem(tab: HomeTab, selected: Boolean, onClick: () -> Unit) {
 
 @Composable
 private fun PlaceholderTab(
-    icon: ImageVector,
+    glyph: String,
     title: String,
     hint: String,
     modifier: Modifier = Modifier,
@@ -326,11 +333,11 @@ private fun PlaceholderTab(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(
-            imageVector = icon,
+        MaterialSymbol(
+            glyph = glyph,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.outline,
-            modifier = Modifier.size(56.dp),
+            size = 56.dp,
         )
         Spacer(Modifier.height(16.dp))
         Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold)

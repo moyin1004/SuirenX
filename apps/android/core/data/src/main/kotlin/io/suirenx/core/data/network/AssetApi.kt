@@ -46,6 +46,7 @@ data class AssetDto(
     @SerialName("daily_cost_cents") val dailyCostCents: Long,
     @SerialName("retired_date") val retiredDate: String = "",
     @SerialName("archived_at") val archivedAt: String = "",
+    @SerialName("icon_key") val iconKey: String = "devices",
 )
 
 
@@ -54,6 +55,7 @@ data class CreateAssetRequest(
     val name: String,
     @SerialName("price_cents") val priceCents: Long,
     @SerialName("purchase_date") val purchaseDate: String,
+    @SerialName("icon_key") val iconKey: String,
 )
 
 @Serializable
@@ -64,6 +66,7 @@ data class UpdateAssetRequest(
     val name: String,
     @SerialName("price_cents") val priceCents: Long,
     @SerialName("purchase_date") val purchaseDate: String,
+    @SerialName("icon_key") val iconKey: String,
 )
 
 @Serializable
