@@ -337,6 +337,16 @@ private fun AssetDetailContent(asset: Asset, modifier: Modifier = Modifier) {
                 listOf("归档日期" to it.atZone(ZoneId.systemDefault()).toLocalDate().toString())
             }.orEmpty(),
         )
+        val metadata = buildList {
+            asset.purchaseChannel?.takeIf(String::isNotBlank)?.let { add("购买渠道" to it) }
+            asset.warrantyEndDate?.let { add("保修截止日" to it.toString()) }
+            if (asset.tags.isNotEmpty()) add("标签" to asset.tags.joinToString("、"))
+            asset.notes.takeIf(String::isNotBlank)?.let { add("备注" to it) }
+        }
+        if (metadata.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            InfoCard(rows = metadata)
+        }
         Spacer(Modifier.height(24.dp))
     }
 }
@@ -372,9 +382,9 @@ private fun InfoCard(rows: List<Pair<String, String>>, modifier: Modifier = Modi
                         label,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 16.sp,
+                        modifier = Modifier.weight(1f),
                     )
-                    Spacer(Modifier.weight(1f))
-                    Text(value, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                    Text(value, fontSize = 16.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1.5f))
                 }
             }
         }

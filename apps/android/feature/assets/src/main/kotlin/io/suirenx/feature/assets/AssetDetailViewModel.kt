@@ -6,6 +6,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import io.suirenx.core.domain.GetAssetUseCase
 import io.suirenx.core.domain.UpdateAssetArchiveUseCase
 import io.suirenx.core.domain.UpdateAssetStatusUseCase
+import io.suirenx.core.domain.StorageModeRepository
 import io.suirenx.core.model.Asset
 import io.suirenx.core.model.AssetStatus
 import java.time.LocalDate
@@ -39,12 +40,14 @@ class AssetDetailViewModel @Inject constructor(
     private val changeNotifier: AssetChangeNotifier,
     private val updateAssetStatus: UpdateAssetStatusUseCase,
     private val updateAssetArchive: UpdateAssetArchiveUseCase,
+    private val modes: StorageModeRepository = NoopDetailModes,
 ) : ViewModel() {
     val uiState: StateFlow<AssetDetailUiState>
         field = MutableStateFlow(AssetDetailUiState())
 
     private var loadJob: Job? = null
     private var assetId: String? = null
+    private var observedMode: io.suirenx.core.model.StorageMode? = null
 
     init {
         // The edit page slides up over this screen; when a save lands there we
@@ -52,6 +55,16 @@ class AssetDetailViewModel @Inject constructor(
         viewModelScope.launch {
             changeNotifier.events.collect {
                 assetId?.let { fetch(it, silent = true) }
+            }
+        }
+        viewModelScope.launch {
+            modes.mode.collect { mode ->
+                if (mode != null && observedMode != null && mode != observedMode) {
+                    loadJob?.cancel()
+                    assetId = null
+                    uiState.value = AssetDetailUiState(isLoading = false)
+                }
+                if (mode != null) observedMode = mode
             }
         }
     }
@@ -200,4 +213,10 @@ class AssetDetailViewModel @Inject constructor(
             )
         }
     }
+}
+
+private object NoopDetailModes : StorageModeRepository {
+    override val mode = MutableStateFlow<io.suirenx.core.model.StorageMode?>(null)
+    override suspend fun initialize() = Result.success(Unit)
+    override suspend fun select(mode: io.suirenx.core.model.StorageMode) = Result.success(Unit)
 }

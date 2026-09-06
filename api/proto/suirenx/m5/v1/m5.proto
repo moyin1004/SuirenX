@@ -1,0 +1,119 @@
+syntax = "proto3";
+
+package suirenx.m5.v1;
+
+option go_package = "github.com/moyin1004/suirenx/services/api/biz/model/suirenx/m5/v1;m5v1";
+
+import "api.proto";
+
+message AccountRequest {
+  string username = 1 [(api.body) = "username"];
+  string password = 2 [(api.body) = "password"];
+}
+
+message TokenResponse {
+  string access_token = 1;
+  string token_type = 2;
+  string expires_at = 3;
+}
+
+message LogoutRequest {}
+message LogoutResponse { string status = 1; }
+
+service AuthService {
+  rpc Register(AccountRequest) returns (TokenResponse) {
+    option (api.post) = "/api/v1/auth/register";
+  }
+  rpc Login(AccountRequest) returns (TokenResponse) {
+    option (api.post) = "/api/v1/auth/login";
+  }
+  rpc Logout(LogoutRequest) returns (LogoutResponse) {
+    option (api.post) = "/api/v1/auth/logout";
+  }
+}
+
+message SyncAsset {
+  string id = 1;
+  int64 base_version = 2;
+  bool deleted = 3;
+  string name = 4;
+  int64 price_cents = 5;
+  string purchase_date = 6;
+  string status = 7;
+  string image_url = 8;
+  string retired_date = 9;
+  string archived_at = 10;
+  string icon_key = 11;
+  string purchase_channel = 12;
+  string warranty_end_date = 13;
+  string notes = 14;
+  repeated string tags = 15;
+}
+
+message SyncAssetsRequest {
+  int64 cursor = 1 [(api.body) = "cursor"];
+  string idempotency_key = 2 [(api.body) = "idempotency_key"];
+  repeated SyncAsset changes = 3 [(api.body) = "changes"];
+  repeated SyncExpiryItem expiry_changes = 4 [(api.body) = "expiry_changes"];
+  int64 expiry_cursor = 5 [(api.body) = "expiry_cursor"];
+}
+
+message SyncExpiryItem {
+  string id = 1;
+  int64 base_version = 2;
+  bool deleted = 3;
+  string name = 4;
+  string category = 5;
+  string package_expiry_date = 6;
+  string opened_date = 7;
+  int32 opened_validity_days = 8;
+  string location = 9;
+  string notes = 10;
+  string status = 11;
+  string archived_at = 12;
+}
+
+message SyncChange {
+  int64 cursor = 1;
+  int64 version = 2;
+  string deleted_at = 3;
+  SyncAsset asset = 4;
+}
+
+message SyncConflict {
+  string id = 1;
+  int64 base_version = 2;
+  int64 remote_version = 3;
+  SyncAsset remote = 4;
+}
+
+message SyncAssetsResponse {
+  int64 next_cursor = 1;
+  repeated SyncChange applied = 2;
+  repeated SyncChange changes = 3;
+  repeated SyncConflict conflicts = 4;
+  repeated SyncExpiryChange applied_expiry = 5;
+  repeated SyncExpiryChange expiry_changes = 6;
+  repeated SyncExpiryConflict expiry_conflicts = 7;
+  int64 next_expiry_cursor = 8;
+}
+
+message SyncExpiryChange {
+  int64 cursor = 1;
+  int64 version = 2;
+  string deleted_at = 3;
+  SyncExpiryItem item = 4;
+}
+
+message SyncExpiryConflict {
+  string id = 1;
+  int64 base_version = 2;
+  int64 remote_version = 3;
+  SyncExpiryItem remote = 4;
+}
+
+service SyncService {
+  rpc SyncAssets(SyncAssetsRequest) returns (SyncAssetsResponse) {
+    option (api.post) = "/api/v1/sync/assets";
+  }
+}

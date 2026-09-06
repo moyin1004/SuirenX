@@ -64,6 +64,12 @@ repository boundaries.
   restored before editing. Never auto-delete archived records.
 - Runtime databases under `services/api/data` are local artifacts and must not
   be committed.
+- Android `LOCAL` mode uses Room as the sole asset source; `REMOTE` mode uses
+  the selected HTTP server. Mode switches never merge, upload, or silently
+  fall back, and local assets/expiry items are isolated from remote addresses.
+- Local JSON backups are versioned, target the local Room database only,
+  include archived records and expiry items, exclude credentials, and restore
+  through validation plus an automatic pre-restore backup.
 
 ## Android rules
 

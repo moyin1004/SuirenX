@@ -40,6 +40,7 @@ func CreateAsset(_ context.Context, c *app.RequestContext) {
 	}
 	asset, err := assetService(c).Create(service.CreateAssetInput{
 		Name: req.Name, PriceCents: req.PriceCents, PurchaseDate: req.PurchaseDate, ImageURL: req.ImageUrl, IconKey: req.IconKey,
+		PurchaseChannel: req.PurchaseChannel, WarrantyEndDate: req.WarrantyEndDate, Notes: req.Notes, Tags: req.Tags,
 	})
 	if err != nil {
 		writeError(c, err)
@@ -72,8 +73,13 @@ func UpdateAsset(_ context.Context, c *app.RequestContext) {
 		c.JSON(consts.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
+	var tags *[]string
+	if req.Tags != nil {
+		tags = &req.Tags
+	}
 	asset, err := assetService(c).Update(service.UpdateAssetInput{
 		ID: req.Id, Name: req.Name, PriceCents: req.PriceCents, PurchaseDate: req.PurchaseDate, IconKey: req.IconKey,
+		PurchaseChannel: req.PurchaseChannel, WarrantyEndDate: req.WarrantyEndDate, Notes: req.Notes, Tags: tags,
 	})
 	if err != nil {
 		writeError(c, err)

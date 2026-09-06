@@ -1,102 +1,35 @@
 package io.suirenx.core.data.repository
 
-import io.suirenx.core.data.network.AssetApiProvider
-import io.suirenx.core.data.network.AssetDto
-import io.suirenx.core.data.network.CreateAssetRequest
-import io.suirenx.core.data.network.UpdateAssetRequest
-import io.suirenx.core.data.network.UpdateAssetStatusRequest
 import io.suirenx.core.domain.AssetRepository
+import io.suirenx.core.domain.StorageModeRepository
 import io.suirenx.core.model.Asset
 import io.suirenx.core.model.AssetStatus
 import io.suirenx.core.model.NewAsset
 import java.time.LocalDate
-import java.time.Instant
-import io.suirenx.core.data.network.UpdateAssetArchiveRequest
-import java.util.concurrent.CancellationException
 import javax.inject.Inject
 
 class DefaultAssetRepository @Inject constructor(
-    private val api: AssetApiProvider,
+    private val local: LocalAssetRepository,
+    private val modes: StorageModeRepository,
+    private val remote: RemoteAssetSyncStore,
 ) : AssetRepository {
-    override suspend fun updateAssetArchive(id: String, archive: Boolean): Result<Asset> = try {
-        val response = api.current().updateAssetArchive(
-            id, UpdateAssetArchiveRequest(if (archive) "ARCHIVE" else "RESTORE"),
-        )
-        Result.success(response.asset.toDomain())
-    } catch (error: CancellationException) {
-        throw error
-    } catch (error: Exception) {
-        Result.failure(error)
-    }
+    private fun useLocal() = modes.mode.value == io.suirenx.core.model.StorageMode.Local
 
-    override suspend fun updateAssetStatus(id: String, status: AssetStatus, retiredDate: LocalDate?): Result<Asset> = try {
-        val response = api.current().updateAssetStatus(
-            id, UpdateAssetStatusRequest(status.toApiValue(), retiredDate?.toString().orEmpty()),
-        )
-        Result.success(response.asset.toDomain())
-    } catch (error: CancellationException) {
-        throw error
-    } catch (error: Exception) {
-        Result.failure(error)
-    }
+    override suspend fun updateAssetArchive(id: String, archive: Boolean): Result<Asset> =
+        if (useLocal()) local.updateAssetArchive(id, archive) else remote.updateArchive(id, archive)
 
-    override suspend fun createAsset(asset: NewAsset): Result<Asset> = try {
-        val response = api.current().createAsset(
-            CreateAssetRequest(asset.name, asset.priceCents, asset.purchaseDate.toString(), asset.iconKey),
-        )
-        Result.success(response.asset.toDomain())
-    } catch (error: CancellationException) {
-        throw error
-    } catch (error: Exception) {
-        Result.failure(error)
-    }
+    override suspend fun updateAssetStatus(id: String, status: AssetStatus, retiredDate: LocalDate?): Result<Asset> =
+        if (useLocal()) local.updateAssetStatus(id, status, retiredDate) else remote.updateStatus(id, status, retiredDate)
 
-    override suspend fun updateAsset(id: String, asset: NewAsset): Result<Asset> = try {
-        val response = api.current().updateAsset(
-            id,
-            UpdateAssetRequest(asset.name, asset.priceCents, asset.purchaseDate.toString(), asset.iconKey),
-        )
-        Result.success(response.asset.toDomain())
-    } catch (error: CancellationException) {
-        throw error
-    } catch (error: Exception) {
-        Result.failure(error)
-    }
+    override suspend fun createAsset(asset: NewAsset): Result<Asset> =
+        if (useLocal()) local.createAsset(asset) else remote.create(asset)
 
-    override suspend fun getAssets(status: AssetStatus?, includeArchived: Boolean): Result<List<Asset>> = try {
-        val response = api.current().getAssets(status?.toApiValue(), if (includeArchived) "ALL" else null)
-        Result.success(response.assets.map(AssetDto::toDomain))
-    } catch (error: CancellationException) {
-        throw error
-    } catch (error: Exception) {
-        Result.failure(error)
-    }
+    override suspend fun updateAsset(id: String, asset: NewAsset): Result<Asset> =
+        if (useLocal()) local.updateAsset(id, asset) else remote.update(id, asset)
 
-    override suspend fun getAsset(id: String): Result<Asset> = try {
-        Result.success(api.current().getAsset(id).asset.toDomain())
-    } catch (error: CancellationException) {
-        throw error
-    } catch (error: Exception) {
-        Result.failure(error)
-    }
+    override suspend fun getAssets(status: AssetStatus?, includeArchived: Boolean): Result<List<Asset>> =
+        if (useLocal()) local.getAssets(status, includeArchived) else remote.list(status, includeArchived)
+
+    override suspend fun getAsset(id: String): Result<Asset> =
+        if (useLocal()) local.getAsset(id) else remote.get(id)
 }
-
-private fun AssetDto.toDomain() = Asset(
-    id = id,
-    name = name,
-    priceCents = priceCents,
-    purchaseDate = LocalDate.parse(purchaseDate),
-    status = if (status == "RETIRED") AssetStatus.Retired else AssetStatus.Active,
-    imageUrl = imageUrl,
-    heldDays = heldDays,
-    dailyCostCents = dailyCostCents,
-    retiredDate = retiredDate.takeIf { it.isNotEmpty() }?.let(LocalDate::parse),
-    archivedAt = archivedAt.takeIf { it.isNotEmpty() }?.let(Instant::parse),
-    iconKey = iconKey.ifEmpty { "devices" },
-)
-
-private fun AssetStatus.toApiValue() = when (this) {
-    AssetStatus.Active -> "ACTIVE"
-    AssetStatus.Retired -> "RETIRED"
-}
-

@@ -7,6 +7,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import io.suirenx.core.domain.CreateAssetUseCase
 import io.suirenx.core.domain.GetAssetUseCase
 import io.suirenx.core.domain.UpdateAssetUseCase
+import io.suirenx.core.domain.StorageModeRepository
 import java.math.BigDecimal
 import java.time.LocalDate
 import javax.inject.Inject
@@ -30,6 +31,10 @@ data class AssetFormUiState(
     val errorMessage: String? = null,
     val iconKey: String = "devices",
     val isIconPickerOpen: Boolean = false,
+    val purchaseChannel: String = "",
+    val warrantyEndDate: String = "",
+    val notes: String = "",
+    val tags: String = "",
 )
 
 /**
@@ -44,6 +49,7 @@ class AssetFormViewModel @Inject constructor(
     private val updateAsset: UpdateAssetUseCase,
     getAsset: GetAssetUseCase,
     private val changeNotifier: AssetChangeNotifier,
+    private val modes: StorageModeRepository = NoopFormModes,
 ) : ViewModel() {
     val uiState: StateFlow<AssetFormUiState>
         field = MutableStateFlow(AssetFormUiState())
@@ -55,6 +61,16 @@ class AssetFormViewModel @Inject constructor(
     private val assetId: String? = savedStateHandle.get<String>("id")?.takeIf { it.isNotBlank() }
 
     init {
+        viewModelScope.launch {
+            modes.mode.collect { mode ->
+                if (mode != null && mode != observedMode) {
+                    observedMode = mode
+                    if (uiState.value.isEdit || uiState.value.name.isNotBlank()) {
+                        uiState.value = AssetFormUiState(errorMessage = "使用模式已切换，请重新打开表单")
+                    }
+                }
+            }
+        }
         val id = assetId
         if (id != null) {
             uiState.update { it.copy(isEdit = true, isLoading = true) }
@@ -68,6 +84,10 @@ class AssetFormViewModel @Inject constructor(
                                 price = BigDecimal(asset.priceCents).movePointLeft(2).toPlainString(),
                                 purchaseDate = asset.purchaseDate.toString(),
                                 iconKey = asset.iconKey,
+                                purchaseChannel = asset.purchaseChannel.orEmpty(),
+                                warrantyEndDate = asset.warrantyEndDate?.toString().orEmpty(),
+                                notes = asset.notes,
+                                tags = asset.tags.joinToString(", "),
                             )
                         }
                     },
@@ -79,6 +99,8 @@ class AssetFormViewModel @Inject constructor(
         }
     }
 
+    private var observedMode: io.suirenx.core.model.StorageMode? = null
+
     fun openIconPicker() = update { it.copy(isIconPickerOpen = true) }
     fun closeIconPicker() = update { it.copy(isIconPickerOpen = false) }
     fun onIconSelected(key: String) = update {
@@ -88,6 +110,10 @@ class AssetFormViewModel @Inject constructor(
     fun onNameChanged(value: String) = update { it.copy(name = value, errorMessage = null) }
     fun onPriceChanged(value: String) = update { it.copy(price = value, errorMessage = null) }
     fun onPurchaseDateChanged(value: String) = update { it.copy(purchaseDate = value, errorMessage = null) }
+    fun onPurchaseChannelChanged(value: String) = update { it.copy(purchaseChannel = value, errorMessage = null) }
+    fun onWarrantyEndDateChanged(value: String) = update { it.copy(warrantyEndDate = value, errorMessage = null) }
+    fun onNotesChanged(value: String) = update { it.copy(notes = value, errorMessage = null) }
+    fun onTagsChanged(value: String) = update { it.copy(tags = value, errorMessage = null) }
 
     private fun update(transform: (AssetFormUiState) -> AssetFormUiState) {
         uiState.update { state ->
@@ -99,7 +125,11 @@ class AssetFormViewModel @Inject constructor(
         val state = uiState.value
         if (state.isSaving || state.isLoading || state.loadError) return
         val draft = try {
-            AssetFormState(state.name, state.price, state.purchaseDate, iconKey = state.iconKey).toNewAsset()
+            AssetFormState(
+                state.name, state.price, state.purchaseDate, iconKey = state.iconKey,
+                purchaseChannel = state.purchaseChannel, warrantyEndDate = state.warrantyEndDate,
+                notes = state.notes, tags = state.tags,
+            ).toNewAsset()
         } catch (error: IllegalArgumentException) {
             uiState.update { it.copy(errorMessage = error.message) }
             return
@@ -113,7 +143,7 @@ class AssetFormViewModel @Inject constructor(
                     changeNotifier.notifyAssetChanged()
                     _saved.tryEmit(Unit)
                 },
-                onFailure = {
+                onFailure = { error ->
                     uiState.update {
                         it.copy(isSaving = false, errorMessage = "保存失败，请检查网络和服务后重试")
                     }
@@ -121,4 +151,10 @@ class AssetFormViewModel @Inject constructor(
             )
         }
     }
+}
+
+private object NoopFormModes : StorageModeRepository {
+    override val mode = MutableStateFlow<io.suirenx.core.model.StorageMode?>(null)
+    override suspend fun initialize() = Result.success(Unit)
+    override suspend fun select(mode: io.suirenx.core.model.StorageMode) = Result.success(Unit)
 }

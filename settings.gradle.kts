@@ -25,3 +25,5 @@ include(":apps:android:core:ui")
 include(":apps:android:feature:assets")
 
 include(":apps:android:feature:settings")
+include(":apps:android:feature:tools")
+include(":apps:android:feature:expiry")

@@ -32,6 +32,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,6 +57,10 @@ import io.suirenx.feature.assets.AssetFormRoute
 import io.suirenx.feature.assets.AssetsRoute
 import io.suirenx.feature.settings.BackendGate
 import io.suirenx.feature.settings.SettingsRoute
+import io.suirenx.feature.settings.ThemeSettingsViewModel
+import io.suirenx.feature.tools.ToolsRoute
+import io.suirenx.feature.expiry.ExpiryRoute
+import io.suirenx.feature.expiry.ExpirySummaryBanner
 
 // Navigation is owned by the app module; feature modules never reference each other.
 private object Routes {
@@ -62,6 +68,7 @@ private object Routes {
     const val ASSET_DETAIL = "assets/{id}"
     const val ASSET_CREATE = "new-asset"
     const val ASSET_EDIT = "assets/{id}/edit"
+    const val EXPIRY = "expiry"
 
     fun assetDetail(id: String) = "assets/$id"
     fun assetEdit(id: String) = "assets/$id/edit"
@@ -83,9 +90,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            SuirenXTheme {
-                SuirenXApp()
-            }
+            val themeViewModel: ThemeSettingsViewModel = hiltViewModel()
+            val theme by themeViewModel.theme.collectAsStateWithLifecycle()
+            SuirenXTheme(theme) { SuirenXApp() }
         }
     }
 }
@@ -102,6 +109,8 @@ private fun SuirenXApp() {
                 MainScaffold(
                     onAssetClick = { id -> navController.navigate(Routes.assetDetail(id)) },
                     onAddAsset = { navController.navigate(Routes.ASSET_CREATE) },
+                    onOpenExpiry = { navController.navigate(Routes.EXPIRY) },
+                    onAddExpiry = { navController.navigate(Routes.EXPIRY) },
                 )
             }
         }
@@ -145,6 +154,9 @@ private fun SuirenXApp() {
         ) {
             AssetFormRoute(onClose = { navController.popBackStack() })
         }
+        composable(Routes.EXPIRY) {
+            ExpiryRoute(onBack = { navController.popBackStack() })
+        }
     }
 }
 
@@ -155,8 +167,7 @@ private enum class HomeTab(
     val glyph: String,
 ) {
     Assets("tab/assets", "资产", "\uE9B2"), // home
-    Wishes("tab/wishes", "心愿", "\uE87E"), // favorite
-    Trends("tab/trends", "趋势", "\uE4FB"), // auto_graph
+    Tools("tab/tools", "工具", "\uE4FB"), // auto_graph
     Settings("tab/settings", "设置", "\uE8B8"), // settings
 }
 
@@ -164,6 +175,8 @@ private enum class HomeTab(
 private fun MainScaffold(
     onAssetClick: (String) -> Unit,
     onAddAsset: () -> Unit,
+    onOpenExpiry: () -> Unit,
+    onAddExpiry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val tabNavController = rememberNavController()
@@ -179,21 +192,13 @@ private fun MainScaffold(
             modifier = Modifier.fillMaxSize(),
         ) {
             composable(HomeTab.Assets.route) {
-                AssetsRoute(onAssetClick = onAssetClick)
+                Column(Modifier.fillMaxSize()) {
+                    ExpirySummaryBanner(onClick = onOpenExpiry)
+                    AssetsRoute(onAssetClick = onAssetClick, modifier = Modifier.weight(1f))
+                }
             }
-            composable(HomeTab.Wishes.route) {
-                PlaceholderTab(
-                    glyph = HomeTab.Wishes.glyph,
-                    title = "心愿清单",
-                    hint = "想入手的东西，先记在这里",
-                )
-            }
-            composable(HomeTab.Trends.route) {
-                PlaceholderTab(
-                    glyph = HomeTab.Trends.glyph,
-                    title = "趋势",
-                    hint = "资产变化趋势，敬请期待",
-                )
+            composable(HomeTab.Tools.route) {
+                ToolsRoute(onOpenExpiry = onOpenExpiry, onAddExpiry = onAddExpiry)
             }
             composable(HomeTab.Settings.route) {
                 SettingsRoute()
@@ -210,7 +215,7 @@ private fun MainScaffold(
                     restoreState = true
                 }
             },
-            onAddAsset = onAddAsset,
+            onAddAsset = { if (currentRoute == HomeTab.Tools.route) onAddExpiry() else onAddAsset() },
             modifier = Modifier.align(Alignment.BottomCenter),
         )
     }

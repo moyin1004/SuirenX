@@ -21,11 +21,8 @@ func main() {
 
 	repo := repository.NewGormAssetRepository(db)
 	assetService := service.NewAssetService(repo)
-	if err := assetService.SeedExamples(); err != nil {
-		log.Fatalf("seed examples: %v", err)
-	}
 
-	transport.NewServer(address, assetService).Run()
+	transport.NewServer(address, assetService, transport.WithM5(db)).Run()
 }
 
 func envOrDefault(name, fallback string) string {

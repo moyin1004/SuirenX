@@ -24,6 +24,10 @@ message Asset {
   string archived_at = 12;
   // Stable built-in icon key. Legacy assets default to devices.
   string icon_key = 13;
+  string purchase_channel = 14;
+  string warranty_end_date = 15;
+  string notes = 16;
+  repeated string tags = 17;
 }
 
 message ListAssetsRequest {
@@ -53,6 +57,10 @@ message CreateAssetRequest {
   // devices, laptop, phone, tablet, headphones, watch, camera, gamepad,
   // book, keyboard, bicycle, home. Empty defaults to devices.
   string icon_key = 5 [(api.body) = "icon_key"];
+  string purchase_channel = 6 [(api.body) = "purchase_channel"];
+  string warranty_end_date = 7 [(api.body) = "warranty_end_date"];
+  string notes = 8 [(api.body) = "notes"];
+  repeated string tags = 9 [(api.body) = "tags"];
 }
 
 message CreateAssetResponse {
@@ -67,6 +75,11 @@ message UpdateAssetRequest {
   string purchase_date = 4 [(api.body) = "purchase_date"];
   // Same keys as CreateAsset; omitted/empty preserves the existing icon.
   string icon_key = 5 [(api.body) = "icon_key"];
+  optional string purchase_channel = 6 [(api.body) = "purchase_channel"];
+  optional string warranty_end_date = 7 [(api.body) = "warranty_end_date"];
+  optional string notes = 8 [(api.body) = "notes"];
+  // A nil slice preserves old values; an explicit [] clears all tags.
+  repeated string tags = 9 [(api.body) = "tags"];
 }
 
 message UpdateAssetResponse {

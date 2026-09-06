@@ -34,6 +34,13 @@ func request(s *Server, method, path, body string) *ut.ResponseRecorder {
 		ut.Header{Key: "Content-Type", Value: "application/json"})
 }
 
+func requestBearer(s *Server, method, path, body, token string) *ut.ResponseRecorder {
+	return ut.PerformRequest(s.h.Engine, method, path,
+		&ut.Body{Body: strings.NewReader(body), Len: len(body)},
+		ut.Header{Key: "Content-Type", Value: "application/json"},
+		ut.Header{Key: "Authorization", Value: "Bearer " + token})
+}
+
 func TestAssetJSONRoundTrip(t *testing.T) {
 	s, _ := testServer(t)
 	empty := request(s, "GET", "/api/v1/assets", "")
@@ -94,6 +101,111 @@ func TestAssetJSONRoundTrip(t *testing.T) {
 	large := request(s, "POST", "/api/v1/assets", `{"name":"Large","price_cents":9007199254740993,"purchase_date":"`+today+`"}`)
 	if large.Code != 201 || !strings.Contains(large.Body.String(), `"price_cents":9007199254740993`) {
 		t.Fatalf("integer precision: %d %s", large.Code, large.Body)
+	}
+}
+
+func TestM5AccountIsolationVersionedSyncAndIdempotency(t *testing.T) {
+	db, err := database.Open(filepath.Join(t.TempDir(), "assets.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	s := NewServer(":0", service.NewAssetService(repository.NewGormAssetRepository(db)), WithM5(db))
+
+	register := func(username string) string {
+		response := request(s, "POST", "/api/v1/auth/register", `{"username":"`+username+`","password":"correct horse battery staple"}`)
+		if response.Code != 201 {
+			t.Fatalf("register %s: %d %s", username, response.Code, response.Body)
+		}
+		var payload struct {
+			AccessToken string `json:"access_token"`
+		}
+		if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil || payload.AccessToken == "" {
+			t.Fatalf("register token: %s", response.Body)
+		}
+		return payload.AccessToken
+	}
+	alice, bob := register("alice"), register("bob")
+	if unauthenticated := request(s, "GET", "/api/v1/assets", ""); unauthenticated.Code != 401 {
+		t.Fatalf("asset API accepted unauthenticated request: %d %s", unauthenticated.Code, unauthenticated.Body)
+	}
+	ownedCreate := requestBearer(s, "POST", "/api/v1/assets", `{"name":"Owned","price_cents":100,"purchase_date":"2020-01-01"}`, alice)
+	if ownedCreate.Code != 201 {
+		t.Fatalf("owned asset create: %d %s", ownedCreate.Code, ownedCreate.Body)
+	}
+	var ownedPayload struct {
+		Asset struct {
+			ID string `json:"id"`
+		} `json:"asset"`
+	}
+	if err := json.Unmarshal(ownedCreate.Body.Bytes(), &ownedPayload); err != nil {
+		t.Fatal(err)
+	}
+	if bobAssets := requestBearer(s, "GET", "/api/v1/assets", "", bob); bobAssets.Code != 200 || bobAssets.Body.String() != `{"assets":[]}` {
+		t.Fatalf("asset CRUD owner isolation failed: %d %s", bobAssets.Code, bobAssets.Body)
+	}
+	if bobGet := requestBearer(s, "GET", "/api/v1/assets/"+ownedPayload.Asset.ID, "", bob); bobGet.Code != 404 {
+		t.Fatalf("cross-owner asset lookup was not hidden: %d %s", bobGet.Code, bobGet.Body)
+	}
+	assetID := "cross-device-asset"
+	create := `{"cursor":0,"idempotency_key":"create-1","changes":[{"id":"` + assetID + `","base_version":0,"name":"Keyboard","price_cents":10000,"purchase_date":"2020-01-01","status":"ACTIVE","image_url":"","retired_date":"","archived_at":"","icon_key":"devices","purchase_channel":"","warranty_end_date":"","notes":"","tags":[]}]}`
+	first := requestBearer(s, "POST", "/api/v1/sync/assets", create, alice)
+	if first.Code != 200 || !strings.Contains(first.Body.String(), `"version":1`) {
+		t.Fatalf("create sync: %d %s", first.Code, first.Body)
+	}
+	retry := requestBearer(s, "POST", "/api/v1/sync/assets", create, alice)
+	if retry.Code != 200 || retry.Body.String() != first.Body.String() {
+		t.Fatalf("idempotent retry differs: %d %s vs %s", retry.Code, retry.Body, first.Body)
+	}
+
+	bobPull := requestBearer(s, "POST", "/api/v1/sync/assets", `{"cursor":0,"idempotency_key":"bob-pull","changes":[]}`, bob)
+	if bobPull.Code != 200 || strings.Contains(bobPull.Body.String(), "Keyboard") || strings.Contains(bobPull.Body.String(), assetID) {
+		t.Fatalf("owner isolation leaked: %d %s", bobPull.Code, bobPull.Body)
+	}
+	alicePull := requestBearer(s, "POST", "/api/v1/sync/assets", `{"cursor":0,"idempotency_key":"alice-pull","changes":[]}`, alice)
+	if alicePull.Code != 200 || !strings.Contains(alicePull.Body.String(), "Keyboard") || !strings.Contains(alicePull.Body.String(), "Owned") {
+		t.Fatalf("owner pull missing asset: %d %s", alicePull.Code, alicePull.Body)
+	}
+
+	expiry := `{"cursor":0,"expiry_cursor":0,"idempotency_key":"expiry-1","changes":[],"expiry_changes":[{"id":"expiry-1","base_version":0,"name":"Milk","category":"Food","package_expiry_date":"2030-01-01","opened_date":"","opened_validity_days":0,"location":"Kitchen","notes":"","status":"IN_USE","archived_at":""}]}`
+	expiryResponse := requestBearer(s, "POST", "/api/v1/sync/assets", expiry, alice)
+	if expiryResponse.Code != 200 || !strings.Contains(expiryResponse.Body.String(), `"applied_expiry"`) || !strings.Contains(expiryResponse.Body.String(), `"next_expiry_cursor":1`) {
+		t.Fatalf("expiry sync: %d %s", expiryResponse.Code, expiryResponse.Body)
+	}
+	bobExpiryPull := requestBearer(s, "POST", "/api/v1/sync/assets", `{"cursor":0,"expiry_cursor":0,"idempotency_key":"bob-expiry-pull","changes":[]}`, bob)
+	if bobExpiryPull.Code != 200 || strings.Contains(bobExpiryPull.Body.String(), "Milk") {
+		t.Fatalf("expiry owner isolation leaked: %d %s", bobExpiryPull.Code, bobExpiryPull.Body)
+	}
+
+	conflict := requestBearer(s, "POST", "/api/v1/sync/assets", strings.Replace(create, "create-1", "conflict-1", 1), alice)
+	if conflict.Code != 200 || !strings.Contains(conflict.Body.String(), `"conflicts"`) || !strings.Contains(conflict.Body.String(), `"remote_version":1`) {
+		t.Fatalf("conflict not reported: %d %s", conflict.Code, conflict.Body)
+	}
+	update := strings.Replace(strings.Replace(create, "create-1", "update-1", 1), `"base_version":0`, `"base_version":1`, 1)
+	update = strings.Replace(update, `"Keyboard"`, `"Mechanical Keyboard"`, 1)
+	updated := requestBearer(s, "POST", "/api/v1/sync/assets", update, alice)
+	if updated.Code != 200 || !strings.Contains(updated.Body.String(), `"version":2`) {
+		t.Fatalf("versioned update: %d %s", updated.Code, updated.Body)
+	}
+
+	deleted := strings.Replace(strings.Replace(create, "create-1", "delete-1", 1), `"base_version":0`, `"base_version":2`, 1)
+	deleted = strings.Replace(deleted, `"changes":[{`, `"changes":[{"deleted":true,`, 1)
+	deletedResponse := requestBearer(s, "POST", "/api/v1/sync/assets", deleted, alice)
+	if deletedResponse.Code != 200 || !strings.Contains(deletedResponse.Body.String(), `"deleted_at":"`) {
+		t.Fatalf("tombstone: %d %s", deletedResponse.Code, deletedResponse.Body)
+	}
+
+	logout := requestBearer(s, "POST", "/api/v1/auth/logout", `{}`, alice)
+	if logout.Code != 200 {
+		t.Fatalf("logout: %d %s", logout.Code, logout.Body)
+	}
+	afterLogout := requestBearer(s, "POST", "/api/v1/sync/assets", `{"cursor":0,"idempotency_key":"after-logout","changes":[]}`, alice)
+	if afterLogout.Code != 401 {
+		t.Fatalf("revoked token: %d %s", afterLogout.Code, afterLogout.Body)
 	}
 }
 

@@ -47,6 +47,10 @@ data class AssetDto(
     @SerialName("retired_date") val retiredDate: String = "",
     @SerialName("archived_at") val archivedAt: String = "",
     @SerialName("icon_key") val iconKey: String = "devices",
+    @SerialName("purchase_channel") val purchaseChannel: String = "",
+    @SerialName("warranty_end_date") val warrantyEndDate: String = "",
+    val notes: String = "",
+    val tags: List<String> = emptyList(),
 )
 
 
@@ -56,6 +60,10 @@ data class CreateAssetRequest(
     @SerialName("price_cents") val priceCents: Long,
     @SerialName("purchase_date") val purchaseDate: String,
     @SerialName("icon_key") val iconKey: String,
+    @SerialName("purchase_channel") val purchaseChannel: String = "",
+    @SerialName("warranty_end_date") val warrantyEndDate: String = "",
+    val notes: String = "",
+    val tags: List<String> = emptyList(),
 )
 
 @Serializable
@@ -67,6 +75,10 @@ data class UpdateAssetRequest(
     @SerialName("price_cents") val priceCents: Long,
     @SerialName("purchase_date") val purchaseDate: String,
     @SerialName("icon_key") val iconKey: String,
+    @SerialName("purchase_channel") val purchaseChannel: String = "",
+    @SerialName("warranty_end_date") val warrantyEndDate: String = "",
+    val notes: String = "",
+    val tags: List<String> = emptyList(),
 )
 
 @Serializable

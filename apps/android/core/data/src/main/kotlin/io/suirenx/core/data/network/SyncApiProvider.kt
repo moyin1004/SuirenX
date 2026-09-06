@@ -1,0 +1,29 @@
+package io.suirenx.core.data.network
+
+import io.suirenx.core.domain.BackendRepository
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlinx.serialization.json.Json
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import retrofit2.Retrofit
+import retrofit2.converter.kotlinx.serialization.asConverterFactory
+
+@Singleton
+class SyncApiProvider @Inject constructor(
+    private val backends: BackendRepository,
+    private val client: OkHttpClient,
+    private val json: Json,
+) {
+    fun current(): SyncApi {
+        val url = checkNotNull(backends.settings.value?.activeUrl) { "请先配置后端地址" }
+        return Retrofit.Builder()
+            .baseUrl(url)
+            .client(client)
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+            .build()
+            .create(SyncApi::class.java)
+    }
+
+    fun currentUrl(): String = checkNotNull(backends.settings.value?.activeUrl) { "请先配置后端地址" }
+}

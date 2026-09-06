@@ -44,7 +44,7 @@ func assertScalar(t *testing.T, db *sql.DB, query string, want int) {
 
 func TestFreshDatabaseAppliesBaseline(t *testing.T) {
 	migrations := bundled(t)
-	if len(migrations) != 1 || migrations[0].version != 1 {
+	if len(migrations) == 0 || migrations[0].version != 1 {
 		t.Fatalf("baseline migration set: %+v", migrations)
 	}
 	path := filepath.Join(t.TempDir(), "assets.db")
@@ -60,8 +60,8 @@ func TestFreshDatabaseAppliesBaseline(t *testing.T) {
 	}
 	conn.Close()
 
-	assertScalar(t, raw, "SELECT count(*) FROM schema_migrations", 1)
-	assertScalar(t, raw, "SELECT count(*) FROM pragma_table_info('asset_records')", 11)
+	assertScalar(t, raw, "SELECT count(*) FROM schema_migrations", len(migrations))
+	assertScalar(t, raw, "SELECT count(*) FROM pragma_table_info('asset_records')", 18)
 	// The TEXT primary key also gets an implicit sqlite_autoindex; assert the
 	// two explicit indexes by name.
 	assertScalar(t, raw, "SELECT count(*) FROM pragma_index_list('asset_records') WHERE name='idx_asset_records_status'", 1)
@@ -129,12 +129,13 @@ func TestUpgradeAppliesPendingMigrations(t *testing.T) {
 	if err := migrate(context.Background(), raw, base); err != nil {
 		t.Fatal(err)
 	}
-	assertScalar(t, raw, "SELECT count(*) FROM schema_migrations", 1)
-	next := append(append([]migration{}, base...), testMigration(2, `CREATE TABLE extra_notes(id INTEGER);`))
+	assertScalar(t, raw, "SELECT count(*) FROM schema_migrations", len(base))
+	nextVersion := base[len(base)-1].version + 1
+	next := append(append([]migration{}, base...), testMigration(nextVersion, `CREATE TABLE extra_notes(id INTEGER);`))
 	if err := migrate(context.Background(), raw, next); err != nil {
 		t.Fatal(err)
 	}
-	assertScalar(t, raw, "SELECT count(*) FROM schema_migrations", 2)
+	assertScalar(t, raw, "SELECT count(*) FROM schema_migrations", len(base)+1)
 	assertScalar(t, raw, "SELECT count(*) FROM sqlite_master WHERE name='extra_notes'", 1)
 }
 
@@ -151,24 +152,27 @@ func TestFailedMigrationRollsBackDDLDataAndHistory(t *testing.T) {
 	if _, err := raw.Exec(`INSERT INTO asset_records(id,name,price_cents,status) VALUES ('a','A',123,'ACTIVE')`); err != nil {
 		t.Fatal(err)
 	}
-	failed := append(append([]migration{}, base...), testMigration(2, `CREATE TABLE partial_write(id INTEGER); UPDATE asset_records SET price_cents=0; INSERT INTO missing_table VALUES(1);`))
+	nextVersion := base[len(base)-1].version + 1
+	failed := append(append([]migration{}, base...), testMigration(nextVersion, `CREATE TABLE partial_write(id INTEGER); UPDATE asset_records SET price_cents=0; INSERT INTO missing_table VALUES(1);`))
 	err := migrate(context.Background(), raw, failed)
-	if err == nil || !strings.Contains(err.Error(), "002_test.sql") {
+	if err == nil || !strings.Contains(err.Error(), fmt.Sprintf("%03d_test.sql", nextVersion)) {
 		t.Fatalf("expected migration context: %v", err)
 	}
 	assertScalar(t, raw, "SELECT count(*) FROM sqlite_master WHERE name='partial_write'", 0)
 	assertScalar(t, raw, "SELECT price_cents FROM asset_records", 123)
-	assertScalar(t, raw, "SELECT count(*) FROM schema_migrations", 1)
-	fixed := append(append([]migration{}, base...), testMigration(2, `CREATE TABLE partial_write(id INTEGER);`))
+	assertScalar(t, raw, "SELECT count(*) FROM schema_migrations", len(base))
+	fixed := append(append([]migration{}, base...), testMigration(nextVersion, `CREATE TABLE partial_write(id INTEGER);`))
 	if err = migrate(context.Background(), raw, fixed); err != nil {
 		t.Fatal(err)
 	}
-	assertScalar(t, raw, "SELECT count(*) FROM schema_migrations", 2)
+	assertScalar(t, raw, "SELECT count(*) FROM schema_migrations", len(base)+1)
 }
 
 func TestFreshFailureLeavesNoPartialSchema(t *testing.T) {
 	raw := openRaw(t, filepath.Join(t.TempDir(), "assets.db"))
-	migrations := append(bundled(t), testMigration(2, "INVALID SQL"))
+	base := bundled(t)
+	nextVersion := base[len(base)-1].version + 1
+	migrations := append(base, testMigration(nextVersion, "INVALID SQL"))
 	if err := migrate(context.Background(), raw, migrations); err == nil {
 		t.Fatal("expected failure")
 	}
@@ -182,7 +186,7 @@ func TestRejectIncompatibleHistory(t *testing.T) {
 	for _, change := range []string{
 		"UPDATE schema_migrations SET checksum='changed' WHERE version=1",
 		"UPDATE schema_migrations SET name='renamed.sql' WHERE version=1",
-		"INSERT INTO schema_migrations VALUES(2,'future.sql','unknown','2026-09-05T00:00:00Z')",
+		"INSERT INTO schema_migrations VALUES(4,'future.sql','unknown','2026-09-05T00:00:00Z')",
 	} {
 		t.Run(change, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "assets.db")
@@ -228,7 +232,7 @@ func TestConcurrentStartupAppliesOnce(t *testing.T) {
 		}
 	}
 	raw := openRaw(t, path)
-	assertScalar(t, raw, "SELECT count(*) FROM schema_migrations", 1)
+	assertScalar(t, raw, "SELECT count(*) FROM schema_migrations", len(bundled(t)))
 }
 
 func TestRejectInvalidMigrationFiles(t *testing.T) {

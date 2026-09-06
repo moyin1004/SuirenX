@@ -20,10 +20,13 @@ dependencies {
     implementation(project(":apps:android:core:ui"))
     implementation(project(":apps:android:feature:assets"))
     implementation(project(":apps:android:feature:settings"))
+    implementation(project(":apps:android:feature:tools"))
+    implementation(project(":apps:android:feature:expiry"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.navigation.compose)
+    implementation(libs.androidx.hilt.navigation.compose)
     implementation(libs.hilt.android)
     kapt(libs.hilt.compiler)
 
@@ -35,4 +38,3 @@ dependencies {
 kapt {
     correctErrorTypes = true
 }
-

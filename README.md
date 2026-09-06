@@ -6,7 +6,7 @@ SuirenX（燧人）是一个个人工具箱项目。第一版从“有数”式�
 
 ## 技术栈
 
-- Android：Kotlin、Jetpack Compose、Hilt、Retrofit
+- Android：Kotlin、Jetpack Compose、Hilt、Retrofit、Room（本地资产与用品）
 - API：Go、Hertz、Protobuf IDL
 - 数据库：SQLite、GORM
 - 构建：Gradle 9.6、Version Catalog、Convention Plugins
@@ -25,7 +25,9 @@ Proto 描述的是 HTTP + JSON API 契约，并不强制使用 gRPC 或二进制
 │   ├── core/domain/                 仓储接口与用例
 │   ├── core/data/                   Retrofit、DTO 与仓储实现
 │   ├── core/ui/                     Compose 主题与共享 UI
-│   └── feature/assets/              资产列表与新增表单
+│   ├── feature/assets/              资产列表与新增/编辑表单
+│   ├── feature/tools/               工具入口
+│   └── feature/expiry/              日用品保质期管理
 ├── build-logic/convention/          Gradle 约定插件
 ├── docs/                            架构说明与任务清单
 └── services/api/                    Hertz + GORM + SQLite 服务
@@ -53,19 +55,21 @@ cd services/api
 go run ./cmd/server
 ```
 
-默认监听 `http://localhost:8888`。首次启动会自动创建 `services/api/data/suirenx.db` 并加入两条演示资产；该目录不会提交到 Git。
+默认监听 `http://localhost:8888`。首次启动会自动创建 `services/api/data/suirenx.db`，不会创建无主的匿名演示资产；该目录不会提交到 Git。
 
 验证接口：
 
 ```shell
 curl http://localhost:8888/healthz
-curl http://localhost:8888/api/v1/assets
+curl http://localhost:8888/api/v1/assets \
+  -H 'Authorization: Bearer <access-token>'
 ```
 
 创建资产示例：
 
 ```shell
 curl -X POST http://localhost:8888/api/v1/assets \
+  -H 'Authorization: Bearer <access-token>' \
   -H 'Content-Type: application/json' \
   -d '{"name":"机械键盘","price_cents":89900,"purchase_date":"2026-09-05","image_url":""}'
 ```
@@ -88,6 +92,8 @@ API 启动时按编号执行内置 SQL 迁移，迁移记录保存在 `schema_mi
 点击右下角 `+` 可录入资产名称、购买金额（元，最多两位小数）和购买日期。
 保存成功后返回全部资产列表；保存失败会保留输入，修复连接后可以重试。
 
+首次启动也可以选择“本地使用”，无需服务器地址或网络。资产与用品分别保存在设备本地；设置中可切换数据来源，切换不会自动上传、复制或合并数据。本地模式提供 JSON 完整备份与恢复，恢复前会校验并自动备份当前本地库。
+
 如果使用真机，可让 ADB 转发端口：
 
 ```shell
@@ -97,6 +103,8 @@ adb reverse tcp:8888 tcp:8888
 ```
 
 也可以将构建属性 `SUIRENX_API_BASE_URL` 设置为 Mac 的局域网地址。明文 HTTP 只在 Debug 构建中开放。
+
+远程模式先在设置中配置服务器并注册/登录账号。Android 将资产和用品的远程缓存、待发送 outbox 与冲突记录按服务器及账号隔离，断网时保留最近成功同步的缓存并在下一次访问时重试；退出登录不会把旧账号缓存展示给新账号。设置中的“本地数据迁入”是显式预览/确认操作，不会随模式切换自动上传。
 
 直接构建 APK：
 
@@ -121,6 +129,10 @@ HTTP JSON 使用 snake_case 字段名、整数金额和 `ACTIVE` / `RETIRED` 字
 | `GET` | `/healthz` | 健康检查 |
 | `GET` | `/api/v1/assets` | 查询资产，可用 `status=ACTIVE/RETIRED` 筛选 |
 | `POST` | `/api/v1/assets` | 创建资产 |
+| `POST` | `/api/v1/auth/register` | 注册账号并返回 bearer token |
+| `POST` | `/api/v1/auth/login` | 登录并返回 bearer token |
+| `POST` | `/api/v1/auth/logout` | 撤销当前账号 token |
+| `POST` | `/api/v1/sync/assets` | 版本化资产/用品批量同步与增量拉取 |
 
 ## 开发约定
 

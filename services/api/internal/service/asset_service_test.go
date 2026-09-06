@@ -47,12 +47,52 @@ func (r *memoryAssetRepository) Update(asset *domain.Asset) error {
 			r.assets[i].PriceCents = asset.PriceCents
 			r.assets[i].PurchaseDate = asset.PurchaseDate
 			r.assets[i].IconKey = asset.IconKey
+			r.assets[i].PurchaseChannel = asset.PurchaseChannel
+			r.assets[i].WarrantyEndDate = asset.WarrantyEndDate
+			r.assets[i].Notes = asset.Notes
+			r.assets[i].Tags = append([]string{}, asset.Tags...)
 			r.assets[i].UpdatedAt = time.Date(2026, 9, 6, 0, 0, 0, 0, time.UTC)
 			*asset = r.assets[i]
 			return nil
 		}
 	}
 	return repository.ErrNotFound
+}
+
+func TestMetadataIsNormalizedAndOptionalUpdateFieldsPreserveOrClear(t *testing.T) {
+	repo := &memoryAssetRepository{}
+	s := NewAssetService(repo)
+	s.now = func() time.Time { return time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC) }
+	created, err := s.Create(CreateAssetInput{
+		Name: "Camera", PriceCents: 10000, PurchaseDate: "2026-09-01",
+		PurchaseChannel: "  门店  ", WarrantyEndDate: "2027-09-01", Notes: "  test note  ",
+		Tags: []string{"  旅行", "旅行", "摄影"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.PurchaseChannel != "门店" || created.WarrantyEndDate != "2027-09-01" || created.Notes != "test note" {
+		t.Fatalf("metadata was not normalized: %+v", created)
+	}
+	if len(created.Tags) != 2 || created.Tags[0] != "旅行" || created.Tags[1] != "摄影" {
+		t.Fatalf("tags were not normalized: %#v", created.Tags)
+	}
+
+	preserved, err := s.Update(UpdateAssetInput{ID: created.ID, Name: "Camera 2", PriceCents: 10000, PurchaseDate: "2026-09-01"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preserved.PurchaseChannel != "门店" || preserved.WarrantyEndDate != "2027-09-01" || len(preserved.Tags) != 2 {
+		t.Fatalf("nil metadata fields should preserve values: %+v", preserved)
+	}
+	empty, emptyTags := "", []string{}
+	cleared, err := s.Update(UpdateAssetInput{ID: created.ID, Name: "Camera 2", PriceCents: 10000, PurchaseDate: "2026-09-01", PurchaseChannel: &empty, WarrantyEndDate: &empty, Notes: &empty, Tags: &emptyTags})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleared.PurchaseChannel != "" || cleared.WarrantyEndDate != "" || cleared.Notes != "" || len(cleared.Tags) != 0 {
+		t.Fatalf("explicit empty metadata should clear values: %+v", cleared)
+	}
 }
 
 func (r *memoryAssetRepository) Count() (int64, error) {

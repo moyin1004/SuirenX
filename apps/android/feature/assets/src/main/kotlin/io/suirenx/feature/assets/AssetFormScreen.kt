@@ -60,6 +60,10 @@ fun AssetFormRoute(
         onNameChanged = viewModel::onNameChanged,
         onPriceChanged = viewModel::onPriceChanged,
         onPurchaseDateChanged = viewModel::onPurchaseDateChanged,
+        onPurchaseChannelChanged = viewModel::onPurchaseChannelChanged,
+        onWarrantyEndDateChanged = viewModel::onWarrantyEndDateChanged,
+        onNotesChanged = viewModel::onNotesChanged,
+        onTagsChanged = viewModel::onTagsChanged,
         onOpenIconPicker = viewModel::openIconPicker,
         onCloseIconPicker = viewModel::closeIconPicker,
         onIconSelected = viewModel::onIconSelected,
@@ -75,6 +79,10 @@ fun AssetFormScreen(
     onNameChanged: (String) -> Unit,
     onPriceChanged: (String) -> Unit,
     onPurchaseDateChanged: (String) -> Unit,
+    onPurchaseChannelChanged: (String) -> Unit,
+    onWarrantyEndDateChanged: (String) -> Unit,
+    onNotesChanged: (String) -> Unit,
+    onTagsChanged: (String) -> Unit,
     onSave: () -> Unit,
     onClose: () -> Unit,
     onOpenIconPicker: () -> Unit,
@@ -116,7 +124,7 @@ fun AssetFormScreen(
                         Button(onClick = onClose) { Text("关闭") }
                     }
                 }
-                else -> FormBody(state, onNameChanged, onPriceChanged, onPurchaseDateChanged, onOpenIconPicker)
+                else -> FormBody(state, onNameChanged, onPriceChanged, onPurchaseDateChanged, onPurchaseChannelChanged, onWarrantyEndDateChanged, onNotesChanged, onTagsChanged, onOpenIconPicker)
             }
         }
     }
@@ -192,6 +200,10 @@ private fun FormBody(
     onNameChanged: (String) -> Unit,
     onPriceChanged: (String) -> Unit,
     onPurchaseDateChanged: (String) -> Unit,
+    onPurchaseChannelChanged: (String) -> Unit,
+    onWarrantyEndDateChanged: (String) -> Unit,
+    onNotesChanged: (String) -> Unit,
+    onTagsChanged: (String) -> Unit,
     onOpenIconPicker: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -233,6 +245,42 @@ private fun FormBody(
             label = { Text(stringResource(R.string.asset_name_label)) },
             enabled = !state.isSaving,
             singleLine = true,
+        )
+        OutlinedTextField(
+            value = state.purchaseChannel,
+            onValueChange = onPurchaseChannelChanged,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("购买渠道（选填）") },
+            singleLine = true,
+            enabled = !state.isSaving,
+        )
+        OutlinedTextField(
+            value = state.warrantyEndDate,
+            onValueChange = onWarrantyEndDateChanged,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("保修截止日（选填）") },
+            supportingText = { Text("YYYY-MM-DD") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+            singleLine = true,
+            enabled = !state.isSaving,
+        )
+        OutlinedTextField(
+            value = state.tags,
+            onValueChange = onTagsChanged,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("标签（选填，用逗号分隔）") },
+            supportingText = { Text("最多 20 个") },
+            singleLine = false,
+            enabled = !state.isSaving,
+        )
+        OutlinedTextField(
+            value = state.notes,
+            onValueChange = onNotesChanged,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("备注（选填）") },
+            minLines = 3,
+            maxLines = 8,
+            enabled = !state.isSaving,
         )
         OutlinedTextField(
             value = state.price,
@@ -278,6 +326,10 @@ private fun AssetFormScreenPreview() {
             onNameChanged = {},
             onPriceChanged = {},
             onPurchaseDateChanged = {},
+            onPurchaseChannelChanged = {},
+            onWarrantyEndDateChanged = {},
+            onNotesChanged = {},
+            onTagsChanged = {},
             onSave = {},
             onClose = {},
             onOpenIconPicker = {},

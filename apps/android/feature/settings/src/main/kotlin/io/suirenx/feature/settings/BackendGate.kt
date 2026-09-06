@@ -22,7 +22,8 @@ fun BackendGate(
     content: @Composable () -> Unit,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val configured = state.settings?.activeUrl != null
+    val configured = state.mode == io.suirenx.core.model.StorageMode.Local ||
+        (state.settings?.activeUrl != null && state.auth.authenticated)
     Box(modifier.fillMaxSize()) {
         when {
             state.settings == null && state.error == null ->
@@ -34,6 +35,8 @@ fun BackendGate(
                 onSave = viewModel::save,
                 onSelect = viewModel::select,
                 onRetry = viewModel::load,
+                onUseLocal = viewModel::useLocal,
+                onUseRemote = viewModel::useRemote,
             )
             else -> content()
         }

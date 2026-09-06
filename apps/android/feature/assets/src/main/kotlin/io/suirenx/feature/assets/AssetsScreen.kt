@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -30,6 +31,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,6 +50,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.suirenx.core.model.Asset
 import io.suirenx.core.model.AssetStatus
+import io.suirenx.core.domain.SyncConflictResolution
 import io.suirenx.core.ui.theme.SuirenXTheme
 import java.text.NumberFormat
 import java.time.LocalDate
@@ -65,6 +68,8 @@ fun AssetsRoute(
         onFilterSelected = viewModel::onFilterSelected,
         onRefresh = viewModel::refresh,
         onAssetClick = onAssetClick,
+        onRetrySync = viewModel::retrySync,
+        onResolveConflict = viewModel::resolveConflict,
         modifier = modifier,
     )
 }
@@ -75,6 +80,8 @@ fun AssetsScreen(
     onFilterSelected: (AssetFilter) -> Unit,
     onRefresh: () -> Unit,
     onAssetClick: (String) -> Unit,
+    onRetrySync: () -> Unit = {},
+    onResolveConflict: (String, SyncConflictResolution) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     // One scrolling container: the overview card scrolls away while the filter
@@ -88,6 +95,16 @@ fun AssetsScreen(
     ) {
         item {
             Header(onRefresh = onRefresh, modifier = Modifier.padding(horizontal = 20.dp))
+        }
+        if (state.syncStatus.pendingOperations > 0 || state.syncStatus.conflicts.isNotEmpty()) {
+            item {
+                SyncStatusCard(
+                    state = state,
+                    onRetry = onRetrySync,
+                    onResolveConflict = onResolveConflict,
+                    modifier = Modifier.padding(horizontal = 20.dp),
+                )
+            }
         }
         if (state.assets.isNotEmpty()) {
             item {
@@ -115,6 +132,39 @@ fun AssetsScreen(
             }
             else -> items(state.visibleAssets.chunked(2), key = { row -> row.first().id }) { rowAssets ->
                 AssetRow(rowAssets, onAssetClick)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SyncStatusCard(
+    state: AssetsUiState,
+    onRetry: () -> Unit,
+    onResolveConflict: (String, SyncConflictResolution) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(modifier = modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (state.syncStatus.pendingOperations > 0) {
+                Text("有 ${state.syncStatus.pendingOperations} 项变更等待同步", fontWeight = FontWeight.Bold)
+                OutlinedButton(onClick = onRetry, modifier = Modifier.fillMaxWidth()) { Text("立即重试") }
+            }
+            state.syncStatus.lastSyncedAt?.let { Text("最近成功同步：$it", color = MaterialTheme.colorScheme.onTertiaryContainer) }
+            state.syncStatus.conflicts.forEach { conflict ->
+                Text("资产“${conflict.local.name}”发生同步冲突", fontWeight = FontWeight.Bold)
+                Text(
+                    "本机：${conflict.local.name} · 服务器：${conflict.remote?.name ?: "已删除"}",
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { onResolveConflict(conflict.assetId, SyncConflictResolution.KeepLocal) }, modifier = Modifier.weight(1f)) {
+                        Text("保留本机")
+                    }
+                    OutlinedButton(onClick = { onResolveConflict(conflict.assetId, SyncConflictResolution.KeepRemote) }, modifier = Modifier.weight(1f)) {
+                        Text("保留服务器")
+                    }
+                }
             }
         }
     }
@@ -365,7 +415,7 @@ private fun AssetCard(asset: Asset, onClick: () -> Unit, modifier: Modifier = Mo
     val currency = NumberFormat.getCurrencyInstance(Locale.CHINA)
     Card(
         onClick = onClick,
-        modifier = modifier.height(180.dp),
+        modifier = modifier.defaultMinSize(minHeight = 180.dp),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
@@ -402,7 +452,7 @@ private fun AssetCard(asset: Asset, onClick: () -> Unit, modifier: Modifier = Mo
                 )
             }
             Spacer(Modifier.height(16.dp))
-            Text(asset.name, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+            Text(asset.name, fontSize = 15.sp, fontWeight = FontWeight.Medium)
             Spacer(Modifier.height(8.dp))
             Text(
                 text = "${currency.format(asset.priceCents / 100.0)}  |  ${asset.heldDays} 天",

@@ -19,6 +19,7 @@ var (
 	ErrInvalidPurchaseDate  = errors.New("purchase date must use YYYY-MM-DD")
 	ErrInvalidStatus        = errors.New("invalid asset status")
 	ErrInvalidRetiredDate   = errors.New("retired date must use YYYY-MM-DD, be between purchase date and today, and be empty for ACTIVE")
+	ErrInvalidAssetMetadata = errors.New("invalid asset metadata")
 	ErrInvalidScope         = errors.New("scope must be CURRENT, ARCHIVED, or ALL")
 	ErrInvalidArchiveAction = errors.New("action must be ARCHIVE or RESTORE")
 	ErrAssetArchived        = errors.New("restore archived asset before editing")
@@ -26,35 +27,47 @@ var (
 )
 
 type AssetView struct {
-	IconKey        string `json:"icon_key"`
-	ArchivedAt     string `json:"archived_at"`
-	RetiredDate    string `json:"retired_date"`
-	ID             string `json:"id"`
-	Name           string `json:"name"`
-	PriceCents     int64  `json:"price_cents"`
-	PurchaseDate   string `json:"purchase_date"`
-	Status         string `json:"status"`
-	ImageURL       string `json:"image_url"`
-	HeldDays       int    `json:"held_days"`
-	DailyCostCents int64  `json:"daily_cost_cents"`
-	CreatedAt      string `json:"created_at"`
-	UpdatedAt      string `json:"updated_at"`
+	IconKey         string   `json:"icon_key"`
+	ArchivedAt      string   `json:"archived_at"`
+	RetiredDate     string   `json:"retired_date"`
+	ID              string   `json:"id"`
+	Name            string   `json:"name"`
+	PriceCents      int64    `json:"price_cents"`
+	PurchaseDate    string   `json:"purchase_date"`
+	Status          string   `json:"status"`
+	ImageURL        string   `json:"image_url"`
+	HeldDays        int      `json:"held_days"`
+	DailyCostCents  int64    `json:"daily_cost_cents"`
+	CreatedAt       string   `json:"created_at"`
+	UpdatedAt       string   `json:"updated_at"`
+	PurchaseChannel string   `json:"purchase_channel"`
+	WarrantyEndDate string   `json:"warranty_end_date"`
+	Notes           string   `json:"notes"`
+	Tags            []string `json:"tags"`
 }
 
 type CreateAssetInput struct {
-	IconKey      string `json:"icon_key"`
-	Name         string `json:"name"`
-	PriceCents   int64  `json:"price_cents"`
-	PurchaseDate string `json:"purchase_date"`
-	ImageURL     string `json:"image_url"`
+	IconKey         string   `json:"icon_key"`
+	Name            string   `json:"name"`
+	PriceCents      int64    `json:"price_cents"`
+	PurchaseDate    string   `json:"purchase_date"`
+	ImageURL        string   `json:"image_url"`
+	PurchaseChannel string   `json:"purchase_channel"`
+	WarrantyEndDate string   `json:"warranty_end_date"`
+	Notes           string   `json:"notes"`
+	Tags            []string `json:"tags"`
 }
 
 type UpdateAssetInput struct {
-	IconKey      string `json:"icon_key"`
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	PriceCents   int64  `json:"price_cents"`
-	PurchaseDate string `json:"purchase_date"`
+	IconKey         string    `json:"icon_key"`
+	ID              string    `json:"id"`
+	Name            string    `json:"name"`
+	PriceCents      int64     `json:"price_cents"`
+	PurchaseDate    string    `json:"purchase_date"`
+	PurchaseChannel *string   `json:"purchase_channel"`
+	WarrantyEndDate *string   `json:"warranty_end_date"`
+	Notes           *string   `json:"notes"`
+	Tags            *[]string `json:"tags"`
 }
 
 type UpdateAssetStatusInput struct {
@@ -65,11 +78,16 @@ type UpdateAssetStatusInput struct {
 
 type AssetService struct {
 	repository repository.AssetRepository
+	ownerID    string
 	now        func() time.Time
 }
 
 func NewAssetService(repository repository.AssetRepository) *AssetService {
 	return &AssetService{repository: repository, now: time.Now}
+}
+
+func (s *AssetService) ForOwner(ownerID string) *AssetService {
+	return &AssetService{repository: s.repository, ownerID: ownerID, now: s.now}
 }
 
 func (s *AssetService) List(status string) ([]AssetView, error) {
@@ -98,7 +116,15 @@ func (s *AssetService) ListScope(status, scope string) ([]AssetView, error) {
 		filter = &parsed
 	}
 
-	assets, err := s.repository.List(filter, archived)
+	var assets []domain.Asset
+	var err error
+	if s.ownerID == "" {
+		assets, err = s.repository.List(filter, archived)
+	} else if owned, ok := s.repository.(repository.OwnerAssetRepository); ok {
+		assets, err = owned.ListForOwner(s.ownerID, filter, archived)
+	} else {
+		return nil, fmt.Errorf("list assets: owner-scoped repository unavailable")
+	}
 	if err != nil {
 		return nil, fmt.Errorf("list assets: %w", err)
 	}
@@ -110,7 +136,7 @@ func (s *AssetService) ListScope(status, scope string) ([]AssetView, error) {
 }
 
 func (s *AssetService) Get(id string) (AssetView, error) {
-	asset, err := s.repository.Get(id)
+	asset, err := s.get(id)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			return AssetView{}, ErrAssetNotFound
@@ -131,6 +157,7 @@ func (s *AssetService) Create(input CreateAssetInput) (AssetView, error) {
 		return AssetView{}, err
 	}
 	asset := domain.Asset{
+		OwnerID:      s.ownerID,
 		IconKey:      iconKey,
 		ID:           newID(),
 		Name:         name,
@@ -139,7 +166,10 @@ func (s *AssetService) Create(input CreateAssetInput) (AssetView, error) {
 		Status:       domain.AssetStatusActive,
 		ImageURL:     strings.TrimSpace(input.ImageURL),
 	}
-	if err := s.repository.Create(&asset); err != nil {
+	if err := applyMetadata(&asset, input.PurchaseChannel, input.WarrantyEndDate, input.Notes, &input.Tags, purchaseDate); err != nil {
+		return AssetView{}, err
+	}
+	if err := s.create(&asset); err != nil {
 		return AssetView{}, fmt.Errorf("create asset: %w", err)
 	}
 	return s.toView(asset), nil
@@ -153,7 +183,7 @@ func (s *AssetService) Update(input UpdateAssetInput) (AssetView, error) {
 		return AssetView{}, err
 	}
 
-	current, err := s.repository.Get(input.ID)
+	current, err := s.get(input.ID)
 	if errors.Is(err, repository.ErrNotFound) {
 		return AssetView{}, ErrAssetNotFound
 	}
@@ -182,7 +212,14 @@ func (s *AssetService) Update(input UpdateAssetInput) (AssetView, error) {
 		PriceCents:   input.PriceCents,
 		PurchaseDate: purchaseDate,
 	}
-	if err := s.repository.Update(&asset); err != nil {
+	asset.PurchaseChannel = current.PurchaseChannel
+	asset.WarrantyEndDate = current.WarrantyEndDate
+	asset.Notes = current.Notes
+	asset.Tags = current.Tags
+	if err := applyMetadata(&asset, optionalValue(input.PurchaseChannel, current.PurchaseChannel), optionalDate(input.WarrantyEndDate, current.WarrantyEndDate), optionalValue(input.Notes, current.Notes), optionalTags(input.Tags, current.Tags), purchaseDate); err != nil {
+		return AssetView{}, err
+	}
+	if err := s.update(&asset); err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			return AssetView{}, ErrAssetNotFound
 		}
@@ -209,7 +246,7 @@ func (s *AssetService) UpdateStatus(input UpdateAssetStatusInput) (AssetView, er
 	} else if input.RetiredDate != "" {
 		return AssetView{}, ErrInvalidRetiredDate
 	}
-	asset, err := s.repository.Get(input.ID)
+	asset, err := s.get(input.ID)
 	if errors.Is(err, repository.ErrNotFound) {
 		return AssetView{}, ErrAssetNotFound
 	}
@@ -224,7 +261,7 @@ func (s *AssetService) UpdateStatus(input UpdateAssetStatusInput) (AssetView, er
 	}
 	asset.Status = status
 	asset.RetiredAt = retiredAt
-	if err := s.repository.UpdateStatus(asset); err != nil {
+	if err := s.updateStatus(asset); err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			return AssetView{}, ErrAssetNotFound
 		}
@@ -239,7 +276,7 @@ func (s *AssetService) UpdateArchive(id, action string) (AssetView, error) {
 	if action != "ARCHIVE" && action != "RESTORE" {
 		return AssetView{}, ErrInvalidArchiveAction
 	}
-	asset, err := s.repository.Get(id)
+	asset, err := s.get(id)
 	if errors.Is(err, repository.ErrNotFound) {
 		return AssetView{}, ErrAssetNotFound
 	}
@@ -254,13 +291,68 @@ func (s *AssetService) UpdateArchive(id, action string) (AssetView, error) {
 	} else {
 		asset.ArchivedAt = nil
 	}
-	if err := s.repository.UpdateArchive(asset); err != nil {
+	if err := s.updateArchive(asset); err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			return AssetView{}, ErrAssetNotFound
 		}
 		return AssetView{}, fmt.Errorf("update asset archive: %w", err)
 	}
 	return s.toView(*asset), nil
+}
+
+func (s *AssetService) get(id string) (*domain.Asset, error) {
+	if s.ownerID == "" {
+		return s.repository.Get(id)
+	}
+	owned, ok := s.repository.(repository.OwnerAssetRepository)
+	if !ok {
+		return nil, fmt.Errorf("owner-scoped repository unavailable")
+	}
+	return owned.GetForOwner(s.ownerID, id)
+}
+
+func (s *AssetService) create(asset *domain.Asset) error {
+	if s.ownerID == "" {
+		return s.repository.Create(asset)
+	}
+	owned, ok := s.repository.(repository.OwnerAssetRepository)
+	if !ok {
+		return fmt.Errorf("owner-scoped repository unavailable")
+	}
+	return owned.CreateForOwner(s.ownerID, asset)
+}
+
+func (s *AssetService) update(asset *domain.Asset) error {
+	if s.ownerID == "" {
+		return s.repository.Update(asset)
+	}
+	owned, ok := s.repository.(repository.OwnerAssetRepository)
+	if !ok {
+		return fmt.Errorf("owner-scoped repository unavailable")
+	}
+	return owned.UpdateForOwner(s.ownerID, asset)
+}
+
+func (s *AssetService) updateStatus(asset *domain.Asset) error {
+	if s.ownerID == "" {
+		return s.repository.UpdateStatus(asset)
+	}
+	owned, ok := s.repository.(repository.OwnerAssetRepository)
+	if !ok {
+		return fmt.Errorf("owner-scoped repository unavailable")
+	}
+	return owned.UpdateStatusForOwner(s.ownerID, asset)
+}
+
+func (s *AssetService) updateArchive(asset *domain.Asset) error {
+	if s.ownerID == "" {
+		return s.repository.UpdateArchive(asset)
+	}
+	owned, ok := s.repository.(repository.OwnerAssetRepository)
+	if !ok {
+		return fmt.Errorf("owner-scoped repository unavailable")
+	}
+	return owned.UpdateArchiveForOwner(s.ownerID, asset)
 }
 
 // validateEditable enforces the shared rules for the user-editable fields.
@@ -324,20 +416,94 @@ func (s *AssetService) toView(asset domain.Asset) AssetView {
 		iconKey = "devices"
 	}
 	return AssetView{
-		IconKey:        iconKey,
-		RetiredDate:    retiredDate,
-		ArchivedAt:     archivedAt,
-		ID:             asset.ID,
-		Name:           asset.Name,
-		PriceCents:     asset.PriceCents,
-		PurchaseDate:   asset.PurchaseDate.Format(time.DateOnly),
-		Status:         string(asset.Status),
-		ImageURL:       asset.ImageURL,
-		HeldDays:       days,
-		DailyCostCents: dailyCost,
-		CreatedAt:      asset.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:      asset.UpdatedAt.Format(time.RFC3339),
+		IconKey:         iconKey,
+		RetiredDate:     retiredDate,
+		ArchivedAt:      archivedAt,
+		ID:              asset.ID,
+		Name:            asset.Name,
+		PriceCents:      asset.PriceCents,
+		PurchaseDate:    asset.PurchaseDate.Format(time.DateOnly),
+		Status:          string(asset.Status),
+		ImageURL:        asset.ImageURL,
+		HeldDays:        days,
+		DailyCostCents:  dailyCost,
+		CreatedAt:       asset.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:       asset.UpdatedAt.Format(time.RFC3339),
+		PurchaseChannel: asset.PurchaseChannel,
+		WarrantyEndDate: formatOptionalDate(asset.WarrantyEndDate),
+		Notes:           asset.Notes,
+		Tags:            append([]string{}, asset.Tags...),
 	}
+}
+
+func applyMetadata(asset *domain.Asset, purchaseChannel, warrantyEndDate, notes string, tags *[]string, purchaseDate time.Time) error {
+	channel := strings.TrimSpace(purchaseChannel)
+	if len([]rune(channel)) > 100 || len([]rune(notes)) > 2000 {
+		return ErrInvalidAssetMetadata
+	}
+	var warranty *time.Time
+	if strings.TrimSpace(warrantyEndDate) != "" {
+		parsed, err := time.Parse(time.DateOnly, strings.TrimSpace(warrantyEndDate))
+		if err != nil {
+			return ErrInvalidAssetMetadata
+		}
+		warranty = &parsed
+	}
+	if tags == nil {
+		tags = &[]string{}
+	}
+	normalized := make([]string, 0, len(*tags))
+	seen := make(map[string]struct{}, len(*tags))
+	for _, raw := range *tags {
+		tag := strings.TrimSpace(raw)
+		if tag == "" {
+			continue
+		}
+		if len([]rune(tag)) > 30 {
+			return ErrInvalidAssetMetadata
+		}
+		if _, exists := seen[tag]; exists {
+			continue
+		}
+		seen[tag] = struct{}{}
+		normalized = append(normalized, tag)
+	}
+	if len(normalized) > 20 {
+		return ErrInvalidAssetMetadata
+	}
+	asset.PurchaseChannel, asset.WarrantyEndDate, asset.Notes, asset.Tags = channel, warranty, strings.TrimSpace(notes), normalized
+	return nil
+}
+
+func optionalValue(value *string, fallback string) string {
+	if value == nil {
+		return fallback
+	}
+	return *value
+}
+
+func optionalDate(value *string, fallback *time.Time) string {
+	if value == nil {
+		if fallback == nil {
+			return ""
+		}
+		return fallback.Format(time.DateOnly)
+	}
+	return *value
+}
+
+func optionalTags(value *[]string, fallback []string) *[]string {
+	if value == nil {
+		return &fallback
+	}
+	return value
+}
+
+func formatOptionalDate(value *time.Time) string {
+	if value == nil {
+		return ""
+	}
+	return value.Format(time.DateOnly)
 }
 
 func newID() string {
