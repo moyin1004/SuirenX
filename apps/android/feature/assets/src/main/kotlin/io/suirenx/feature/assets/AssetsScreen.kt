@@ -84,8 +84,8 @@ fun AssetsScreen(
         modifier = modifier
             .fillMaxSize()
             .statusBarsPadding(),
-        contentPadding = PaddingValues(top = 18.dp, bottom = 120.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
+        contentPadding = PaddingValues(top = 14.dp, bottom = 120.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item {
             Header(onRefresh = onRefresh, modifier = Modifier.padding(horizontal = 20.dp))
@@ -127,13 +127,13 @@ private fun Header(onRefresh: () -> Unit, modifier: Modifier = Modifier) {
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("燧人", fontSize = 36.sp, fontWeight = FontWeight.Black)
+        Text("燧人", fontSize = 30.sp, fontWeight = FontWeight.Black)
         Spacer(Modifier.weight(1f))
         IconButton(onClick = {}) {
-            Icon(Icons.Default.Search, contentDescription = "搜索", modifier = Modifier.size(30.dp))
+            Icon(Icons.Default.Search, contentDescription = "搜索", modifier = Modifier.size(26.dp))
         }
         IconButton(onClick = onRefresh) {
-            Icon(Icons.Default.Refresh, contentDescription = "刷新", modifier = Modifier.size(28.dp))
+            Icon(Icons.Default.Refresh, contentDescription = "刷新", modifier = Modifier.size(24.dp))
         }
     }
 }
@@ -163,8 +163,8 @@ private fun FilterChips(
                 ) {
                     Text(
                         text = filter.label,
-                        modifier = Modifier.padding(horizontal = 22.dp, vertical = 12.dp),
-                        fontSize = 16.sp,
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+                        fontSize = 14.sp,
                     )
                 }
             }
@@ -177,12 +177,12 @@ private fun AssetOverviewCard(overview: AssetOverview, modifier: Modifier = Modi
     val currency = NumberFormat.getCurrencyInstance(Locale.CHINA)
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(28.dp),
+        shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.surface,
     ) {
-        Column(Modifier.padding(20.dp)) {
+        Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("资产总览", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Text("资产总览", fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
                 Surface(
                     shape = RoundedCornerShape(14.dp),
@@ -191,45 +191,45 @@ private fun AssetOverviewCard(overview: AssetOverview, modifier: Modifier = Modi
                     Text(
                         text = "服役中 ${overview.activeCount}/${overview.totalCount}",
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(14.dp))
             Row {
                 Column(Modifier.weight(1f)) {
-                    Text("总资产", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("总资产", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(6.dp))
                     Text(
                         text = currency.format(overview.totalPriceCents / 100.0),
-                        fontSize = 24.sp,
+                        fontSize = 21.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                     )
                 }
                 Column(Modifier.weight(1f)) {
-                    Text("日均成本", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("日均成本", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(6.dp))
                     Text(
                         text = "${currency.format(overview.totalDailyCostCents / 100.0)}/天",
-                        fontSize = 24.sp,
+                        fontSize = 21.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                     )
                 }
             }
-            Spacer(Modifier.height(18.dp))
-            DashedDivider()
             Spacer(Modifier.height(14.dp))
+            DashedDivider()
+            Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 LegendDot(MaterialTheme.colorScheme.secondary)
                 Spacer(Modifier.size(6.dp))
-                Text("服役中 ${overview.activeCount}", fontSize = 13.sp)
+                Text("服役中 ${overview.activeCount}", fontSize = 12.sp)
                 Spacer(Modifier.weight(1f))
                 LegendDot(MaterialTheme.colorScheme.outline)
                 Spacer(Modifier.size(6.dp))
-                Text("已退役 ${overview.retiredCount}", fontSize = 13.sp)
+                Text("已退役 ${overview.retiredCount}", fontSize = 12.sp)
             }
             Spacer(Modifier.height(10.dp))
             OverviewBar(overview)
@@ -366,11 +366,11 @@ private fun AssetCard(asset: Asset, onClick: () -> Unit, modifier: Modifier = Mo
     val currency = NumberFormat.getCurrencyInstance(Locale.CHINA)
     Card(
         onClick = onClick,
-        modifier = modifier.height(224.dp),
-        shape = RoundedCornerShape(28.dp),
+        modifier = modifier.height(180.dp),
+        shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
-        Column(Modifier.padding(18.dp)) {
+        Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     imageVector = Icons.Outlined.Devices,
@@ -397,21 +397,21 @@ private fun AssetCard(asset: Asset, onClick: () -> Unit, modifier: Modifier = Mo
                 Spacer(Modifier.size(6.dp))
                 Text(
                     text = if (asset.status == AssetStatus.Active) "服役中" else "已退役",
-                    fontSize = 13.sp,
+                    fontSize = 12.sp,
                 )
             }
-            Spacer(Modifier.height(28.dp))
-            Text(asset.name, fontSize = 17.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+            Spacer(Modifier.height(16.dp))
+            Text(asset.name, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1)
             Spacer(Modifier.height(8.dp))
             Text(
                 text = "${currency.format(asset.priceCents / 100.0)}  |  ${asset.heldDays} 天",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 13.sp,
+                fontSize = 12.sp,
             )
             Spacer(Modifier.weight(1f))
             Text(
                 text = "${currency.format(asset.dailyCostCents / 100.0)}/天",
-                fontSize = 20.sp,
+                fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
             )
         }
