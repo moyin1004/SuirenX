@@ -27,7 +27,7 @@ func assetService(c *app.RequestContext) *service.AssetService {
 
 func toAPIAsset(asset service.AssetView) *model.Asset {
 	return &model.Asset{
-		Id: asset.ID, Name: asset.Name, PriceCents: asset.PriceCents,
+		Id: asset.ID, Name: asset.Name, PriceCents: asset.PriceCents, IconKey: asset.IconKey,
 		PurchaseDate: asset.PurchaseDate, Status: asset.Status, ImageUrl: asset.ImageURL,
 		HeldDays: int32(asset.HeldDays), DailyCostCents: asset.DailyCostCents,
 		CreatedAt: asset.CreatedAt, UpdatedAt: asset.UpdatedAt, RetiredDate: asset.RetiredDate, ArchivedAt: asset.ArchivedAt,
@@ -36,7 +36,7 @@ func toAPIAsset(asset service.AssetView) *model.Asset {
 
 func writeError(c *app.RequestContext, err error) {
 	status := consts.StatusInternalServerError
-	if errors.Is(err, service.ErrInvalidScope) || errors.Is(err, service.ErrInvalidArchiveAction) || errors.Is(err, service.ErrInvalidName) || errors.Is(err, service.ErrInvalidPrice) ||
+	if errors.Is(err, service.ErrInvalidIcon) || errors.Is(err, service.ErrInvalidScope) || errors.Is(err, service.ErrInvalidArchiveAction) || errors.Is(err, service.ErrInvalidName) || errors.Is(err, service.ErrInvalidPrice) ||
 		errors.Is(err, service.ErrInvalidRetiredDate) || errors.Is(err, service.ErrInvalidPurchaseDate) || errors.Is(err, service.ErrInvalidStatus) {
 		status = consts.StatusBadRequest
 	} else if errors.Is(err, service.ErrAssetArchived) {

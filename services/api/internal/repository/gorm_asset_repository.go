@@ -17,6 +17,7 @@ type AssetRecord struct {
 	ArchivedAt   *time.Time `gorm:"index"`
 	Status       string     `gorm:"index;not null"`
 	ImageURL     string
+	IconKey      string
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }
@@ -83,6 +84,7 @@ func (r *GormAssetRepository) Update(asset *domain.Asset) error {
 			"name":          asset.Name,
 			"price_cents":   asset.PriceCents,
 			"purchase_date": asset.PurchaseDate,
+			"icon_key":      asset.IconKey,
 		})
 	if result.Error != nil {
 		return result.Error
@@ -133,6 +135,7 @@ func (r AssetRecord) toDomain() domain.Asset {
 		ArchivedAt:   r.ArchivedAt,
 		Status:       domain.AssetStatus(r.Status),
 		ImageURL:     r.ImageURL,
+		IconKey:      r.IconKey,
 		CreatedAt:    r.CreatedAt,
 		UpdatedAt:    r.UpdatedAt,
 	}
@@ -148,6 +151,7 @@ func recordFromDomain(asset domain.Asset) AssetRecord {
 		ArchivedAt:   asset.ArchivedAt,
 		Status:       string(asset.Status),
 		ImageURL:     asset.ImageURL,
+		IconKey:      asset.IconKey,
 		CreatedAt:    asset.CreatedAt,
 		UpdatedAt:    asset.UpdatedAt,
 	}

@@ -466,3 +466,60 @@ func TestAssetArchiveRoundTrip(t *testing.T) {
 		t.Fatalf("db error: %d %s", failed.Code, failed.Body)
 	}
 }
+
+func TestAssetIconRoundTrip(t *testing.T) {
+	s, _ := testServer(t)
+	created := request(s, "POST", "/api/v1/assets", `{"name":"Camera","price_cents":100,"purchase_date":"2020-01-01","icon_key":"camera"}`)
+	var response struct {
+		Asset service.AssetView `json:"asset"`
+	}
+	if created.Code != 201 {
+		t.Fatal(created.Body)
+	}
+	if err := json.Unmarshal(created.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Asset.IconKey != "camera" {
+		t.Fatal(response.Asset.IconKey)
+	}
+	path := "/api/v1/assets/" + response.Asset.ID
+	for _, tc := range []struct{ body, icon string }{
+		{`{"name":"Camera","price_cents":100,"purchase_date":"2020-01-01","icon_key":"phone"}`, "phone"},
+		{`{"name":"Camera","price_cents":100,"purchase_date":"2020-01-01"}`, "phone"},
+	} {
+		got := request(s, "PUT", path, tc.body)
+		if got.Code != 200 || !strings.Contains(got.Body.String(), `"icon_key":"`+tc.icon+`"`) {
+			t.Fatalf("edit: %d %s", got.Code, got.Body)
+		}
+	}
+	for _, method := range []string{"POST", "PUT"} {
+		target := path
+		if method == "POST" {
+			target = "/api/v1/assets"
+		}
+		got := request(s, method, target, `{"name":"X","price_cents":0,"purchase_date":"2020-01-01","icon_key":"invalid"}`)
+		if got.Code != 400 {
+			t.Fatalf("invalid icon: %d %s", got.Code, got.Body)
+		}
+	}
+	for _, tc := range []struct{ suffix, body string }{
+		{"/status", `{"status":"RETIRED","retired_date":"2020-01-03"}`},
+		{"/archive", `{"action":"ARCHIVE"}`},
+		{"/archive", `{"action":"RESTORE"}`},
+	} {
+		got := request(s, "PUT", path+tc.suffix, tc.body)
+		if got.Code != 200 || !strings.Contains(got.Body.String(), `"icon_key":"phone"`) {
+			t.Fatalf("lifecycle icon: %d %s", got.Code, got.Body)
+		}
+	}
+	for _, target := range []string{path, "/api/v1/assets"} {
+		got := request(s, "GET", target, "")
+		if got.Code != 200 || !strings.Contains(got.Body.String(), `"icon_key":"phone"`) {
+			t.Fatalf("persisted icon: %s", got.Body)
+		}
+	}
+	legacy := request(s, "POST", "/api/v1/assets", `{"name":"Old","price_cents":0,"purchase_date":"2020-01-01"}`)
+	if legacy.Code != 201 || !strings.Contains(legacy.Body.String(), `"icon_key":"devices"`) {
+		t.Fatal(legacy.Body)
+	}
+}

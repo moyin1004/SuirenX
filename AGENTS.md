@@ -46,6 +46,8 @@ repository boundaries.
 
 ## Data rules
 
+- Asset visuals use built-in icons identified by stable `icon_key` strings.
+  Render icon-library objects only in UI modules; do not add image upload/storage.
 - Store money as integer cents (`int64`/`Long`), never floating point.
 - Exchange date-only values as `YYYY-MM-DD` and timestamps as RFC 3339.
 - An active asset's held days include both its purchase day and today.

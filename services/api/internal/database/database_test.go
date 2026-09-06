@@ -8,10 +8,10 @@ import (
 	"github.com/moyin1004/suirenx/services/api/internal/repository"
 )
 
-// The baseline schema must satisfy the GORM repository end to end: the archive
-// column persists across reopening, and restoring returns the asset to the
-// current list.
-func TestBaselineSchemaPersistsArchiveAcrossReopen(t *testing.T) {
+// The baseline schema must satisfy the GORM repository end to end: icon and
+// archive columns persist across reopening, and restoring returns the asset
+// to the current list.
+func TestBaselineSchemaPersistsIconAndArchiveAcrossReopen(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "baseline.db")
 
 	db, err := Open(path)
@@ -31,6 +31,10 @@ func TestBaselineSchemaPersistsArchiveAcrossReopen(t *testing.T) {
 	asset, err := repo.Get("legacy")
 	if err != nil || asset.Name != "Keyboard" || asset.PriceCents != 10000 || asset.ArchivedAt != nil {
 		t.Fatalf("baseline read: %+v %v", asset, err)
+	}
+	asset.IconKey = "keyboard"
+	if err = repo.Update(asset); err != nil {
+		t.Fatal(err)
 	}
 	now := time.Now().UTC().Truncate(time.Second)
 	asset.ArchivedAt = &now
@@ -52,7 +56,7 @@ func TestBaselineSchemaPersistsArchiveAcrossReopen(t *testing.T) {
 	defer reopenedConn.Close()
 	repo = repository.NewGormAssetRepository(reopened)
 	asset, err = repo.Get("legacy")
-	if err != nil || asset.ArchivedAt == nil || !asset.ArchivedAt.Equal(now) {
+	if err != nil || asset.ArchivedAt == nil || !asset.ArchivedAt.Equal(now) || asset.IconKey != "keyboard" {
 		t.Fatalf("reopen: %+v %v", asset, err)
 	}
 	asset.ArchivedAt = nil

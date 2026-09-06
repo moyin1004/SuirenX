@@ -46,6 +46,7 @@ func (r *memoryAssetRepository) Update(asset *domain.Asset) error {
 			r.assets[i].Name = asset.Name
 			r.assets[i].PriceCents = asset.PriceCents
 			r.assets[i].PurchaseDate = asset.PurchaseDate
+			r.assets[i].IconKey = asset.IconKey
 			r.assets[i].UpdatedAt = time.Date(2026, 9, 6, 0, 0, 0, 0, time.UTC)
 			*asset = r.assets[i]
 			return nil
@@ -411,5 +412,46 @@ func TestArchiveValidation(t *testing.T) {
 	}
 	if _, err := s.ListScope("", "garbage"); !errors.Is(err, ErrInvalidScope) {
 		t.Fatal(err)
+	}
+}
+
+func TestIconSelectionValidationAndPreservation(t *testing.T) {
+	s := NewAssetService(&memoryAssetRepository{})
+	for _, key := range []string{"", "devices", "laptop", "phone", "tablet", "headphones", "watch", "camera", "gamepad", "book", "keyboard", "bicycle", "home"} {
+		asset, err := s.Create(CreateAssetInput{Name: "A", PriceCents: 100, PurchaseDate: "2020-01-01", IconKey: key})
+		if err != nil {
+			t.Fatal(err)
+		}
+		expected := key
+		if key == "" {
+			expected = "devices"
+		}
+		if asset.IconKey != expected {
+			t.Fatalf("icon=%q want %q", asset.IconKey, expected)
+		}
+	}
+	if _, err := s.Create(CreateAssetInput{Name: "A", PriceCents: 100, PurchaseDate: "2020-01-01", IconKey: "unknown"}); !errors.Is(err, ErrInvalidIcon) {
+		t.Fatal(err)
+	}
+	created, err := s.Create(CreateAssetInput{Name: "A", PriceCents: 100, PurchaseDate: "2020-01-01", IconKey: "laptop"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Older clients omit the new field: keep the user's selected icon.
+	updated, err := s.Update(UpdateAssetInput{ID: created.ID, Name: "B", PriceCents: 100, PurchaseDate: "2020-01-01"})
+	if err != nil || updated.IconKey != "laptop" {
+		t.Fatalf("legacy edit: %+v %v", updated, err)
+	}
+	_, err = s.Update(UpdateAssetInput{ID: created.ID, Name: "B", PriceCents: 100, PurchaseDate: "2020-01-01", IconKey: "bad"})
+	if !errors.Is(err, ErrInvalidIcon) {
+		t.Fatal(err)
+	}
+	got, _ := s.Get(created.ID)
+	if got.IconKey != "laptop" {
+		t.Fatal("invalid key mutated icon")
+	}
+	updated, err = s.Update(UpdateAssetInput{ID: created.ID, Name: "B", PriceCents: 100, PurchaseDate: "2020-01-01", IconKey: "devices"})
+	if err != nil || updated.IconKey != "devices" {
+		t.Fatalf("reset: %+v %v", updated, err)
 	}
 }

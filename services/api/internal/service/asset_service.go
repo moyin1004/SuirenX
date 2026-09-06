@@ -13,6 +13,7 @@ import (
 )
 
 var (
+	ErrInvalidIcon          = errors.New("unsupported asset icon key")
 	ErrInvalidName          = errors.New("asset name is required")
 	ErrInvalidPrice         = errors.New("price must not be negative")
 	ErrInvalidPurchaseDate  = errors.New("purchase date must use YYYY-MM-DD")
@@ -25,6 +26,7 @@ var (
 )
 
 type AssetView struct {
+	IconKey        string `json:"icon_key"`
 	ArchivedAt     string `json:"archived_at"`
 	RetiredDate    string `json:"retired_date"`
 	ID             string `json:"id"`
@@ -40,6 +42,7 @@ type AssetView struct {
 }
 
 type CreateAssetInput struct {
+	IconKey      string `json:"icon_key"`
 	Name         string `json:"name"`
 	PriceCents   int64  `json:"price_cents"`
 	PurchaseDate string `json:"purchase_date"`
@@ -47,6 +50,7 @@ type CreateAssetInput struct {
 }
 
 type UpdateAssetInput struct {
+	IconKey      string `json:"icon_key"`
 	ID           string `json:"id"`
 	Name         string `json:"name"`
 	PriceCents   int64  `json:"price_cents"`
@@ -122,7 +126,12 @@ func (s *AssetService) Create(input CreateAssetInput) (AssetView, error) {
 		return AssetView{}, err
 	}
 
+	iconKey, err := normalizeIconKey(input.IconKey)
+	if err != nil {
+		return AssetView{}, err
+	}
 	asset := domain.Asset{
+		IconKey:      iconKey,
 		ID:           newID(),
 		Name:         name,
 		PriceCents:   input.PriceCents,
@@ -158,7 +167,16 @@ func (s *AssetService) Update(input UpdateAssetInput) (AssetView, error) {
 		return AssetView{}, ErrInvalidRetiredDate
 	}
 
+	iconKey := input.IconKey
+	if iconKey == "" {
+		iconKey = current.IconKey
+	}
+	iconKey, err = normalizeIconKey(iconKey)
+	if err != nil {
+		return AssetView{}, err
+	}
 	asset := domain.Asset{
+		IconKey:      iconKey,
 		ID:           input.ID,
 		Name:         name,
 		PriceCents:   input.PriceCents,
@@ -301,7 +319,12 @@ func (s *AssetService) toView(asset domain.Asset) AssetView {
 		dailyCost++
 	}
 
+	iconKey := asset.IconKey
+	if iconKey == "" {
+		iconKey = "devices"
+	}
 	return AssetView{
+		IconKey:        iconKey,
 		RetiredDate:    retiredDate,
 		ArchivedAt:     archivedAt,
 		ID:             asset.ID,
@@ -323,4 +346,16 @@ func newID() string {
 		panic(fmt.Sprintf("generate asset id: %v", err))
 	}
 	return hex.EncodeToString(value[:])
+}
+
+func normalizeIconKey(key string) (string, error) {
+	if key == "" {
+		return "devices", nil
+	}
+	switch key {
+	case "devices", "laptop", "phone", "tablet", "headphones", "watch", "camera", "gamepad", "book", "keyboard", "bicycle", "home":
+		return key, nil
+	default:
+		return "", ErrInvalidIcon
+	}
 }

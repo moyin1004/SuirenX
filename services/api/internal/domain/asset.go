@@ -22,6 +22,7 @@ type Asset struct {
 	ArchivedAt   *time.Time
 	Status       AssetStatus
 	ImageURL     string
+	IconKey      string
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }

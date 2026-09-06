@@ -39,7 +39,7 @@ func CreateAsset(_ context.Context, c *app.RequestContext) {
 		return
 	}
 	asset, err := assetService(c).Create(service.CreateAssetInput{
-		Name: req.Name, PriceCents: req.PriceCents, PurchaseDate: req.PurchaseDate, ImageURL: req.ImageUrl,
+		Name: req.Name, PriceCents: req.PriceCents, PurchaseDate: req.PurchaseDate, ImageURL: req.ImageUrl, IconKey: req.IconKey,
 	})
 	if err != nil {
 		writeError(c, err)
@@ -73,7 +73,7 @@ func UpdateAsset(_ context.Context, c *app.RequestContext) {
 		return
 	}
 	asset, err := assetService(c).Update(service.UpdateAssetInput{
-		ID: req.Id, Name: req.Name, PriceCents: req.PriceCents, PurchaseDate: req.PurchaseDate,
+		ID: req.Id, Name: req.Name, PriceCents: req.PriceCents, PurchaseDate: req.PurchaseDate, IconKey: req.IconKey,
 	})
 	if err != nil {
 		writeError(c, err)
