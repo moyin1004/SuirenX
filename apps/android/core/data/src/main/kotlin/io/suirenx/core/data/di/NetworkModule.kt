@@ -38,7 +38,7 @@ object NetworkModule {
         )
         .addInterceptor { chain ->
             val token = tokens.tokenFor(chain.request().url.toString())
-            val request = if (token.isNullOrBlank()) chain.request() else chain.request().newBuilder()
+            val request = if (token.isNullOrBlank() || chain.request().header("Authorization") != null) chain.request() else chain.request().newBuilder()
                 .addHeader("Authorization", "Bearer $token")
                 .build()
             chain.proceed(request)

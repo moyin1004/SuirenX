@@ -6,6 +6,8 @@ import io.suirenx.core.model.NewExpiryItem
 import java.time.LocalDate
 
 interface RemoteExpiryRepository {
+    suspend fun deleteExpiry(id: String): Result<Unit>
+
     suspend fun listExpiry(includeArchived: Boolean = false): Result<List<ExpiryItem>>
     suspend fun getExpiry(id: String): Result<ExpiryItem>
     suspend fun createExpiry(item: NewExpiryItem): Result<ExpiryItem>

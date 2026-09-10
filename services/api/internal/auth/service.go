@@ -52,7 +52,7 @@ func NewService(repository Repository) *Service {
 
 func (s *Service) Register(username, password string) (Token, error) {
 	username = strings.TrimSpace(username)
-	if username == "" || len(password) < 8 || len(username) > 100 {
+	if username == "" || len(password) < 8 || len(password) > 72 || len(username) > 100 {
 		return Token{}, ErrInvalidAccount
 	}
 	existing, err := s.repository.FindAccount(username)

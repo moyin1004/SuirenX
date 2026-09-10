@@ -7,7 +7,7 @@ import retrofit2.http.POST
 
 interface SyncApi {
     @POST("api/v1/sync/assets")
-    suspend fun sync(@Body request: SyncRequest): SyncResponse
+    suspend fun sync(@Body request: SyncRequest, @retrofit2.http.Header("Authorization") authorization: String? = null): SyncResponse
 }
 
 @Serializable

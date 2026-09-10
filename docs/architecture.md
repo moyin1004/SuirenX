@@ -1,130 +1,34 @@
-# Architecture
+# 架构
 
-SuirenX starts as a monorepo and a modular monolith. Repository boundaries are
-kept language-neutral so performance-sensitive Go modules can later be
-replaced by C++ without changing mobile clients.
+SuirenX 使用 monorepo，Android/iOS 保持原生。Android 模块依赖向内：app → feature → domain/model；data 实现 domain 接口，domain/model 不依赖 android.*。服务端为 Go/Hertz 模块化单体，transport → service → repository；服务只依赖仓储接口，SQLite/GORM 细节留在基础设施与仓储层。
 
-## Data flow
+## 本地数据与同步
 
 ```text
-Android (Compose)
-      |
-      | HTTP + JSON, described by Protobuf IDL
-      v
-Hertz transport -> asset service -> repository interface -> GORM -> SQLite
+Compose / ViewModel → 领域仓储 → Room 业务表 + 同步日志（同一事务）
+                                     ↕
+                              后台同步协调器
+                                     ↕ HTTP JSON
+                 Hertz → 同步/认证服务 → repository → SQLite
 ```
 
-Protobuf is the API contract and code-generation source. It does not require
-binary Protobuf on the wire. SQLite is the server database in the first
-version. Android-local Room storage will be introduced when offline behavior
-and conflict rules are defined.
+资产和用品的唯一事实来源是 Room。服务器地址、认证、断网和同步开关不改变列表数据源。旧 StorageMode 名称仅作为持久化兼容值，Local 表示暂停同步、Remote 表示开启同步。
 
-`services/api/scripts/generate.sh` pins hz v0.9.7 and generates the transport
-models and routes from the IDL. Generated handler entry points adapt requests
-to the service and map service views back to API models. A server-scoped
-middleware supplies the service without process-global mutable dependencies.
-The public JSON uses snake_case, numeric integer cents, string statuses
-(`ACTIVE` / `RETIRED`), explicit zero values, and empty arrays rather than null.
-Use Hertz JSON rendering, not canonical protojson encoding.
+服务端只公开健康、认证、增量同步端点。IDL 在 api/proto，services/api/scripts/generate.sh 固定 hz v0.9.7 从 m5.proto 生成路由、模型和 handler 骨架，维护的 handler 适配到服务实例。业务 CRUD 不通过 HTTP。
 
-## Migration boundaries
+协议采用 snake_case HTTP JSON、整数 cents、YYYY-MM-DD 日期、RFC 3339 时间、字符串状态、显式零值和空数组，不使用 canonical protojson。资产与用品独立游标，版本号来自服务器，设备时间不用于决定覆盖顺序。
 
-- API messages live under `api/proto` and do not expose GORM models.
-- Business logic depends on repository interfaces, not GORM.
-- Monetary values are integer cents.
-- Dates crossing the API boundary use ISO 8601 strings.
-- Database-specific queries remain inside repository implementations.
+业务写入与同步 journal 同事务提交。同步批次在 HTTP 前持久化，响应确认、游标和业务变更同事务应用。在途网络不占用 Room 事务；新修订不会被旧确认覆盖。详细的冲突、迁移、备份、后台调度与验收见 [data-sync.md](data-sync.md)。
 
-## Asset lifecycle
+## 业务约定
 
-`PUT /api/v1/assets/:id/status` accepts `status` (`ACTIVE` / `RETIRED`) and
-`retired_date`. Retiring requires a `YYYY-MM-DD` date between purchase day and
-server-local today, inclusive. Reactivation requires an empty date and clears
-the stored retirement value. Repeating a request yields the same lifecycle
-state. Every asset response includes `retired_date`, empty while active.
+- 金额为整数分，持有天数包含购买日与今天；退役后截止退役日并包含当天。重新服役清空退役日，从原购买日继续计算。
+- 退役日期介于购买日和今天之间；编辑购买日不得晚于退役日。日均成本在领域层计算，不作为存储事实。
+- 归档独立于服役状态，可恢复，默认列表与总览排除归档项；归档后需恢复才能编辑。删除需明确确认，并保留同步 tombstone。
+- 用品独立于资产金额统计。实际到期日取包装到期日与开封期限中较早者；开封日/有效天数成对填写，到期强提示持续可见。
+- 图标用稳定 icon_key，具体矢量/字体只由 UI 模块映射。保持已有资产页视觉和内置图标，不引入图片上传。
+- Hilt 注入依赖，StateFlow 表示界面状态，route 下的 Compose 无状态；协程工作可取消且数据层主线程安全。
 
-Held days include both endpoints: purchase through today for active assets,
-purchase through retirement for retired assets. Reactivation counts from the
-original purchase date, including the intervening retired period; this version
-does not maintain a history of service periods. The overview includes all asset
-prices but sums daily costs only for active assets. Editing a retired asset
-cannot move its purchase date beyond retirement.
+## 数据库策略
 
-## Reversible archive
-
-Archive is independent of `ACTIVE` / `RETIRED`. `PUT /api/v1/assets/:id/archive`
-requires `action: "ARCHIVE"` or `action: "RESTORE"`; retries preserve the first
-archive timestamp. Responses always include `archived_at` (RFC 3339 when
-archived, empty otherwise). No automatic expiration or permanent deletion is
-implemented. Restoring preserves price, purchase date, service status and
-retirement date; archiving does not pause the held-day calculation.
-
-`GET /api/v1/assets` defaults to non-archived assets. `scope=CURRENT`,
-`scope=ARCHIVED`, and `scope=ALL` select visibility independently of `status`.
-Android loads `ALL` for local filters but excludes archived records from all
-everyday filters and the overview. Archived detail is readable by ID and only
-offers restoration; editing and lifecycle writes return HTTP 409 until restored.
-The nullable archive column is introduced by versioned SQL migration 002.
-
-## Asset icons
-
-Asset visuals render from a bundled Material Symbols Rounded variable font,
-subset to the curated glyphs and shipped as `res/font` in the shared `core/ui`
-module. The public `MaterialSymbol` renders a private-use-area codepoint with
-`BasicText` (font size derived from the dp icon size, so rendering is
-independent of font scale); tint follows `LocalContentColor` like an
-`ImageVector` icon, and `filled = true` selects a second Font entry that pins
-the FILL axis to 1 (used for the selected navigation tab). The full variable
-font is ~15 MB; the subset is ~65 KB for 16 glyphs. Regenerate it with
-`apps/android/scripts/subset-material-symbols.sh` when adding glyphs. The app
-does not depend on `material-icons-extended`; only the small `material-icons-core`
-remains, for a handful of action icons (search, refresh, close, check, edit).
-
-`icon_key` is a stable, language-neutral string shared through the API:
-`devices`, `laptop`, `phone`, `tablet`, `headphones`, `watch`, `camera`,
-`gamepad`, `book`, `keyboard`, `bicycle`, or `home`. The key-to-glyph mapping
-lives only in the UI module; the server never stores glyphs. No uploaded image
-files or image-serving infrastructure are needed. `image_url` remains in the
-existing API for compatibility.
-
-Creation defaults an empty icon to `devices`; updates with an omitted or empty
-icon preserve the existing choice for older clients. An explicit `devices`
-resets the choice. Unknown input keys return HTTP 400. Legacy database rows
-render as `devices`; Android also renders a generic fallback for unknown keys
-received from a newer server, preserving the raw key in the model.
-
-Each category also carries a soft pastel `containerColor` / `contentColor`
-pair, defined next to the key-to-glyph mapping in `feature/assets`'s
-`AssetIcons.kt`. `AssetCategoryIcon` renders the glyph centered in a rounded
-tinted tile on list cards, the detail header, and the form icon button. The
-icon picker intentionally stays neutral (`surfaceVariant` tiles,
-`secondaryContainer` only for the selected item), so color reads as a
-property of the chosen asset rather than a selection affordance. The pairs
-are tuned for the light-only theme; `icon_key` and the API remain unchanged.
-
-## Versioned database migrations
-
-`database.Open` runs the SQL files embedded from `internal/database/migrations`
-before the server accepts requests. Versions are consecutive integers starting
-at 1 with no fixed digit width (001, 002, ... 999, 1000); the loader orders
-files by numeric version, so growing past 999 needs no rename. `schema_migrations`
-records the version, filename, SHA-256 of the exact SQL bytes, and UTC
-application time. Applied files are immutable; append a new file for subsequent
-changes. There is no runtime GORM AutoMigrate or model-driven schema diff. SQL
-scripts must contain transaction-compatible SQLite DDL/DML without
-BEGIN/COMMIT/ROLLBACK, VACUUM, or connection-level PRAGMA statements.
-
-One SQLite `BEGIN IMMEDIATE` transaction serializes startup (five-second busy
-wait) and commits all pending SQL and history rows together. An error rolls back
-the pending batch and aborts startup; it never leaves half-applied changes. The
-migration phase has a 30-second context timeout. Unknown/newer history, gaps,
-renamed files or changed checksums abort startup rather than guessing a repair.
-
-The early-development snapshots were squashed into a single `001_init.sql`
-baseline. Databases created before that baseline (no migration history, or
-history from the pre-squash 001-003 files) are not adopted: applying the
-baseline fails and the batch rolls back, so startup aborts instead of silently
-serving a mismatched schema. Development databases are recreated from `data/`;
-real data is restored through a backup.
-
-Operational steps and backup-based recovery are in [database-migrations.md](database-migrations.md).
+开发阶段服务端唯一 SQL 文件为 001_init.sql；首次上线后先修改 AGENTS.md，再启用不可变增量迁移。校验失败仍停止启动，不自动删除或改写旧库。Android Room 始终显式迁移。详见 [database-migrations.md](database-migrations.md)。

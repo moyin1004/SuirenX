@@ -57,27 +57,18 @@ go run ./cmd/server
 
 默认监听 `http://localhost:8888`。首次启动会自动创建 `services/api/data/suirenx.db`，不会创建无主的匿名演示资产；该目录不会提交到 Git。
 
-验证接口：
+验证健康接口：
 
 ```shell
-curl http://localhost:8888/healthz
-curl http://localhost:8888/api/v1/assets \
-  -H 'Authorization: Bearer <access-token>'
+curl --fail http://localhost:8888/healthz
 ```
 
-创建资产示例：
-
-```shell
-curl -X POST http://localhost:8888/api/v1/assets \
-  -H 'Authorization: Bearer <access-token>' \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"机械键盘","price_cents":89900,"purchase_date":"2026-09-05","image_url":""}'
-```
+资产和用品在 Android 本机增删改查。服务器仅负责账号与跨设备同步，详见 [数据与同步](docs/data-sync.md)。
 
 ## 数据库升级
 
 API 启动时按编号执行内置 SQL 迁移，迁移记录保存在 `schema_migrations`。
-升级前备份数据库；新增表结构变更须添加新迁移文件，不能修改已执行的迁移。
+开发阶段只维护唯一的 `001_init.sql`；旧库不自动重建，先备份或导出。上线后先修改 AGENTS.md，再启用不可变的增量迁移。
 详见[迁移与恢复说明](docs/database-migrations.md)。
 
 ## 运行 Android
@@ -90,21 +81,11 @@ API 启动时按编号执行内置 SQL 迁移，迁移记录保存在 `schema_mi
 模拟器通过 `http://10.0.2.2:8888/` 访问 Mac 上的 API。
 
 点击右下角 `+` 可录入资产名称、购买金额（元，最多两位小数）和购买日期。
-保存成功后返回全部资产列表；保存失败会保留输入，修复连接后可以重试。
+保存成功后返回资产列表；保存不等待网络，同步失败可以单独重试。
 
-首次启动也可以选择“本地使用”，无需服务器地址或网络。资产与用品分别保存在设备本地；设置中可切换数据来源，切换不会自动上传、复制或合并数据。本地模式提供 JSON 完整备份与恢复，恢复前会校验并自动备份当前本地库。
+首次启动直接使用本地 Room，无需服务器。设置中可选开启同步、配置账号与地址，选择每次修改后同步或定时同步；始终可手动同步。后台失败保留本机数据和待发送批次。备份/恢复始终针对本机完整数据，恢复前自动备份。
 
-如果使用真机，可让 ADB 转发端口：
-
-```shell
-adb reverse tcp:8888 tcp:8888
-./gradlew :apps:android:app:installDebug \
-  -PSUIRENX_API_BASE_URL=http://127.0.0.1:8888/
-```
-
-也可以将构建属性 `SUIRENX_API_BASE_URL` 设置为 Mac 的局域网地址。明文 HTTP 只在 Debug 构建中开放。
-
-远程模式先在设置中配置服务器并注册/登录账号。Android 将资产和用品的远程缓存、待发送 outbox 与冲突记录按服务器及账号隔离，断网时保留最近成功同步的缓存并在下一次访问时重试；退出登录不会把旧账号缓存展示给新账号。设置中的“本地数据迁入”是显式预览/确认操作，不会随模式切换自动上传。
+模拟器通过 `http://10.0.2.2:8888/` 连接开发服务；明文 HTTP 仅 Debug 开放。首次同步将经过备份并整理当前账号旧缓存；更换账号不会自动上传已绑定的数据集。真实多设备验收范围见 [TODO](docs/TODO.md)。
 
 直接构建 APK：
 
@@ -117,7 +98,7 @@ adb reverse tcp:8888 tcp:8888
 ## 当前 API
 
 修改 Proto 后，在仓库根目录运行 `services/api/scripts/generate.sh`。
-脚本使用固定版本 `hz` 更新 `biz/model`、`biz/router` 和 handler 骨架，并校验 Proto。
+脚本从 `m5.proto` 使用固定版本 `hz` 更新 `biz/model`、`biz/router` 和 handler 骨架，并校验 Proto。
 已有 handler 中的业务适配实现由开发者维护，`hz update` 会保留；不要手改生成的模型和路由。
 生成器安装命令：`go install github.com/cloudwego/hertz/cmd/hz@v0.9.7`。
 
@@ -127,8 +108,6 @@ HTTP JSON 使用 snake_case 字段名、整数金额和 `ACTIVE` / `RETIRED` 字
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |
 | `GET` | `/healthz` | 健康检查 |
-| `GET` | `/api/v1/assets` | 查询资产，可用 `status=ACTIVE/RETIRED` 筛选 |
-| `POST` | `/api/v1/assets` | 创建资产 |
 | `POST` | `/api/v1/auth/register` | 注册账号并返回 bearer token |
 | `POST` | `/api/v1/auth/login` | 登录并返回 bearer token |
 | `POST` | `/api/v1/auth/logout` | 撤销当前账号 token |

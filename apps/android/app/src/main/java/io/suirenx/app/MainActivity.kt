@@ -6,11 +6,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -30,6 +25,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.runtime.SideEffect
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.core.view.WindowCompat
+import io.suirenx.core.model.ThemeMode
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -43,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -50,6 +50,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import dagger.hilt.android.AndroidEntryPoint
+import androidx.compose.material3.Icon
+import io.suirenx.core.ui.icon.SuirenIcons
 import io.suirenx.core.ui.icon.MaterialSymbol
 import io.suirenx.core.ui.theme.SuirenXTheme
 import io.suirenx.feature.assets.AssetDetailRoute
@@ -74,16 +76,6 @@ private object Routes {
     fun assetEdit(id: String) = "assets/$id/edit"
 }
 
-// Detail and form pages slide up over the tab scaffold like the 有数 app;
-// the scaffold underneath stays put and is revealed again on the way back.
-private const val SLIDE_DURATION = 350
-
-private fun slideUpEnter(): EnterTransition =
-    slideInVertically(animationSpec = tween(SLIDE_DURATION)) { it } + fadeIn(animationSpec = tween(SLIDE_DURATION))
-
-private fun slideDownExit(): ExitTransition =
-    slideOutVertically(animationSpec = tween(SLIDE_DURATION)) { it } + fadeOut(animationSpec = tween(300))
-
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -92,6 +84,17 @@ class MainActivity : ComponentActivity() {
         setContent {
             val themeViewModel: ThemeSettingsViewModel = hiltViewModel()
             val theme by themeViewModel.theme.collectAsStateWithLifecycle()
+            val dark = when (theme) {
+                ThemeMode.System -> isSystemInDarkTheme()
+                ThemeMode.Light -> false
+                ThemeMode.Dark -> true
+            }
+            SideEffect {
+                WindowCompat.getInsetsController(window, window.decorView).apply {
+                    isAppearanceLightStatusBars = !dark
+                    isAppearanceLightNavigationBars = !dark
+                }
+            }
             SuirenXTheme(theme) { SuirenXApp() }
         }
     }
@@ -100,27 +103,30 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun SuirenXApp() {
     val navController = rememberNavController()
+    val tabNavController = rememberNavController()
     NavHost(
         navController = navController,
         startDestination = Routes.MAIN,
+        enterTransition = { EnterTransition.None },
+        exitTransition = { ExitTransition.None },
+        popEnterTransition = { EnterTransition.None },
+        popExitTransition = { ExitTransition.None },
+        predictivePopEnterTransition = { EnterTransition.None },
+        predictivePopExitTransition = { ExitTransition.None },
     ) {
         composable(Routes.MAIN) {
             BackendGate {
                 MainScaffold(
+                    tabNavController = tabNavController,
                     onAssetClick = { id -> navController.navigate(Routes.assetDetail(id)) },
                     onAddAsset = { navController.navigate(Routes.ASSET_CREATE) },
                     onOpenExpiry = { navController.navigate(Routes.EXPIRY) },
-                    onAddExpiry = { navController.navigate(Routes.EXPIRY) },
                 )
             }
         }
         composable(
             route = Routes.ASSET_DETAIL,
             arguments = listOf(navArgument("id") { type = NavType.StringType }),
-            enterTransition = { slideUpEnter() },
-            exitTransition = { ExitTransition.None },
-            popEnterTransition = { EnterTransition.None },
-            popExitTransition = { slideDownExit() },
         ) { entry ->
             val id = entry.arguments?.getString("id").orEmpty()
             AssetDetailRoute(
@@ -131,10 +137,6 @@ private fun SuirenXApp() {
         }
         composable(
             route = Routes.ASSET_CREATE,
-            enterTransition = { slideUpEnter() },
-            exitTransition = { ExitTransition.None },
-            popEnterTransition = { EnterTransition.None },
-            popExitTransition = { slideDownExit() },
         ) {
             AssetFormRoute(onClose = { navController.popBackStack() })
         }
@@ -147,15 +149,30 @@ private fun SuirenXApp() {
                     defaultValue = null
                 },
             ),
-            enterTransition = { slideUpEnter() },
-            exitTransition = { ExitTransition.None },
-            popEnterTransition = { EnterTransition.None },
-            popExitTransition = { slideDownExit() },
         ) {
             AssetFormRoute(onClose = { navController.popBackStack() })
         }
         composable(Routes.EXPIRY) {
-            ExpiryRoute(onBack = { navController.popBackStack() })
+            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                ExpiryRoute(onBack = { navController.popBackStack() })
+                FloatingTabBar(
+                    currentRoute = HomeTab.Tools.route,
+                    onTabSelected = { tab ->
+                        // A tab tap may arrive while system-back is finishing.
+                        // Never pop the main page a second time.
+                        if (navController.currentDestination?.route == Routes.EXPIRY) {
+                            navController.popBackStack()
+                        }
+                        tabNavController.navigate(tab.route) {
+                            popUpTo(tabNavController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onAddAsset = { navController.navigate(Routes.ASSET_CREATE) },
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                )
+            }
         }
     }
 }
@@ -166,39 +183,63 @@ private enum class HomeTab(
     // Material Symbols Rounded codepoints; see core/ui MaterialSymbol.
     val glyph: String,
 ) {
-    Assets("tab/assets", "资产", "\uE9B2"), // home
+    Overview("tab/overview", "总览", "\uE9B2"),
+    Assets("tab/assets", "资产", "\uE326"), // home
     Tools("tab/tools", "工具", "\uE4FB"), // auto_graph
     Settings("tab/settings", "设置", "\uE8B8"), // settings
 }
 
 @Composable
 private fun MainScaffold(
+    tabNavController: NavHostController,
     onAssetClick: (String) -> Unit,
     onAddAsset: () -> Unit,
     onOpenExpiry: () -> Unit,
-    onAddExpiry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val tabNavController = rememberNavController()
     val currentBackStackEntry by tabNavController.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry?.destination?.route
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         // Each tab is a separate navigation destination; saveState/restoreState
         // keeps every tab's ViewModel and scroll position alive across switches.
         NavHost(
             navController = tabNavController,
-            startDestination = HomeTab.Assets.route,
+            startDestination = HomeTab.Overview.route,
+            enterTransition = { EnterTransition.None },
+            exitTransition = { ExitTransition.None },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { ExitTransition.None },
+            predictivePopEnterTransition = { EnterTransition.None },
+            predictivePopExitTransition = { ExitTransition.None },
             modifier = Modifier.fillMaxSize(),
         ) {
+            composable(HomeTab.Overview.route) {
+                OverviewRoute(
+                    onAssets = {
+                        tabNavController.navigate(HomeTab.Assets.route) {
+                            popUpTo(tabNavController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onSupplies = onOpenExpiry,
+                )
+            }
             composable(HomeTab.Assets.route) {
-                Column(Modifier.fillMaxSize()) {
-                    ExpirySummaryBanner(onClick = onOpenExpiry)
-                    AssetsRoute(onAssetClick = onAssetClick, modifier = Modifier.weight(1f))
-                }
+                AssetsRoute(onAssetClick = onAssetClick)
             }
             composable(HomeTab.Tools.route) {
-                ToolsRoute(onOpenExpiry = onOpenExpiry, onAddExpiry = onAddExpiry)
+                val expiryViewModel: io.suirenx.feature.expiry.ExpiryViewModel = hiltViewModel()
+                val expiry by expiryViewModel.uiState.collectAsStateWithLifecycle()
+                val pendingCount = if (expiry.loading || expiry.error != null) null else expiry.items.count {
+                    it.archivedAt == null && it.bucket(java.time.LocalDate.now(), expiry.soonDays) in setOf(
+                        io.suirenx.core.model.ExpiryBucket.Expired,
+                        io.suirenx.core.model.ExpiryBucket.DueToday,
+                        io.suirenx.core.model.ExpiryBucket.ExpiringSoon,
+                    )
+                }
+                ToolsRoute(onOpenExpiry = onOpenExpiry, pendingCount = pendingCount)
             }
             composable(HomeTab.Settings.route) {
                 SettingsRoute()
@@ -215,7 +256,7 @@ private fun MainScaffold(
                     restoreState = true
                 }
             },
-            onAddAsset = { if (currentRoute == HomeTab.Tools.route) onAddExpiry() else onAddAsset() },
+            onAddAsset = onAddAsset,
             modifier = Modifier.align(Alignment.BottomCenter),
         )
     }
@@ -228,51 +269,26 @@ private fun FloatingTabBar(
     onAddAsset: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .navigationBarsPadding()
-            .padding(horizontal = 20.dp)
-            .padding(bottom = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    Column(
+        modifier = modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 14.dp).padding(bottom = 14.dp),
+        horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Surface(
-            shape = RoundedCornerShape(50),
-            color = MaterialTheme.colorScheme.surface,
-            shadowElevation = 10.dp,
-            modifier = Modifier.weight(1f),
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 5.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                HomeTab.entries.forEach { tab ->
-                    TabItem(
-                        tab = tab,
-                        selected = currentRoute == tab.route,
-                        onClick = { onTabSelected(tab) },
-                        modifier = Modifier.weight(1f),
-                    )
+        if (currentRoute == HomeTab.Assets.route) {
+            Surface(onClick = onAddAsset, shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.secondary, contentColor = MaterialTheme.colorScheme.onSecondary,
+                shadowElevation = 8.dp, modifier = Modifier.size(54.dp)) {
+                Box(contentAlignment = Alignment.Center) {
+                    MaterialSymbol(glyph = "\uE145", contentDescription = "新增资产", size = 26.dp)
                 }
             }
         }
-        Surface(
-            onClick = onAddAsset,
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-            shadowElevation = 10.dp,
-            modifier = Modifier.size(52.dp),
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                MaterialSymbol(
-                    glyph = "\uE145", // add
-                    contentDescription = "新增资产",
-                    filled = true,
-                    size = 28.dp,
-                )
+        Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surface,
+            shadowElevation = 8.dp, modifier = Modifier.fillMaxWidth()) {
+            Row(Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                HomeTab.entries.forEach { tab ->
+                    TabItem(tab, currentRoute == tab.route, { onTabSelected(tab) }, Modifier.weight(1f))
+                }
             }
         }
     }
@@ -286,40 +302,43 @@ private fun TabItem(
     modifier: Modifier = Modifier,
 ) {
     val contentColor = if (selected) {
-        MaterialTheme.colorScheme.onSurface
+        MaterialTheme.colorScheme.onSecondary
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant
     }
     Column(
         modifier = modifier
-            .clip(CircleShape)
+            .clip(RoundedCornerShape(16.dp))
+            .background(if (selected) MaterialTheme.colorScheme.secondary else Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(vertical = 4.dp),
+            .height(48.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
     ) {
         Box(
             modifier = Modifier
                 .clip(CircleShape)
                 .background(
-                    if (selected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent,
+                    if (selected) MaterialTheme.colorScheme.secondary else Color.Transparent,
                 )
-                .size(width = 44.dp, height = 30.dp),
+                .size(width = 44.dp, height = 20.dp),
             contentAlignment = Alignment.Center,
         ) {
             // Filled glyph for the selected tab; compensate for the gear's
             // optical size to keep the four tabs visually balanced.
-            MaterialSymbol(
+            if (tab == HomeTab.Assets) {
+                Icon(SuirenIcons.AssetBox, contentDescription = tab.label, tint = contentColor, modifier = Modifier.size(20.dp))
+            } else MaterialSymbol(
                 glyph = tab.glyph,
                 contentDescription = tab.label,
                 tint = contentColor,
                 filled = selected,
-                size = 22.dp,
+                size = 20.dp,
                 modifier = Modifier
                     .scale(if (tab == HomeTab.Settings) 1.1f else 1f),
             )
         }
-        Text(text = tab.label, fontSize = 11.sp, color = contentColor)
+        Text(text = tab.label, fontSize = 10.sp, lineHeight = 14.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal, color = contentColor)
     }
 }
 

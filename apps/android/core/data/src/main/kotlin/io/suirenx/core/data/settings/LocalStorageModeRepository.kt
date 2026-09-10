@@ -25,7 +25,7 @@ class LocalStorageModeRepository @Inject constructor(
 
     override suspend fun initialize(): Result<Unit> = perform {
         if (mutableMode.value == null) {
-            mutableMode.value = preferences.getString(KEY_MODE, null)?.let(::parse)
+            mutableMode.value = preferences.getString(KEY_MODE, null)?.let(::parse) ?: StorageMode.Local
         }
     }
 

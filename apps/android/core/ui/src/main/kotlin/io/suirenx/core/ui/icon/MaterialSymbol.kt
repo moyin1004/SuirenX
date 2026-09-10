@@ -2,6 +2,7 @@ package io.suirenx.core.ui.icon
 
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -55,6 +56,12 @@ fun MaterialSymbol(
     size: Dp = 24.dp,
     filled: Boolean = false,
 ) {
+    // Keep the persisted phone key/codepoint while using a cleaner front-facing vector.
+    if (glyph == "\uE7BA") {
+        Icon(SuirenIcons.Phone, contentDescription, modifier.size(size),
+            tint = if (tint != Color.Unspecified) tint else LocalContentColor.current)
+        return
+    }
     val fontSize = with(LocalDensity.current) { size.toSp() }
     val color = if (tint != Color.Unspecified) tint else LocalContentColor.current
     val style = TextStyle(

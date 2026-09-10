@@ -19,7 +19,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.*
 
 private const val LOCAL_BACKUP_FORMAT = "suirenx-local-backup"
 private const val LOCAL_BACKUP_VERSION = 1
@@ -74,13 +74,21 @@ class LocalBackupRepositoryImpl @Inject constructor(
     private val local: LocalAssetRepository,
     private val expiry: LocalExpiryRepository,
     private val json: Json,
+    @io.suirenx.core.data.di.IoDispatcher private val dispatcher: kotlinx.coroutines.CoroutineDispatcher,
 ) : LocalBackupRepository {
     override suspend fun snapshot(): Result<LocalDataSnapshot> = attempt {
         LocalDataSnapshot(local.allForBackup(), expiry.allForBackup())
     }
 
     override suspend fun createSafetyBackup(): Result<Unit> = attempt {
-        val content = export().getOrThrow()
+        val content = database.withTransaction {
+            val business = json.parseToJsonElement(export().getOrThrow()).jsonObject
+            // Recovery evidence for a target change; never contains auth credentials.
+            JsonObject(business + ("syncRecovery" to buildJsonObject {
+                put("records", json.encodeToJsonElement(database.syncDao().all()))
+                database.syncDao().session()?.let { put("session", json.encodeToJsonElement(it)) }
+            })).toString()
+        }
         withContext(Dispatchers.IO) {
             val directory = context.getDir("backups", Context.MODE_PRIVATE)
             directory.resolve("pre-remote-import-${System.currentTimeMillis()}.json").writeText(content)
@@ -185,7 +193,7 @@ class LocalBackupRepositoryImpl @Inject constructor(
     }
 
     private suspend fun <T> attempt(block: suspend () -> T): Result<T> = try {
-        Result.success(block())
+        Result.success(withContext(dispatcher) { block() })
     } catch (error: CancellationException) {
         throw error
     } catch (error: Exception) {

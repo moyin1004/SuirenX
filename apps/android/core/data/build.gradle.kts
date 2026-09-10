@@ -6,11 +6,16 @@ plugins {
 }
 
 android {
+    defaultConfig.testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     namespace = "io.suirenx.core.data"
     buildFeatures.buildConfig = true
 }
 
 dependencies {
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.junit)
+    androidTestImplementation(libs.junit4)
+    implementation(libs.androidx.work.runtime)
     implementation(project(":apps:android:core:model"))
     implementation(project(":apps:android:core:domain"))
 

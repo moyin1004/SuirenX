@@ -21,47 +21,32 @@ func _v1Mw() []app.HandlerFunc {
 	return nil
 }
 
-func _listassetsMw() []app.HandlerFunc {
+func _authMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
 
-func _createassetMw() []app.HandlerFunc {
+func _loginMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
 
-func _assetsMw() []app.HandlerFunc {
+func _logoutMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
 
-func _getassetMw() []app.HandlerFunc {
+func _registerMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
 
-func _updateassetMw() []app.HandlerFunc {
+func _syncMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
 
-func _assets0Mw() []app.HandlerFunc {
-	// your code...
-	return nil
-}
-
-func _idMw() []app.HandlerFunc {
-	// your code...
-	return nil
-}
-
-func _updateassetstatusMw() []app.HandlerFunc {
-	// your code...
-	return nil
-}
-
-func _updateassetarchiveMw() []app.HandlerFunc {
+func _syncassetsMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }

@@ -21,18 +21,15 @@ func Register(r *server.Hertz) {
 		_api := root.Group("/api", _apiMw()...)
 		{
 			_v1 := _api.Group("/v1", _v1Mw()...)
-			_v1.GET("/assets", append(_listassetsMw(), v1.ListAssets)...)
-			_assets := _v1.Group("/assets", _assetsMw()...)
-			_assets.GET("/:id", append(_getassetMw(), v1.GetAsset)...)
-			_assets.PUT("/:id", append(_updateassetMw(), v1.UpdateAsset)...)
-			_v1.POST("/assets", append(_createassetMw(), v1.CreateAsset)...)
 			{
-				_assets0 := _v1.Group("/assets", _assets0Mw()...)
-				{
-					_id := _assets0.Group("/:id", _idMw()...)
-					_id.PUT("/archive", append(_updateassetarchiveMw(), v1.UpdateAssetArchive)...)
-					_id.PUT("/status", append(_updateassetstatusMw(), v1.UpdateAssetStatus)...)
-				}
+				_auth := _v1.Group("/auth", _authMw()...)
+				_auth.POST("/login", append(_loginMw(), v1.Login)...)
+				_auth.POST("/logout", append(_logoutMw(), v1.Logout)...)
+				_auth.POST("/register", append(_registerMw(), v1.Register)...)
+			}
+			{
+				_sync := _v1.Group("/sync", _syncMw()...)
+				_sync.POST("/assets", append(_syncassetsMw(), v1.SyncAssets)...)
 			}
 		}
 	}

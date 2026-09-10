@@ -31,6 +31,10 @@ import javax.inject.Singleton
 abstract class DataModule {
     @Binds
     @Singleton
+    abstract fun bindSyncSchedule(implementation: io.suirenx.core.data.sync.SyncScheduler): io.suirenx.core.domain.SyncScheduleRepository
+
+    @Binds
+    @Singleton
     abstract fun bindAuthRepository(implementation: LocalAuthRepository): AuthRepository
     @Binds
     @Singleton
@@ -62,7 +66,7 @@ abstract class DataModule {
 
     @Binds
     @Singleton
-    abstract fun bindRemoteSyncRepository(implementation: io.suirenx.core.data.repository.RemoteAssetSyncStore): RemoteSyncRepository
+    abstract fun bindRemoteSyncRepository(implementation: io.suirenx.core.data.sync.LocalFirstSyncRepository): RemoteSyncRepository
 
     @Binds
     @Singleton

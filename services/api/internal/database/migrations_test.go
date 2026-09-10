@@ -271,3 +271,10 @@ func TestLoadMigrationsAcceptsMultiDigitVersions(t *testing.T) {
 		}
 	}
 }
+
+func TestDevelopmentSchemaUsesOnly001(t *testing.T) {
+	migrations := bundled(t)
+	if len(migrations) != 1 || migrations[0].name != "001_init.sql" {
+		t.Fatalf("pre-release schema must stay in 001_init.sql; update AGENTS.md after release before adding versions: %+v", migrations)
+	}
+}

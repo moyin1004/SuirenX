@@ -11,9 +11,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /**
- * First-run gate: shows the backend setup screen until a backend URL is
- * configured, then renders [content]. Settings are otherwise reachable from
- * the settings tab, so the gate never reopens once configured.
+ * First-run gate: asks for a data source before showing the main navigation.
+ * Remote address and authentication are managed inside the settings tab;
+ * changing them must not replace the main navigation with the setup screen.
  */
 @Composable
 fun BackendGate(
@@ -22,8 +22,7 @@ fun BackendGate(
     content: @Composable () -> Unit,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val configured = state.mode == io.suirenx.core.model.StorageMode.Local ||
-        (state.settings?.activeUrl != null && state.auth.authenticated)
+    val configured = state.mode != null
     Box(modifier.fillMaxSize()) {
         when {
             state.settings == null && state.error == null ->

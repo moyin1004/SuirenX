@@ -71,9 +71,9 @@ func (s *SyncService) Apply(ownerID string, input SyncBatchInput) (domain.SyncBa
 	}
 	seen := make(map[string]struct{}, len(input.Changes))
 	changes := make([]repository.SyncAssetInput, 0, len(input.Changes))
-	for _, item := range input.Changes {
+	for index, item := range input.Changes {
 		if err := validateSyncAsset(item, nowDate(s.now)); err != nil {
-			return domain.SyncBatchResult{}, err
+			return domain.SyncBatchResult{}, fmt.Errorf("%w: asset[%d] has invalid fields", err, index)
 		}
 		if _, exists := seen[item.ID]; exists {
 			return domain.SyncBatchResult{}, ErrInvalidSyncRequest
@@ -83,9 +83,9 @@ func (s *SyncService) Apply(ownerID string, input SyncBatchInput) (domain.SyncBa
 	}
 	seenExpiry := make(map[string]struct{}, len(input.ExpiryChanges))
 	expiryChanges := make([]repository.SyncExpiryInput, 0, len(input.ExpiryChanges))
-	for _, item := range input.ExpiryChanges {
+	for index, item := range input.ExpiryChanges {
 		if err := validateSyncExpiry(item); err != nil {
-			return domain.SyncBatchResult{}, err
+			return domain.SyncBatchResult{}, fmt.Errorf("%w: expiry[%d] has invalid fields", err, index)
 		}
 		if _, exists := seenExpiry[item.ID]; exists {
 			return domain.SyncBatchResult{}, ErrInvalidSyncRequest
@@ -146,11 +146,11 @@ func validateSyncAsset(item SyncAssetInput, today time.Time) error {
 			return ErrInvalidSyncRequest
 		}
 	}
-	if len(item.Notes) > 2000 || len(item.Tags) > 20 {
+	if len([]rune(item.Notes)) > 2000 || len(item.Tags) > 20 {
 		return ErrInvalidSyncRequest
 	}
 	for _, tag := range item.Tags {
-		if len(tag) > 30 {
+		if len([]rune(tag)) > 30 {
 			return ErrInvalidSyncRequest
 		}
 	}
@@ -169,7 +169,7 @@ func validateSyncExpiry(item SyncExpiryInput) error {
 	if item.Deleted {
 		return nil
 	}
-	if strings.TrimSpace(item.Name) == "" || strings.TrimSpace(item.Category) == "" || strings.TrimSpace(item.Location) == "" {
+	if strings.TrimSpace(item.Name) == "" || strings.TrimSpace(item.Category) == "" {
 		return ErrInvalidSyncRequest
 	}
 	if _, err := time.Parse(time.DateOnly, item.PackageExpiryDate); err != nil {

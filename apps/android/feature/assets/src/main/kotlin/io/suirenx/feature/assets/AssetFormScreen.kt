@@ -1,9 +1,13 @@
 package io.suirenx.feature.assets
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -124,7 +128,7 @@ fun AssetFormScreen(
                         Button(onClick = onClose) { Text("关闭") }
                     }
                 }
-                else -> FormBody(state, onNameChanged, onPriceChanged, onPurchaseDateChanged, onPurchaseChannelChanged, onWarrantyEndDateChanged, onNotesChanged, onTagsChanged, onOpenIconPicker)
+                else -> FormBody(state, onNameChanged, onPriceChanged, onPurchaseDateChanged, onPurchaseChannelChanged, onWarrantyEndDateChanged, onNotesChanged, onTagsChanged, onOpenIconPicker, onIconSelected, onSave)
             }
         }
     }
@@ -146,7 +150,7 @@ private fun FormTopBar(
     ) {
         Surface(
             onClick = { if (!isSaving) onClose() },
-            shape = CircleShape,
+            shape = RoundedCornerShape(14.dp),
             color = MaterialTheme.colorScheme.surface,
             contentColor = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier
@@ -168,9 +172,9 @@ private fun FormTopBar(
         )
         Surface(
             onClick = { if (!isSaving) onSave() },
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.secondary,
+            contentColor = MaterialTheme.colorScheme.onSecondary,
             modifier = Modifier
                 .align(Alignment.CenterEnd)
                 .size(44.dp),
@@ -205,6 +209,8 @@ private fun FormBody(
     onNotesChanged: (String) -> Unit,
     onTagsChanged: (String) -> Unit,
     onOpenIconPicker: () -> Unit,
+    onIconSelected: (String) -> Unit,
+    onSave: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -216,91 +222,93 @@ private fun FormBody(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Spacer(Modifier.height(8.dp))
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            val iconOption = assetIconOption(state.iconKey)
-            Surface(
-                onClick = onOpenIconPicker,
-                enabled = !state.isSaving,
-                shape = RoundedCornerShape(32.dp),
-                color = iconOption.containerColor,
-            ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    MaterialSymbol(
-                        glyph = iconOption.glyph,
-                        tint = iconOption.contentColor,
-                        size = 48.dp,
-                    )
-                    Text("更换图标", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        FormSection(title = "选择图标") {
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                val choices = (listOf(assetIconOption(state.iconKey)) + assetIconOptions.take(5)).distinctBy { it.key }
+                choices.forEach { option ->
+                    val selected = option.key == state.iconKey
+                    Surface(onClick = { onIconSelected(option.key) }, enabled = !state.isSaving,
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (selected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = if (selected) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(48.dp)) {
+                        Box(contentAlignment = Alignment.Center) {
+                            MaterialSymbol(glyph = option.glyph, contentDescription = option.label, size = 26.dp)
+                        }
+                    }
                 }
             }
+            androidx.compose.material3.TextButton(onClick = onOpenIconPicker, enabled = !state.isSaving) { Text("查看全部图标") }
         }
-        OutlinedTextField(
-            value = state.name,
-            onValueChange = onNameChanged,
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text(stringResource(R.string.asset_name_label)) },
-            enabled = !state.isSaving,
-            singleLine = true,
-        )
-        OutlinedTextField(
-            value = state.purchaseChannel,
-            onValueChange = onPurchaseChannelChanged,
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("购买渠道（选填）") },
-            singleLine = true,
-            enabled = !state.isSaving,
-        )
-        OutlinedTextField(
-            value = state.warrantyEndDate,
-            onValueChange = onWarrantyEndDateChanged,
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("保修截止日（选填）") },
-            supportingText = { Text("YYYY-MM-DD") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-            singleLine = true,
-            enabled = !state.isSaving,
-        )
-        OutlinedTextField(
-            value = state.tags,
-            onValueChange = onTagsChanged,
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("标签（选填，用逗号分隔）") },
-            supportingText = { Text("最多 20 个") },
-            singleLine = false,
-            enabled = !state.isSaving,
-        )
-        OutlinedTextField(
-            value = state.notes,
-            onValueChange = onNotesChanged,
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("备注（选填）") },
-            minLines = 3,
-            maxLines = 8,
-            enabled = !state.isSaving,
-        )
-        OutlinedTextField(
-            value = state.price,
-            onValueChange = onPriceChanged,
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text(stringResource(R.string.asset_price_label)) },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            enabled = !state.isSaving,
-            singleLine = true,
-        )
-        OutlinedTextField(
-            value = state.purchaseDate,
-            onValueChange = onPurchaseDateChanged,
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text(stringResource(R.string.asset_purchase_date_label)) },
-            supportingText = { Text("YYYY-MM-DD") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-            enabled = !state.isSaving,
-            singleLine = true,
-        )
+        FormSection(title = "基本信息") {
+            OutlinedTextField(
+                value = state.name,
+                onValueChange = onNameChanged,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.asset_name_label)) },
+                enabled = !state.isSaving,
+                singleLine = true,
+            )
+            OutlinedTextField(
+                value = state.price,
+                onValueChange = onPriceChanged,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.asset_price_label)) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                enabled = !state.isSaving,
+                singleLine = true,
+            )
+            OutlinedTextField(
+                value = state.purchaseDate,
+                onValueChange = onPurchaseDateChanged,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.asset_purchase_date_label)) },
+                supportingText = { Text("YYYY-MM-DD") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                enabled = !state.isSaving,
+                singleLine = true,
+            )
+            OutlinedTextField(
+                value = state.purchaseChannel,
+                onValueChange = onPurchaseChannelChanged,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("购买渠道（选填）") },
+                singleLine = true,
+                enabled = !state.isSaving,
+            )
+        }
+        FormSection(title = "生命周期") {
+            OutlinedTextField(
+                value = state.warrantyEndDate,
+                onValueChange = onWarrantyEndDateChanged,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("保修截止日（选填）") },
+                supportingText = { Text("YYYY-MM-DD") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                singleLine = true,
+                enabled = !state.isSaving,
+            )
+            OutlinedTextField(
+                value = state.tags,
+                onValueChange = onTagsChanged,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("标签（选填，用逗号分隔）") },
+                supportingText = { Text("最多 20 个") },
+                singleLine = false,
+                enabled = !state.isSaving,
+            )
+        }
+        FormSection(title = "备注") {
+            OutlinedTextField(
+                value = state.notes,
+                onValueChange = onNotesChanged,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("备注（选填）") },
+                minLines = 3,
+                maxLines = 8,
+                enabled = !state.isSaving,
+            )
+        }
         state.errorMessage?.let { message ->
             Text(
                 text = message,
@@ -308,7 +316,37 @@ private fun FormBody(
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             )
         }
-        Spacer(Modifier.height(8.dp))
+        Button(onClick = onSave, enabled = !state.isSaving, modifier = Modifier.fillMaxWidth().height(48.dp),
+            shape = RoundedCornerShape(14.dp),
+            colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary, contentColor = MaterialTheme.colorScheme.onSecondary)) {
+            Text(if (state.isSaving) "保存中…" else "保存资产")
+        }
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun FormSection(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        color = MaterialTheme.colorScheme.surface,
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            content = {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                content()
+            },
+        )
     }
 }
 

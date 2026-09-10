@@ -1,4 +1,7 @@
 [versions]
+androidxTestRunner = "1.6.2"
+androidxTestJunit = "1.2.1"
+work = "2.10.1"
 agp = "9.3.0"
 kotlin = "2.3.21"
 hilt = "2.60.1"
@@ -17,6 +20,9 @@ javaxInject = "1"
 junit4 = "4.13.2"
 
 [libraries]
+androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidxTestRunner" }
+androidx-test-junit = { module = "androidx.test.ext:junit", version.ref = "androidxTestJunit" }
+androidx-work-runtime = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
 android-gradlePlugin = { module = "com.android.tools.build:gradle", version.ref = "agp" }
 kotlin-gradlePlugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 

@@ -108,28 +108,5 @@ message UpdateAssetArchiveResponse {
   Asset asset = 1;
 }
 
-service AssetService {
-  rpc UpdateAssetArchive(UpdateAssetArchiveRequest) returns (UpdateAssetArchiveResponse) {
-    option (api.put) = "/api/v1/assets/:id/archive";
-  }
-
-  rpc UpdateAssetStatus(UpdateAssetStatusRequest) returns (UpdateAssetStatusResponse) {
-    option (api.put) = "/api/v1/assets/:id/status";
-  }
-
-  rpc ListAssets(ListAssetsRequest) returns (ListAssetsResponse) {
-    option (api.get) = "/api/v1/assets";
-  }
-
-  rpc GetAsset(GetAssetRequest) returns (GetAssetResponse) {
-    option (api.get) = "/api/v1/assets/:id";
-  }
-
-  rpc CreateAsset(CreateAssetRequest) returns (CreateAssetResponse) {
-    option (api.post) = "/api/v1/assets";
-  }
-
-  rpc UpdateAsset(UpdateAssetRequest) returns (UpdateAssetResponse) {
-    option (api.put) = "/api/v1/assets/:id";
-  }
-}
+// Legacy message definitions retained for stored data compatibility.
+// Business CRUD is local-only; public services are defined in m5/v1/m5.proto.

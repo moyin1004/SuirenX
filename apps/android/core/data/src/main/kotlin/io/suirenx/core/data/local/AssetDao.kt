@@ -7,6 +7,9 @@ import androidx.room.Update
 
 @Dao
 interface AssetDao {
+    @Insert(onConflict = androidx.room.OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: AssetEntity)
+
     @Query("SELECT * FROM assets ORDER BY createdAt DESC")
     suspend fun getAll(): List<AssetEntity>
 
@@ -21,6 +24,9 @@ interface AssetDao {
 
     @Update
     suspend fun update(asset: AssetEntity)
+
+    @Query("DELETE FROM assets WHERE id = :id")
+    suspend fun delete(id: String)
 
     @Query("DELETE FROM assets")
     suspend fun deleteAll()

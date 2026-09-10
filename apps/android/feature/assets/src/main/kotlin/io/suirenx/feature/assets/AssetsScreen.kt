@@ -1,6 +1,7 @@
 package io.suirenx.feature.assets
 
-import androidx.compose.foundation.Canvas
+import io.suirenx.core.ui.component.SuirenHeader
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -8,22 +9,29 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.VerticalDivider
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -33,15 +41,21 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import io.suirenx.core.ui.theme.SuirenNumberFont
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -50,7 +64,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.suirenx.core.model.Asset
 import io.suirenx.core.model.AssetStatus
-import io.suirenx.core.domain.SyncConflictResolution
+import io.suirenx.core.ui.icon.MaterialSymbol
 import io.suirenx.core.ui.theme.SuirenXTheme
 import java.text.NumberFormat
 import java.time.LocalDate
@@ -63,14 +77,18 @@ fun AssetsRoute(
     viewModel: AssetsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    var query by rememberSaveable { mutableStateOf("") }
+    var searching by rememberSaveable { mutableStateOf(false) }
     AssetsScreen(
         state = state,
         onFilterSelected = viewModel::onFilterSelected,
         onRefresh = viewModel::refresh,
         onAssetClick = onAssetClick,
-        onRetrySync = viewModel::retrySync,
-        onResolveConflict = viewModel::resolveConflict,
         modifier = modifier,
+        query = query,
+        searching = searching,
+        onQueryChange = { query = it },
+        onSearch = { searching = !searching; query = "" },
     )
 }
 
@@ -80,57 +98,61 @@ fun AssetsScreen(
     onFilterSelected: (AssetFilter) -> Unit,
     onRefresh: () -> Unit,
     onAssetClick: (String) -> Unit,
-    onRetrySync: () -> Unit = {},
-    onResolveConflict: (String, SyncConflictResolution) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
+    query: String = "",
+    searching: Boolean = false,
+    onQueryChange: (String) -> Unit = {},
+    onSearch: () -> Unit = {},
 ) {
-    // One scrolling container: the overview card scrolls away while the filter
-    // chips stay pinned, mirroring the 有数-style collapsing overview.
+    val listState = rememberLazyListState()
+    val overviewIndex = 1 + (if (searching) 1 else 0)
+    val compact by remember(listState, overviewIndex) { derivedStateOf { listState.firstVisibleItemIndex > overviewIndex } }
+    val visibleAssets = state.visibleAssets.filter { it.name.contains(query, ignoreCase = true) || it.tags.any { tag -> tag.contains(query, ignoreCase = true) } }
     LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .statusBarsPadding(),
-        contentPadding = PaddingValues(top = 14.dp, bottom = 120.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        state = listState,
+        modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding(),
+        contentPadding = PaddingValues(bottom = 132.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        item {
-            Header(onRefresh = onRefresh, modifier = Modifier.padding(horizontal = 20.dp))
-        }
-        if (state.syncStatus.pendingOperations > 0 || state.syncStatus.conflicts.isNotEmpty()) {
-            item {
-                SyncStatusCard(
-                    state = state,
-                    onRetry = onRetrySync,
-                    onResolveConflict = onResolveConflict,
-                    modifier = Modifier.padding(horizontal = 20.dp),
-                )
-            }
+        item { Header(onRefresh = onRefresh, onSearch = onSearch, modifier = Modifier.padding(horizontal = 16.dp)) }
+        if (searching) {
+            item { OutlinedTextField(value = query, onValueChange = onQueryChange, placeholder = { Text("搜索资产名称或标签") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), shape = RoundedCornerShape(14.dp)) }
         }
         if (state.assets.isNotEmpty()) {
             item {
-                AssetOverviewCard(
-                    overview = state.overview,
-                    modifier = Modifier.padding(horizontal = 20.dp),
-                )
+                AssetOverviewCard(state.overview, Modifier.padding(horizontal = 16.dp), state.assets.filterNot { it.isArchived }.maxOfOrNull { it.heldDays } ?: 0)
             }
         }
         stickyHeader {
-            FilterChips(selected = state.selectedFilter, onSelected = onFilterSelected)
+            Column(Modifier.background(MaterialTheme.colorScheme.background)) {
+                if (compact && state.assets.isNotEmpty()) {
+                    Surface(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+                        Row(Modifier.padding(14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(NumberFormat.getCurrencyInstance(Locale.CHINA).format(state.overview.totalPriceCents / 100.0), fontSize = 18.sp, fontFamily = SuirenNumberFont)
+                            Text("总资产 · ${state.overview.activeCount} 件服役中", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+                FilterChips(state.selectedFilter, onFilterSelected)
+            }
+        }
+        item {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                Text("我的资产", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.weight(1f))
+                Text("${visibleAssets.size} 项记录", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+            }
         }
         when {
-            state.isLoading -> item {
-                LoadingState(Modifier.fillParentMaxSize())
-            }
-            state.errorMessage != null -> item {
-                ErrorState(state.errorMessage, onRefresh, Modifier.fillParentMaxSize())
-            }
-            state.assets.isEmpty() -> item {
-                EmptyState(Modifier.fillParentMaxSize())
-            }
-            state.visibleAssets.isEmpty() -> item {
-                FilteredEmptyState(Modifier.fillParentMaxSize())
-            }
-            else -> items(state.visibleAssets.chunked(2), key = { row -> row.first().id }) { rowAssets ->
+            state.isLoading -> item { LoadingState() }
+            state.errorMessage != null -> item { ErrorState(state.errorMessage, onRefresh) }
+            state.assets.isEmpty() -> item { EmptyState() }
+            visibleAssets.isEmpty() -> item { FilteredEmptyState() }
+            else -> items(visibleAssets.chunked(2), key = { row -> row.first().id }) { rowAssets ->
                 AssetRow(rowAssets, onAssetClick)
             }
         }
@@ -138,32 +160,15 @@ fun AssetsScreen(
 }
 
 @Composable
-private fun SyncStatusCard(
-    state: AssetsUiState,
-    onRetry: () -> Unit,
-    onResolveConflict: (String, SyncConflictResolution) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Card(modifier = modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (state.syncStatus.pendingOperations > 0) {
-                Text("有 ${state.syncStatus.pendingOperations} 项变更等待同步", fontWeight = FontWeight.Bold)
-                OutlinedButton(onClick = onRetry, modifier = Modifier.fillMaxWidth()) { Text("立即重试") }
-            }
-            state.syncStatus.lastSyncedAt?.let { Text("最近成功同步：$it", color = MaterialTheme.colorScheme.onTertiaryContainer) }
-            state.syncStatus.conflicts.forEach { conflict ->
-                Text("资产“${conflict.local.name}”发生同步冲突", fontWeight = FontWeight.Bold)
-                Text(
-                    "本机：${conflict.local.name} · 服务器：${conflict.remote?.name ?: "已删除"}",
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { onResolveConflict(conflict.assetId, SyncConflictResolution.KeepLocal) }, modifier = Modifier.weight(1f)) {
-                        Text("保留本机")
-                    }
-                    OutlinedButton(onClick = { onResolveConflict(conflict.assetId, SyncConflictResolution.KeepRemote) }, modifier = Modifier.weight(1f)) {
-                        Text("保留服务器")
-                    }
+private fun Header(onRefresh: () -> Unit, onSearch: () -> Unit, modifier: Modifier = Modifier) {
+    SuirenHeader(modifier) {
+        Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onSearch, modifier = Modifier.size(44.dp)) {
+                    Icon(Icons.Default.Search, contentDescription = "搜索", modifier = Modifier.size(21.dp))
+                }
+                IconButton(onClick = onRefresh, modifier = Modifier.size(44.dp)) {
+                    Icon(Icons.Default.Refresh, contentDescription = "刷新", modifier = Modifier.size(21.dp))
                 }
             }
         }
@@ -171,36 +176,11 @@ private fun SyncStatusCard(
 }
 
 @Composable
-private fun Header(onRefresh: () -> Unit, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text("燧人", fontSize = 30.sp, fontWeight = FontWeight.Black)
-        Spacer(Modifier.weight(1f))
-        IconButton(onClick = {}) {
-            Icon(Icons.Default.Search, contentDescription = "搜索", modifier = Modifier.size(26.dp))
-        }
-        IconButton(onClick = onRefresh) {
-            Icon(Icons.Default.Refresh, contentDescription = "刷新", modifier = Modifier.size(24.dp))
-        }
-    }
-}
-
-@Composable
-private fun FilterChips(
-    selected: AssetFilter,
-    onSelected: (AssetFilter) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    // Opaque background so cards scrolling underneath stay hidden behind the pinned chips.
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.background,
-    ) {
+private fun FilterChips(selected: AssetFilter, onSelected: (AssetFilter) -> Unit, modifier: Modifier = Modifier) {
+    Surface(modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.background) {
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             items(AssetFilter.entries) { filter ->
                 val isSelected = filter == selected
@@ -208,204 +188,64 @@ private fun FilterChips(
                     onClick = { onSelected(filter) },
                     color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
                     contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    shape = RoundedCornerShape(24.dp),
+                    shape = CircleShape,
+                    border = BorderStroke(1.dp, if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
                 ) {
                     Text(
-                        text = filter.label,
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
-                        fontSize = 14.sp,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AssetOverviewCard(overview: AssetOverview, modifier: Modifier = Modifier) {
-    val currency = NumberFormat.getCurrencyInstance(Locale.CHINA)
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surface,
-    ) {
-        Column(Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("资产总览", fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.weight(1f))
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                ) {
-                    Text(
-                        text = "服役中 ${overview.activeCount}/${overview.totalCount}",
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                        filter.label,
+                        modifier = Modifier.padding(horizontal = 15.dp, vertical = 10.dp),
                         fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
                     )
                 }
             }
-            Spacer(Modifier.height(14.dp))
-            Row {
-                Column(Modifier.weight(1f)) {
-                    Text("总资产", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = currency.format(overview.totalPriceCents / 100.0),
-                        fontSize = 21.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                    )
-                }
-                Column(Modifier.weight(1f)) {
-                    Text("日均成本", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = "${currency.format(overview.totalDailyCostCents / 100.0)}/天",
-                        fontSize = 21.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                    )
-                }
-            }
-            Spacer(Modifier.height(14.dp))
-            DashedDivider()
-            Spacer(Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                LegendDot(MaterialTheme.colorScheme.secondary)
-                Spacer(Modifier.size(6.dp))
-                Text("服役中 ${overview.activeCount}", fontSize = 12.sp)
-                Spacer(Modifier.weight(1f))
-                LegendDot(MaterialTheme.colorScheme.outline)
-                Spacer(Modifier.size(6.dp))
-                Text("已退役 ${overview.retiredCount}", fontSize = 12.sp)
-            }
-            Spacer(Modifier.height(10.dp))
-            OverviewBar(overview)
         }
     }
 }
 
 @Composable
-private fun DashedDivider(modifier: Modifier = Modifier) {
-    val color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
-    Canvas(modifier
-        .fillMaxWidth()
-        .height(1.dp)) {
-        drawLine(
-            color = color,
-            start = Offset(0f, 0f),
-            end = Offset(size.width, 0f),
-            strokeWidth = 2f,
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f), 0f),
-        )
+private fun AssetOverviewCard(overview: AssetOverview, modifier: Modifier = Modifier, longestHeldDays: Int = 0) {
+    val currency = NumberFormat.getCurrencyInstance(Locale.CHINA).apply { minimumFractionDigits = 0 }
+    Surface(modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+        Column(Modifier.padding(18.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                Text("当前总资产", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.weight(1f))
+                Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.size(30.dp)) {
+                    Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                }
+            }
+            Row(Modifier.padding(top = 8.dp, bottom = 16.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(currency.format(overview.totalPriceCents / 100.0), modifier = Modifier.alignByBaseline(), fontSize = 28.sp, lineHeight = 34.sp, fontWeight = FontWeight.Medium, fontFamily = SuirenNumberFont, letterSpacing = (-0.84).sp)
+                Text("元", modifier = Modifier.alignByBaseline(), fontSize = 13.sp, lineHeight = 18.sp)
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Row(Modifier.fillMaxWidth().padding(top = 14.dp).height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OverviewMetric("日均成本", currency.format(overview.totalDailyCostCents / 100.0), Modifier.weight(1f))
+                VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                OverviewMetric("服役中", "${overview.activeCount}", Modifier.weight(1f))
+                VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                OverviewMetric("最长持有天", "$longestHeldDays", Modifier.weight(1f))
+            }
+        }
     }
 }
 
 @Composable
-private fun LegendDot(color: Color, modifier: Modifier = Modifier) {
-    Box(
-        modifier
-            .size(8.dp)
-            .clip(CircleShape)
-            .background(color),
-    )
+private fun OverviewMetric(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(value, fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium, fontFamily = SuirenNumberFont)
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, lineHeight = 15.sp)
+    }
 }
 
 @Composable
-private fun OverviewBar(overview: AssetOverview, modifier: Modifier = Modifier) {
+private fun AssetRow(assets: List<Asset>, onAssetClick: (String) -> Unit, modifier: Modifier = Modifier) {
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(8.dp)
-            .clip(RoundedCornerShape(4.dp)),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        if (overview.activeCount > 0) {
-            Box(
-                Modifier
-                    .weight(overview.activeCount.toFloat())
-                    .fillMaxHeight()
-                    .background(MaterialTheme.colorScheme.secondary),
-            )
-        }
-        if (overview.retiredCount > 0) {
-            Box(
-                Modifier
-                    .weight(overview.retiredCount.toFloat())
-                    .fillMaxHeight()
-                    .background(MaterialTheme.colorScheme.outline),
-            )
-        }
-    }
-}
-
-// Full-screen state items sit below the header/overview in the LazyColumn; reserving
-// bottom space keeps their centered content clear of the floating capsule tab bar.
-@Composable
-private fun StateContentBox(modifier: Modifier, content: @Composable () -> Unit) {
-    Box(
-        modifier
-            .fillMaxSize()
-            .padding(bottom = 120.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        content()
-    }
-}
-
-@Composable
-private fun LoadingState(modifier: Modifier = Modifier) {
-    StateContentBox(modifier) {
-        CircularProgressIndicator()
-    }
-}
-
-@Composable
-private fun ErrorState(message: String, onRetry: () -> Unit, modifier: Modifier = Modifier) {
-    StateContentBox(modifier) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(12.dp))
-            Button(onClick = onRetry) { Text("重试") }
-        }
-    }
-}
-
-@Composable
-private fun EmptyState(modifier: Modifier = Modifier) {
-    StateContentBox(modifier) {
-        Text("还没有资产，点击 + 添加第一件")
-    }
-}
-
-@Composable
-private fun FilteredEmptyState(modifier: Modifier = Modifier) {
-    StateContentBox(modifier) {
-        Text("该状态下暂无资产", color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-@Composable
-private fun AssetRow(
-    assets: List<Asset>,
-    onAssetClick: (String) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        assets.forEach { asset ->
-            AssetCard(
-                asset = asset,
-                onClick = { onAssetClick(asset.id) },
-                modifier = Modifier.weight(1f),
-            )
-        }
-        // Keep the lone card of the last row at the same width as the two-column cards.
+        assets.forEach { asset -> AssetCard(asset, { onAssetClick(asset.id) }, Modifier.weight(1f)) }
         if (assets.size == 1) Spacer(Modifier.weight(1f))
     }
 }
@@ -413,59 +253,118 @@ private fun AssetRow(
 @Composable
 private fun AssetCard(asset: Asset, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val currency = NumberFormat.getCurrencyInstance(Locale.CHINA)
+    val active = !asset.isArchived && asset.status == AssetStatus.Active
     Card(
         onClick = onClick,
-        modifier = modifier.defaultMinSize(minHeight = 180.dp),
-        shape = RoundedCornerShape(24.dp),
+        modifier = modifier.heightIn(min = 177.dp),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         Column(Modifier.padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.Top) {
                 AssetCategoryIcon(
-                    option = assetIconOption(asset.iconKey),
-                    modifier = Modifier.size(46.dp),
+                    option = assetIconOption(asset.iconKey).copy(
+                        containerColor = if (active && asset.iconKey == "laptop") MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = if (active && asset.iconKey == "laptop") MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSurface,
+                    ),
+                    modifier = Modifier.size(44.dp),
+                    glyphSize = 25.dp,
+                    cornerRadius = 13.dp,
                 )
                 Spacer(Modifier.weight(1f))
-                Box(
-                    modifier = Modifier
-                        .size(9.dp)
-                        .clip(CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Surface(
-                        color = if (!asset.isArchived && asset.status == AssetStatus.Active) {
-                            MaterialTheme.colorScheme.secondary
-                        } else {
-                            MaterialTheme.colorScheme.outline
-                        },
-                        modifier = Modifier.fillMaxSize(),
-                    ) {}
-                }
-                Spacer(Modifier.size(6.dp))
-                Text(
-                    text = when {
+                StatusPill(
+                    label = when {
                         asset.isArchived -> "已归档"
-                        asset.status == AssetStatus.Active -> "服役中"
+                        active -> "服役中"
                         else -> "已退役"
                     },
-                    fontSize = 12.sp,
+                    active = active,
                 )
             }
-            Spacer(Modifier.height(16.dp))
-            Text(asset.name, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(13.dp))
+            Text(asset.name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
+            Spacer(Modifier.height(4.dp))
             Text(
-                text = "${currency.format(asset.priceCents / 100.0)}  |  ${asset.heldDays} 天",
+                buildAnnotatedString {
+                    withStyle(SpanStyle(fontFamily = SuirenNumberFont, letterSpacing = (-0.2).sp)) {
+                        append(currency.format(asset.priceCents / 100.0))
+                    }
+                    append(" · 持有 ${asset.heldDays} 天")
+                },
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 12.sp,
+                fontSize = 10.sp,
+                lineHeight = 15.sp,
+                maxLines = 1,
             )
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(14.dp))
             Text(
-                text = "${currency.format(asset.dailyCostCents / 100.0)}/天",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
+                buildAnnotatedString {
+                    withStyle(SpanStyle(fontFamily = SuirenNumberFont, letterSpacing = (-0.28).sp)) {
+                        append(currency.format(asset.dailyCostCents / 100.0))
+                    }
+                    withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, letterSpacing = 0.sp)) {
+                        append("/天")
+                    }
+                },
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
+                fontWeight = FontWeight.Normal,
             )
         }
+    }
+}
+
+@Composable
+private fun StatusPill(label: String, active: Boolean, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        shape = CircleShape,
+        color = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    ) {
+        Row(modifier = Modifier.padding(horizontal = 7.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Box(Modifier.size(5.dp).clip(CircleShape).background(if (active) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outline))
+            Text(label, fontSize = 9.sp, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
+private fun LoadingState(modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) {
+        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+    }
+}
+
+@Composable
+private fun ErrorState(message: String, onRetry: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(modifier.padding(horizontal = 16.dp).fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("同步没有完成", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            Button(onClick = onRetry) { Text("重新同步") }
+        }
+    }
+}
+
+@Composable
+private fun EmptyState(modifier: Modifier = Modifier) {
+    Surface(modifier.padding(horizontal = 16.dp).fillMaxWidth(), shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surface) {
+        Column(Modifier.padding(horizontal = 24.dp, vertical = 34.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
+                MaterialSymbol(glyph = "\uE326", contentDescription = null, modifier = Modifier.padding(18.dp), size = 38.dp)
+            }
+            Text("还没有资产", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            Text("把每天正在使用的东西记下来，燧人会帮你算清持有成本。", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
+private fun FilteredEmptyState(modifier: Modifier = Modifier) {
+    Surface(modifier.padding(horizontal = 16.dp).fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface) {
+        Text("这个筛选下暂时没有资产", modifier = Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
     }
 }
 

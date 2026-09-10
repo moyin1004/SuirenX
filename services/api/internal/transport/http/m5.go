@@ -20,7 +20,7 @@ type authRequest struct {
 	Password string `json:"password"`
 }
 
-func (m *m5Handlers) register(c *app.RequestContext) {
+func (m *m5Handlers) Register(c *app.RequestContext) {
 	var request authRequest
 	if err := c.BindAndValidate(&request); err != nil {
 		c.JSON(consts.StatusBadRequest, map[string]string{"error": "invalid account request"})
@@ -34,7 +34,7 @@ func (m *m5Handlers) register(c *app.RequestContext) {
 	c.JSON(consts.StatusCreated, map[string]any{"access_token": token.Value, "token_type": "Bearer", "expires_at": token.ExpiresAt.Format("2006-01-02T15:04:05Z07:00")})
 }
 
-func (m *m5Handlers) login(c *app.RequestContext) {
+func (m *m5Handlers) Login(c *app.RequestContext) {
 	var request authRequest
 	if err := c.BindAndValidate(&request); err != nil {
 		c.JSON(consts.StatusBadRequest, map[string]string{"error": "invalid account request"})
@@ -48,7 +48,7 @@ func (m *m5Handlers) login(c *app.RequestContext) {
 	c.JSON(consts.StatusOK, map[string]any{"access_token": token.Value, "token_type": "Bearer", "expires_at": token.ExpiresAt.Format("2006-01-02T15:04:05Z07:00")})
 }
 
-func (m *m5Handlers) logout(c *app.RequestContext) {
+func (m *m5Handlers) Logout(c *app.RequestContext) {
 	ownerID, err := m.ownerID(c)
 	if err != nil {
 		writeM5Error(c, err)
@@ -61,7 +61,7 @@ func (m *m5Handlers) logout(c *app.RequestContext) {
 	c.JSON(consts.StatusOK, map[string]string{"status": "ok"})
 }
 
-func (m *m5Handlers) syncAssets(c *app.RequestContext) {
+func (m *m5Handlers) SyncAssets(c *app.RequestContext) {
 	ownerID, err := m.ownerID(c)
 	if err != nil {
 		writeM5Error(c, err)

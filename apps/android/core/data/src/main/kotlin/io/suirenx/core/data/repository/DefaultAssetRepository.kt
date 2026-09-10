@@ -9,27 +9,28 @@ import java.time.LocalDate
 import javax.inject.Inject
 
 class DefaultAssetRepository @Inject constructor(
+    private val scheduler: io.suirenx.core.domain.SyncScheduleRepository,
     private val local: LocalAssetRepository,
-    private val modes: StorageModeRepository,
-    private val remote: RemoteAssetSyncStore,
 ) : AssetRepository {
-    private fun useLocal() = modes.mode.value == io.suirenx.core.model.StorageMode.Local
+    override suspend fun deleteAsset(id: String): Result<Unit> =
+        local.deleteAsset(id).also { if (it.isSuccess) scheduler.onLocalChange() }
+
 
     override suspend fun updateAssetArchive(id: String, archive: Boolean): Result<Asset> =
-        if (useLocal()) local.updateAssetArchive(id, archive) else remote.updateArchive(id, archive)
+        local.updateAssetArchive(id, archive).also { if (it.isSuccess) scheduler.onLocalChange() }
 
     override suspend fun updateAssetStatus(id: String, status: AssetStatus, retiredDate: LocalDate?): Result<Asset> =
-        if (useLocal()) local.updateAssetStatus(id, status, retiredDate) else remote.updateStatus(id, status, retiredDate)
+        local.updateAssetStatus(id, status, retiredDate).also { if (it.isSuccess) scheduler.onLocalChange() }
 
     override suspend fun createAsset(asset: NewAsset): Result<Asset> =
-        if (useLocal()) local.createAsset(asset) else remote.create(asset)
+        local.createAsset(asset).also { if (it.isSuccess) scheduler.onLocalChange() }
 
     override suspend fun updateAsset(id: String, asset: NewAsset): Result<Asset> =
-        if (useLocal()) local.updateAsset(id, asset) else remote.update(id, asset)
+        local.updateAsset(id, asset).also { if (it.isSuccess) scheduler.onLocalChange() }
 
     override suspend fun getAssets(status: AssetStatus?, includeArchived: Boolean): Result<List<Asset>> =
-        if (useLocal()) local.getAssets(status, includeArchived) else remote.list(status, includeArchived)
+        local.getAssets(status, includeArchived)
 
     override suspend fun getAsset(id: String): Result<Asset> =
-        if (useLocal()) local.getAsset(id) else remote.get(id)
+        local.getAsset(id)
 }

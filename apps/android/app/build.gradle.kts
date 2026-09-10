@@ -16,6 +16,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":apps:android:core:domain"))
     implementation(project(":apps:android:core:data"))
     implementation(project(":apps:android:core:ui"))
     implementation(project(":apps:android:feature:assets"))
@@ -32,7 +33,10 @@ dependencies {
 
     val composeBom = platform(libs.androidx.compose.bom)
     implementation(composeBom)
+    implementation(libs.androidx.compose.ui.tooling.preview)
+    debugImplementation(libs.androidx.compose.ui.tooling)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.icons.core)
 }
 
 kapt {

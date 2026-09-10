@@ -1,5 +1,7 @@
 package io.suirenx.core.ui.theme
 
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.lightColorScheme
@@ -25,6 +27,7 @@ private val SuirenXColors = lightColorScheme(
     surfaceVariant = Color(0xFFEFEFED),
     onSurfaceVariant = Color(0xFF777773),
     outline = Color(0xFFB9B9B3),
+    outlineVariant = Color(0xFFDEDED7),
     error = Color(0xFFBA1A1A),
 )
 
@@ -44,6 +47,7 @@ private val SuirenXDarkColors = darkColorScheme(
     surfaceVariant = Color(0xFF30312D),
     onSurfaceVariant = Color(0xFFC3C5B9),
     outline = Color(0xFF8D9085),
+    outlineVariant = Color(0xFF42443C),
     error = Color(0xFFFFB4AB),
 )
 
@@ -57,6 +61,10 @@ fun SuirenXTheme(themeMode: ThemeMode = ThemeMode.System, content: @Composable (
     MaterialTheme(
         colorScheme = if (dark) SuirenXDarkColors else SuirenXColors,
         typography = Typography(),
-        content = content,
+        content = {
+            CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground) {
+                content()
+            }
+        },
     )
 }

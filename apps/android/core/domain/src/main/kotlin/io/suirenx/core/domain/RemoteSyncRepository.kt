@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 enum class SyncConflictResolution {
     KeepLocal,
     KeepRemote,
+    KeepBoth,
 }
 
 data class AssetSyncConflict(
@@ -15,6 +16,9 @@ data class AssetSyncConflict(
     val remote: Asset?,
     val baseVersion: Long,
     val remoteVersion: Long,
+    val localDeleted: Boolean = false,
+    val remoteDeleted: Boolean = false,
+    val remoteUnavailable: Boolean = false,
 )
 
 data class ExpirySyncConflict(
@@ -23,6 +27,11 @@ data class ExpirySyncConflict(
     val remoteName: String?,
     val baseVersion: Long,
     val remoteVersion: Long,
+    val localDeleted: Boolean = false,
+    val remoteDeleted: Boolean = false,
+    val remoteUnavailable: Boolean = false,
+    val local: io.suirenx.core.model.ExpiryItem? = null,
+    val remote: io.suirenx.core.model.ExpiryItem? = null,
 )
 
 data class RemoteSyncStatus(
@@ -30,10 +39,16 @@ data class RemoteSyncStatus(
     val conflicts: List<AssetSyncConflict> = emptyList(),
     val expiryConflicts: List<ExpirySyncConflict> = emptyList(),
     val lastSyncedAt: Instant? = null,
+    val syncing: Boolean = false,
+    val waitingForNetwork: Boolean = false,
+    val needsLogin: Boolean = false,
+    val error: String? = null,
 )
 
 interface RemoteSyncRepository {
     val status: StateFlow<RemoteSyncStatus>
+
+    fun cancelCurrent() {}
 
     suspend fun refreshStatus(): Result<Unit>
 

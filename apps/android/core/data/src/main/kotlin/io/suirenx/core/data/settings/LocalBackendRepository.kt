@@ -29,6 +29,7 @@ private data class StoredSettings(val servers: List<StoredServer>, val activeUrl
 class LocalBackendRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val json: Json,
+    private val tokens: io.suirenx.core.data.auth.AuthTokenStore,
 ) : BackendRepository {
     private val mutableSettings = MutableStateFlow<BackendSettings?>(null)
     override val settings: StateFlow<BackendSettings?> = mutableSettings
@@ -51,6 +52,48 @@ class LocalBackendRepository @Inject constructor(
         persist(BackendSettings(servers, url))
     }
 
+    override suspend fun saveServer(originalUrl: String?, address: String, name: String): Result<String> {
+        var savedUrl = ""
+        return perform {
+            val url = normalizeBackendAddress(address, BuildConfig.DEBUG)
+            loadIfNeeded()
+            val current = requireNotNull(settings.value)
+            if (originalUrl != null) require(current.servers.any { it.url == originalUrl }) { "该服务器已删除" }
+            require(current.servers.none { it.url == url && it.url != originalUrl }) { "该地址已存在，请编辑已有服务器" }
+            val server = BackendServer(url, name.trim().ifEmpty { url })
+            val servers = if (originalUrl == null) current.servers + server else current.servers.map { if (it.url == originalUrl) server else it }
+            if (originalUrl != null && originalUrl != url) tokens.clearFor(originalUrl)
+            persist(BackendSettings(servers, if (originalUrl != null && current.activeUrl == originalUrl) url else current.activeUrl))
+            savedUrl = url
+        }.map { savedUrl }
+    }
+
+    override suspend fun testConnection(address: String): Result<String> = try {
+        withContext(Dispatchers.IO) {
+            val url = normalizeBackendAddress(address, BuildConfig.DEBUG)
+            // A probe never sends credentials or follows a redirect to another service.
+            val client = okhttp3.OkHttpClient.Builder().connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                .callTimeout(8, java.util.concurrent.TimeUnit.SECONDS).followRedirects(false).build()
+            client.newCall(okhttp3.Request.Builder().url(url + "healthz").get().build()).execute().use { response ->
+                check(response.isSuccessful) { "连接测试失败：HTTP ${response.code}" }
+                val body = response.body?.string().orEmpty()
+                val healthy = runCatching { kotlinx.serialization.json.Json.parseToJsonElement(body)
+                    .let { it as? kotlinx.serialization.json.JsonObject }?.get("status")?.toString() == "\"ok\"" }.getOrDefault(false)
+                check(healthy) { "服务有响应，但不是预期的健康接口" }
+                Result.success("服务可达；账号登录和数据同步仍需单独验证")
+            }
+        }
+    } catch (error: CancellationException) { throw error }
+    catch (error: Exception) {
+        val message = when (error) {
+            is javax.net.ssl.SSLException -> "证书验证失败，请检查 HTTPS 配置"
+            is java.net.SocketTimeoutException -> "连接超时，请检查地址和网络"
+            is java.io.IOException -> "无法连接，请检查服务器地址、端口和网络"
+            else -> error.message ?: "连接测试失败"
+        }
+        Result.failure(IllegalStateException(message, error))
+    }
+
     override suspend fun select(url: String): Result<Unit> = perform {
         loadIfNeeded()
         val current = requireNotNull(settings.value)
@@ -58,12 +101,24 @@ class LocalBackendRepository @Inject constructor(
         persist(current.copy(activeUrl = url))
     }
 
+    override suspend fun remove(url: String): Result<Unit> = perform {
+        loadIfNeeded()
+        val current = requireNotNull(settings.value)
+        require(current.servers.any { it.url == url }) { "该地址已不存在" }
+        // Clear only this connection's credentials; local data and sync binding are untouched.
+        tokens.clearFor(url)
+        persist(current.copy(
+            servers = current.servers.filterNot { it.url == url },
+            activeUrl = current.activeUrl.takeUnless { it == url },
+        ))
+    }
+
     private fun loadIfNeeded() {
         if (settings.value != null) return
         val encoded = preferences.getString("settings", null)
         val loaded = encoded?.let { json.decodeFromString<StoredSettings>(it) }
         val servers = loaded?.servers?.map { BackendServer(it.url, it.name) }.orEmpty()
-        val active = loaded?.activeUrl?.takeIf { url -> servers.any { it.url == url } } ?: servers.firstOrNull()?.url
+        val active = loaded?.activeUrl?.takeIf { url -> servers.any { it.url == url } }
         mutableSettings.value = BackendSettings(servers, active)
     }
 

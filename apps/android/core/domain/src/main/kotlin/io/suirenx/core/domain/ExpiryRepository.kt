@@ -5,6 +5,8 @@ import io.suirenx.core.model.ExpiryItemStatus
 import io.suirenx.core.model.NewExpiryItem
 
 interface ExpiryRepository {
+    suspend fun delete(id: String): Result<Unit>
+
     suspend fun list(includeArchived: Boolean = false): Result<List<ExpiryItem>>
     suspend fun get(id: String): Result<ExpiryItem>
     suspend fun create(item: NewExpiryItem): Result<ExpiryItem>

@@ -32,6 +32,12 @@ object LocalDatabaseModule {
                     db.execSQL("CREATE TABLE IF NOT EXISTS expiry_items (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, category TEXT NOT NULL, packageExpiryDate TEXT NOT NULL, openedDate TEXT, openedValidityDays INTEGER, location TEXT NOT NULL, notes TEXT NOT NULL, status TEXT NOT NULL, archivedAt TEXT, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL)")
                 }
             })
+            .addMigrations(object : Migration(2, 3) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("CREATE TABLE IF NOT EXISTS local_sync_records (kind TEXT NOT NULL, id TEXT NOT NULL, revision TEXT NOT NULL, version INTEGER NOT NULL, payload TEXT NOT NULL, dirty INTEGER NOT NULL, remotePayload TEXT, remoteVersion INTEGER, PRIMARY KEY(kind, id))")
+                    db.execSQL("CREATE TABLE IF NOT EXISTS local_sync_session (singleton INTEGER NOT NULL PRIMARY KEY, target TEXT NOT NULL, cursor INTEGER NOT NULL, expiryCursor INTEGER NOT NULL, batch TEXT, lastSyncedAt TEXT)")
+                }
+            })
             .build()
 
     @Provides

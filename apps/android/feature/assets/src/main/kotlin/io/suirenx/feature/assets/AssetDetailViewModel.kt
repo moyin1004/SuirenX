@@ -20,6 +20,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class AssetDetailUiState(
+    val deleteConfirmation: Boolean = false,
+    val isDeleting: Boolean = false,
+    val deleted: Boolean = false,
+    val deleteError: String? = null,
     val isLoading: Boolean = true,
     val asset: Asset? = null,
     val errorMessage: String? = null,
@@ -31,7 +35,7 @@ data class AssetDetailUiState(
     val archiveError: String? = null,
     val isSavingArchive: Boolean = false,
 ) {
-    val isSaving: Boolean get() = isSavingStatus || isSavingArchive
+    val isSaving: Boolean get() = isSavingStatus || isSavingArchive || isDeleting
 }
 
 @HiltViewModel
@@ -41,6 +45,8 @@ class AssetDetailViewModel @Inject constructor(
     private val updateAssetStatus: UpdateAssetStatusUseCase,
     private val updateAssetArchive: UpdateAssetArchiveUseCase,
     private val modes: StorageModeRepository = NoopDetailModes,
+    private val deleteAsset: io.suirenx.core.domain.DeleteAssetUseCase? = null,
+    private val dataChanges: io.suirenx.core.domain.DataChangeNotifier = io.suirenx.core.domain.DataChangeNotifier(),
 ) : ViewModel() {
     val uiState: StateFlow<AssetDetailUiState>
         field = MutableStateFlow(AssetDetailUiState())
@@ -58,14 +64,7 @@ class AssetDetailViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            modes.mode.collect { mode ->
-                if (mode != null && observedMode != null && mode != observedMode) {
-                    loadJob?.cancel()
-                    assetId = null
-                    uiState.value = AssetDetailUiState(isLoading = false)
-                }
-                if (mode != null) observedMode = mode
-            }
+            dataChanges.events.collect { assetId?.let { fetch(it, silent = true) } }
         }
     }
 
@@ -79,6 +78,39 @@ class AssetDetailViewModel @Inject constructor(
         val id = assetId ?: return
         assetId = null
         load(id)
+    }
+
+    fun requestDelete() {
+        if (!uiState.value.isSaving) uiState.update { it.copy(deleteConfirmation = true, deleteError = null) }
+    }
+
+    fun dismissDelete() {
+        if (!uiState.value.isSaving) uiState.update { it.copy(deleteConfirmation = false, deleteError = null) }
+    }
+
+    fun confirmDelete() {
+        val asset = uiState.value.asset ?: return
+        if (uiState.value.isSaving || !uiState.value.deleteConfirmation) return
+        val action = deleteAsset ?: return
+        loadJob?.cancel()
+        uiState.update { it.copy(isDeleting = true, deleteError = null) }
+        viewModelScope.launch {
+            try {
+                action(asset.id).fold(
+                    onSuccess = {
+                        assetId = null
+                        uiState.update { it.copy(asset = null, deleted = true, deleteConfirmation = false) }
+                        changeNotifier.notifyAssetChanged()
+                    },
+                    onFailure = { error ->
+                        if (error is CancellationException) throw error
+                        uiState.update { it.copy(deleteError = error.message ?: "删除失败，请重试") }
+                    },
+                )
+            } finally {
+                uiState.update { it.copy(isDeleting = false) }
+            }
+        }
     }
 
     fun openStatusDialog() {

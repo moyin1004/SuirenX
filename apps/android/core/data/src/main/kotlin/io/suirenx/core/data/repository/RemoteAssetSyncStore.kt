@@ -42,6 +42,7 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.coroutines.sync.Mutex
@@ -62,13 +63,24 @@ class RemoteAssetSyncStore @Inject constructor(
     private val _status = MutableStateFlow(RemoteSyncStatus())
     override val status: StateFlow<RemoteSyncStatus> = _status.asStateFlow()
 
+    suspend fun delete(id: String): Result<Unit> = attempt {
+        val key = cacheKey()
+        val current = database.assets().getById(key, id)?.takeUnless { it.deletedAt != null }
+            ?.let(::toDomain) ?: return@attempt
+        enqueue(key, current.copy(updatedAt = Instant.now(clock)), true, current.syncVersion)
+        updateStatus(key)
+    }
+
+    override suspend fun deleteExpiry(id: String): Result<Unit> = attempt {
+        val key = cacheKey()
+        val current = database.expiry().getById(key, id)?.takeUnless { it.deletedAt != null }
+            ?.let(::toExpiryDomain) ?: return@attempt
+        enqueueExpiry(key, current.copy(updatedAt = Instant.now(clock)), true, current.syncVersion)
+        updateStatus(key)
+    }
+
     suspend fun list(status: AssetStatus?, includeArchived: Boolean): Result<List<Asset>> = attempt {
         val serverUrl = cacheKey()
-        try {
-            sync(serverUrl)
-        } catch (error: Exception) {
-            if (!isOffline(error) || database.assets().count(serverUrl) == 0) throw error
-        }
         database.assets().getAll(serverUrl).map(::toDomain).filter { asset ->
             (includeArchived || !asset.isArchived) && (status == null || asset.status == status)
         }
@@ -76,11 +88,6 @@ class RemoteAssetSyncStore @Inject constructor(
 
     suspend fun get(id: String): Result<Asset> = attempt {
         val serverUrl = cacheKey()
-        try {
-            sync(serverUrl)
-        } catch (error: Exception) {
-            if (!isOffline(error)) throw error
-        }
         database.assets().getById(serverUrl, id)?.takeUnless { it.deletedAt != null }?.let(::toDomain)
             ?: error("未找到资产")
     }
@@ -118,21 +125,11 @@ class RemoteAssetSyncStore @Inject constructor(
 
     override suspend fun listExpiry(includeArchived: Boolean): Result<List<ExpiryItem>> = attempt {
         val serverUrl = cacheKey()
-        try {
-            sync(serverUrl)
-        } catch (error: Exception) {
-            if (!isOffline(error) || database.expiry().count(serverUrl) == 0) throw error
-        }
         database.expiry().getAll(serverUrl).map(::toExpiryDomain).filter { includeArchived || it.archivedAt == null }
     }
 
     override suspend fun getExpiry(id: String): Result<ExpiryItem> = attempt {
         val serverUrl = cacheKey()
-        try {
-            sync(serverUrl)
-        } catch (error: Exception) {
-            if (!isOffline(error)) throw error
-        }
         database.expiry().getById(serverUrl, id)?.takeUnless { it.deletedAt != null }?.let(::toExpiryDomain)
             ?: error("未找到用品")
     }
@@ -218,6 +215,7 @@ class RemoteAssetSyncStore @Inject constructor(
             val conflict = database.conflicts().getAll(serverUrl).firstOrNull { it.assetId == assetId }
                 ?: error("未找到同步冲突")
             when (resolution) {
+                SyncConflictResolution.KeepBoth -> error("请通过本地同步处理冲突")
                 SyncConflictResolution.KeepRemote -> {
                     if (conflict.remotePayloadJson.isBlank()) {
                         database.assets().delete(serverUrl, assetId)
@@ -272,6 +270,7 @@ class RemoteAssetSyncStore @Inject constructor(
             val conflict = database.expiryConflicts().getAll(serverUrl).firstOrNull { it.expiryId == expiryId }
                 ?: error("未找到用品同步冲突")
             when (resolution) {
+                SyncConflictResolution.KeepBoth -> error("请通过本地同步处理冲突")
                 SyncConflictResolution.KeepRemote -> {
                     if (conflict.remotePayloadJson.isBlank()) {
                         database.expiry().delete(serverUrl, expiryId)
@@ -353,41 +352,21 @@ class RemoteAssetSyncStore @Inject constructor(
     }
 
     private suspend fun cachedOrPull(serverUrl: String, id: String): Asset {
-        try {
-            sync(serverUrl)
-        } catch (error: Exception) {
-            if (!isOffline(error)) throw error
-        }
         return database.assets().getById(serverUrl, id)?.takeUnless { it.deletedAt != null }?.let(::toDomain)
             ?: error("未找到资产")
     }
 
     private suspend fun flushOrKeep(serverUrl: String, id: String, optimistic: Asset): Asset {
-        return try {
-            sync(serverUrl)
-            database.assets().getById(serverUrl, id)?.takeUnless { it.deletedAt != null }?.let(::toDomain) ?: optimistic
-        } catch (error: Exception) {
-            if (isOffline(error)) optimistic else throw error
-        }
+        return optimistic
     }
 
     private suspend fun cachedExpiryOrPull(serverUrl: String, id: String): ExpiryItem {
-        try {
-            sync(serverUrl)
-        } catch (error: Exception) {
-            if (!isOffline(error)) throw error
-        }
         return database.expiry().getById(serverUrl, id)?.takeUnless { it.deletedAt != null }?.let(::toExpiryDomain)
             ?: error("未找到用品")
     }
 
     private suspend fun flushOrKeepExpiry(serverUrl: String, id: String, optimistic: ExpiryItem): ExpiryItem {
-        return try {
-            sync(serverUrl)
-            database.expiry().getById(serverUrl, id)?.takeUnless { it.deletedAt != null }?.let(::toExpiryDomain) ?: optimistic
-        } catch (error: Exception) {
-            if (isOffline(error)) optimistic else throw error
-        }
+        return optimistic
     }
 
     private suspend fun enqueue(serverUrl: String, asset: Asset, deleted: Boolean, baseVersion: Long = asset.syncVersion) {
@@ -426,8 +405,17 @@ class RemoteAssetSyncStore @Inject constructor(
         return "${apiProvider.currentUrl()}|${auth.state.value.username}"
     }
 
-    private suspend fun sync(serverUrl: String) = syncMutex.withLock {
-        syncLocked(serverUrl)
+    private suspend fun sync(serverUrl: String) {
+        check(syncMutex.tryLock()) { "同步正在进行，请稍后重试" }
+        try {
+            val completed = withTimeoutOrNull(60_000) {
+                syncLocked(serverUrl)
+                true
+            } ?: false
+            if (!completed) throw IOException("同步超时，待同步数据已保留，请重试")
+        } finally {
+            syncMutex.unlock()
+        }
     }
 
     private suspend fun syncLocked(serverUrl: String) {
@@ -448,10 +436,12 @@ class RemoteAssetSyncStore @Inject constructor(
                 updateStatusLocked(serverUrl)
                 throw SyncConflictException(operation.assetId, conflict)
             }
-            applyResponse(serverUrl, response)
-            database.outbox().delete(serverUrl, operation.operationId)
-            state = state.copy(cursor = response.nextCursor, expiryCursor = response.nextExpiryCursor)
-            database.syncState().save(state)
+            database.withTransaction {
+                database.outbox().delete(serverUrl, operation.operationId)
+                applyResponse(serverUrl, response)
+                state = state.copy(cursor = maxOf(state.cursor, response.nextCursor), expiryCursor = maxOf(state.expiryCursor, response.nextExpiryCursor))
+                database.syncState().save(state)
+            }
         }
         val pendingExpiry = database.expiryOutbox().getAll(serverUrl)
         for (operation in pendingExpiry) {
@@ -469,10 +459,12 @@ class RemoteAssetSyncStore @Inject constructor(
                 updateStatusLocked(serverUrl)
                 throw SyncExpiryConflictException(operation.expiryId)
             }
-            applyResponse(serverUrl, response)
-            database.expiryOutbox().delete(serverUrl, operation.operationId)
-            state = state.copy(cursor = response.nextCursor, expiryCursor = response.nextExpiryCursor)
-            database.syncState().save(state)
+            database.withTransaction {
+                database.expiryOutbox().delete(serverUrl, operation.operationId)
+                applyResponse(serverUrl, response)
+                state = state.copy(cursor = maxOf(state.cursor, response.nextCursor), expiryCursor = maxOf(state.expiryCursor, response.nextExpiryCursor))
+                database.syncState().save(state)
+            }
         }
         val response = apiProvider.current().sync(
             SyncRequest(
@@ -480,8 +472,10 @@ class RemoteAssetSyncStore @Inject constructor(
                 idempotencyKey = "pull-${UUID.randomUUID()}",
             ),
         )
-        applyResponse(serverUrl, response)
-            database.syncState().save(state.copy(cursor = response.nextCursor, expiryCursor = response.nextExpiryCursor, lastSyncedAt = Instant.now(clock).toString()))
+        database.withTransaction {
+            applyResponse(serverUrl, response)
+            database.syncState().save(state.copy(cursor = maxOf(state.cursor, response.nextCursor), expiryCursor = maxOf(state.expiryCursor, response.nextExpiryCursor), lastSyncedAt = Instant.now(clock).toString()))
+        }
         updateStatusLocked(serverUrl)
     }
 
@@ -491,10 +485,14 @@ class RemoteAssetSyncStore @Inject constructor(
         skipAssetIds: Set<String> = emptySet(),
         skipExpiryIds: Set<String> = emptySet(),
     ) {
-        for (change in response.changes) if (change.asset.id !in skipAssetIds) applyChange(serverUrl, change)
-        for (change in response.applied) if (change.asset.id !in skipAssetIds) applyChange(serverUrl, change)
-        for (change in response.expiryChanges) if (change.item.id !in skipExpiryIds) applyExpiryChange(serverUrl, change)
-        for (change in response.appliedExpiry) if (change.item.id !in skipExpiryIds) applyExpiryChange(serverUrl, change)
+        // Local edits made while HTTP was in flight must never be replaced by a
+        // stale response, including a tombstone written by the delete action.
+        val protectedAssets = skipAssetIds + database.outbox().getAll(serverUrl).map { it.assetId }
+        val protectedExpiry = skipExpiryIds + database.expiryOutbox().getAll(serverUrl).map { it.expiryId }
+        for (change in response.changes) if (change.asset.id !in protectedAssets) applyChange(serverUrl, change)
+        for (change in response.applied) if (change.asset.id !in protectedAssets) applyChange(serverUrl, change)
+        for (change in response.expiryChanges) if (change.item.id !in protectedExpiry) applyExpiryChange(serverUrl, change)
+        for (change in response.appliedExpiry) if (change.item.id !in protectedExpiry) applyExpiryChange(serverUrl, change)
     }
 
     private suspend fun recordConflict(serverUrl: String, operation: RemoteOutboxEntity, conflict: SyncConflict) {
@@ -521,7 +519,7 @@ class RemoteAssetSyncStore @Inject constructor(
         )
     }
 
-    private suspend fun updateStatus(serverUrl: String) = syncMutex.withLock {
+    private suspend fun updateStatus(serverUrl: String) {
         updateStatusLocked(serverUrl)
     }
 

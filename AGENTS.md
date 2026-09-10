@@ -56,17 +56,46 @@ repository boundaries.
   day and today. Reactivation clears the date and resumes counting from purchase.
 - Keep SQLite-specific behavior in the database/migration infrastructure and
   GORM repository, outside business services.
-- Schema changes use numbered SQL files in `services/api/internal/database/migrations`.
-  Never call GORM `AutoMigrate` or modify an applied migration; append the next
-  migration and test both upgrade and failure rollback.
+- During pre-release development, keep the entire server SQL schema in the sole
+  `services/api/internal/database/migrations/001_init.sql`; consolidate changes
+  into 001 and do not add 002 or later files. Never call GORM `AutoMigrate`.
+  Keep checksum validation and transactional rollback. Never automatically delete
+  or rewrite an existing development database to bypass a baseline mismatch;
+  back up/export data before explicitly rebuilding it. After the first production
+  release, update this AGENTS.md rule to require immutable, append-only numbered
+  migrations with upgrade and rollback tests before adding further migrations.
 - Archive is reversible and independent of lifecycle status. Archived assets
   are excluded from default lists and totals, remain readable, and must be
   restored before editing. Never auto-delete archived records.
 - Runtime databases under `services/api/data` are local artifacts and must not
   be committed.
-- Android `LOCAL` mode uses Room as the sole asset source; `REMOTE` mode uses
-  the selected HTTP server. Mode switches never merge, upload, or silently
-  fall back, and local assets/expiry items are isolated from remote addresses.
+- Android assets and expiry items always use the local Room database as the
+  sole source of truth. The persisted legacy `StorageMode` controls only whether
+  background synchronization is enabled; changing it never changes the UI data
+  source. Every write/delete and its sync journal entry commit in one transaction.
+- The server exposes authentication, incremental synchronization and health
+  endpoints only, not asset/expiry CRUD. Use `m5/v1/m5.proto` to generate routes.
+- Sync batches and idempotency keys are durable before HTTP; retries reuse the
+  identical batch. Never hold a Room transaction across network I/O. Acknowledging
+  an older revision must not overwrite a newer local edit. Conflicts pause only
+  the affected record and preserve both versions until explicit resolution.
+- A local dataset may synchronize to a different server/account after the user
+  signs in and explicitly enables sync. Do not block on a previous target binding.
+  Before changing targets, back up local data and old sync recovery metadata,
+  then transactionally reset target-specific versions, cursors, batches and
+  conflict state. Retain local records and tombstones; same-ID differences use
+  explicit conflict resolution. Saving/selecting a server or logging in alone
+  never starts uploading. Legacy cache enrollment remains account-scoped.
+- Server configuration owns its account session. Store credentials per normalized
+  server URL; logging into or out of a non-current server never changes the
+  active sync account. Editing a URL replaces that entry and clears its old
+  credential; renaming preserves it. Health probes never send credentials,
+  save settings, or enable sync. Probe success means reachability only.
+- Expiry item location is optional on both Android and the sync API; never invent
+  placeholder business values to satisfy mismatched server validation.
+- Deletion is explicit and separate from archive: remove the visible local row,
+  retain a sync tombstone, and never garbage-collect tombstones without a device
+  acknowledgement or full-resync protocol. Archive remains reversible.
 - Local JSON backups are versioned, target the local Room database only,
   include archived records and expiry items, exclude credentials, and restore
   through validation plus an automatic pre-restore backup.
@@ -81,8 +110,8 @@ repository boundaries.
 - Launch ViewModel work in `viewModelScope`; rethrow `CancellationException`.
 - Remote DTOs must be mapped into `core:model` types in the data layer.
 - Cleartext HTTP is permitted only in the Debug manifest for local development.
-- Do not add Room until offline source-of-truth and conflict behavior are
-  explicitly designed.
+- Room schema changes require explicit migrations; never reset an installed
+  database as an upgrade strategy. See docs/data-sync.md for synchronization rules.
 
 AGP 9 built-in Kotlin is temporarily disabled because the initial project uses
 Hilt with kapt. The compatibility flags are intentionally visible in
@@ -111,6 +140,17 @@ git diff --check
 
 If the locally installed `hz` version changes, update the Protobuf include path
 in the verification command instead of vendoring files from a module cache.
+
+## Design and implementation consistency
+
+- Use the current OpenDesign UI artifact as the reference for application UI.
+- If the design differs from real data, domain rules, available capabilities,
+  or required interaction states, update the OpenDesign artifact first. Only
+  then implement the corresponding app/UI changes; never silently diverge in
+  code or substitute fabricated fields, counts, timestamps, or status values.
+- Keep the updated design and application consistent. If OpenDesign is blocked,
+  record the discrepancy and leave dependent UI work pending; continue unrelated
+  authorized work. Do not add an approval step unless the user requested one.
 
 ## Change discipline
 

@@ -9,15 +9,16 @@ import io.suirenx.core.model.NewExpiryItem
 import javax.inject.Inject
 
 class DefaultExpiryRepository @Inject constructor(
+    private val scheduler: io.suirenx.core.domain.SyncScheduleRepository,
     private val local: LocalExpiryRepository,
-    private val remote: RemoteExpiryRepository,
-    private val modes: StorageModeRepository,
 ) : ExpiryRepository {
-    private fun useLocal() = modes.mode.value == io.suirenx.core.model.StorageMode.Local
-    override suspend fun list(includeArchived: Boolean): Result<List<ExpiryItem>> = if (useLocal()) local.list(includeArchived) else remote.listExpiry(includeArchived)
-    override suspend fun get(id: String): Result<ExpiryItem> = if (useLocal()) local.get(id) else remote.getExpiry(id)
-    override suspend fun create(item: NewExpiryItem): Result<ExpiryItem> = if (useLocal()) local.create(item) else remote.createExpiry(item)
-    override suspend fun update(id: String, item: NewExpiryItem): Result<ExpiryItem> = if (useLocal()) local.update(id, item) else remote.updateExpiry(id, item)
-    override suspend fun updateStatus(id: String, status: ExpiryItemStatus): Result<ExpiryItem> = if (useLocal()) local.updateStatus(id, status) else remote.updateExpiryStatus(id, status)
-    override suspend fun updateArchive(id: String, archive: Boolean): Result<ExpiryItem> = if (useLocal()) local.updateArchive(id, archive) else remote.updateExpiryArchive(id, archive)
+    override suspend fun delete(id: String): Result<Unit> =
+        local.delete(id).also { if (it.isSuccess) scheduler.onLocalChange() }
+
+    override suspend fun list(includeArchived: Boolean): Result<List<ExpiryItem>> = local.list(includeArchived)
+    override suspend fun get(id: String): Result<ExpiryItem> = local.get(id)
+    override suspend fun create(item: NewExpiryItem): Result<ExpiryItem> = local.create(item).also { if (it.isSuccess) scheduler.onLocalChange() }
+    override suspend fun update(id: String, item: NewExpiryItem): Result<ExpiryItem> = local.update(id, item).also { if (it.isSuccess) scheduler.onLocalChange() }
+    override suspend fun updateStatus(id: String, status: ExpiryItemStatus): Result<ExpiryItem> = local.updateStatus(id, status).also { if (it.isSuccess) scheduler.onLocalChange() }
+    override suspend fun updateArchive(id: String, archive: Boolean): Result<ExpiryItem> = local.updateArchive(id, archive).also { if (it.isSuccess) scheduler.onLocalChange() }
 }

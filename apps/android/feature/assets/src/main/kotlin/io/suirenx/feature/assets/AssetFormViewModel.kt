@@ -61,16 +61,6 @@ class AssetFormViewModel @Inject constructor(
     private val assetId: String? = savedStateHandle.get<String>("id")?.takeIf { it.isNotBlank() }
 
     init {
-        viewModelScope.launch {
-            modes.mode.collect { mode ->
-                if (mode != null && mode != observedMode) {
-                    observedMode = mode
-                    if (uiState.value.isEdit || uiState.value.name.isNotBlank()) {
-                        uiState.value = AssetFormUiState(errorMessage = "使用模式已切换，请重新打开表单")
-                    }
-                }
-            }
-        }
         val id = assetId
         if (id != null) {
             uiState.update { it.copy(isEdit = true, isLoading = true) }

@@ -24,8 +24,14 @@ class LocalAssetRepository @Inject constructor(
     private val database: LocalDatabase,
     private val json: Json,
     private val clock: Clock,
+    private val journal: io.suirenx.core.data.sync.LocalSyncJournal,
 ) : AssetRepository {
     private val dao: AssetDao = database.assetDao()
+
+    override suspend fun deleteAsset(id: String): Result<Unit> = attempt {
+        dao.getById(id)?.let { journal.asset(toDomain(it), deleted = true) }
+        dao.delete(id)
+    }
 
     override suspend fun updateAssetArchive(id: String, archive: Boolean): Result<Asset> = attempt {
         val current = requireAsset(id)
@@ -34,6 +40,7 @@ class LocalAssetRepository @Inject constructor(
             updatedAt = Instant.now(clock),
         )
         dao.update(updated.toEntity())
+        journal.asset(updated)
         updated
     }
 
@@ -42,6 +49,7 @@ class LocalAssetRepository @Inject constructor(
         check(!current.isArchived) { "归档资产请先恢复" }
         val updated = current.copy(status = status, retiredDate = retiredDate, updatedAt = Instant.now(clock))
         dao.update(updated.toEntity())
+        journal.asset(updated)
         updated
     }
 
@@ -56,6 +64,7 @@ class LocalAssetRepository @Inject constructor(
         )
         val persisted = saved.copy(createdAt = now, updatedAt = now)
         dao.insert(persisted.toEntity())
+        journal.asset(persisted)
         persisted
     }
 
@@ -72,6 +81,7 @@ class LocalAssetRepository @Inject constructor(
             updatedAt = Instant.now(clock),
         )
         dao.update(updated.toEntity())
+        journal.asset(updated)
         updated
     }
 
@@ -85,8 +95,10 @@ class LocalAssetRepository @Inject constructor(
 
     suspend fun replaceAll(assets: List<Asset>) {
         database.withTransaction {
+            dao.getAll().forEach { journal.asset(toDomain(it), deleted = true) }
             dao.deleteAll()
             dao.insertAll(assets.map { it.toEntity() })
+            assets.forEach { journal.asset(it) }
         }
     }
 
@@ -112,7 +124,7 @@ class LocalAssetRepository @Inject constructor(
 
     private fun today(): LocalDate = LocalDate.now(clock.withZone(ZoneId.systemDefault()))
 
-    private fun Asset.toEntity(): AssetEntity = AssetEntity(
+    internal fun Asset.toEntity(): AssetEntity = AssetEntity(
         id = id, name = name, priceCents = priceCents, purchaseDate = purchaseDate.toString(),
         status = status.name, retiredDate = retiredDate?.toString(), archivedAt = archivedAt?.toString(),
         iconKey = iconKey, purchaseChannel = purchaseChannel, warrantyEndDate = warrantyEndDate?.toString(),
@@ -122,7 +134,7 @@ class LocalAssetRepository @Inject constructor(
 
     private fun String.toDate() = LocalDate.parse(this)
     private suspend fun <T> attempt(block: suspend () -> T): Result<T> = try {
-        Result.success(block())
+        Result.success(database.withTransaction { block() })
     } catch (error: CancellationException) {
         throw error
     } catch (error: Exception) {

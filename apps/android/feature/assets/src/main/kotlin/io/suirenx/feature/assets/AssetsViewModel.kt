@@ -81,18 +81,7 @@ class AssetsViewModel @Inject constructor(
     private var refreshJob: Job? = null
 
     init {
-        viewModelScope.launch {
-            combine(modes.mode, backends.settings) { mode, settings -> mode to settings?.activeUrl }
-                .distinctUntilChanged().collect { (mode, url) ->
-                refreshJob?.cancel()
-                val ready = mode == io.suirenx.core.model.StorageMode.Local || url != null
-                uiState.value = AssetsUiState(isLoading = ready)
-                if (ready) {
-                    if (mode == io.suirenx.core.model.StorageMode.Remote) remoteSync.refreshStatus()
-                    refresh()
-                }
-            }
-        }
+        refresh()
         viewModelScope.launch {
             remoteSync.status.collect { status -> uiState.update { it.copy(syncStatus = status) } }
         }
@@ -124,7 +113,7 @@ class AssetsViewModel @Inject constructor(
                         it.copy(
                             isLoading = false,
                             errorMessage = if (remoteSync.status.value.conflicts.isNotEmpty()) null else {
-                                "无法连接后端，请检查网络或在设置中切换地址"
+                                "无法读取本机数据，请重试"
                             },
                         )
                     }

@@ -34,6 +34,8 @@ data class ExpiryEditorState(
 )
 
 data class ExpiryUiState(
+    val deleteConfirmation: Boolean = false,
+    val deleteError: String? = null,
     val items: List<ExpiryItem> = emptyList(),
     val filter: ExpiryBucket? = null,
     val isArchivedFilter: Boolean = false,
@@ -49,7 +51,8 @@ data class ExpiryUiState(
     val expiredCount get() = items.count { it.bucket(LocalDate.now(), soonDays) == ExpiryBucket.Expired }
     val visibleItems get() = items.filter { item ->
         if (isArchivedFilter) item.archivedAt != null
-        else item.archivedAt == null && (filter == null || item.bucket(LocalDate.now(), soonDays) == filter)
+        else item.archivedAt == null && (filter == null || item.bucket(LocalDate.now(), soonDays) == filter ||
+            (filter == ExpiryBucket.ExpiringSoon && item.bucket(LocalDate.now(), soonDays) == ExpiryBucket.DueToday))
     }.sortedWith(compareBy<ExpiryItem> { it.bucket(LocalDate.now(), soonDays).ordinal }.thenBy { it.actualExpiryDate })
 }
 
@@ -132,6 +135,32 @@ class ExpiryViewModel @Inject constructor(
     }
     fun updateStatus(status: ExpiryItemStatus) = mutate { item -> repository.updateStatus(item.id, status) }
     fun archive(archive: Boolean) = mutate { item -> repository.updateArchive(item.id, archive) }
+    fun requestDelete() {
+        if (!uiState.value.busy && uiState.value.detail != null) uiState.update { it.copy(deleteConfirmation = true, deleteError = null) }
+    }
+    fun dismissDelete() {
+        if (!uiState.value.busy) uiState.update { it.copy(deleteConfirmation = false, deleteError = null) }
+    }
+    fun confirmDelete() {
+        val item = uiState.value.detail ?: return
+        if (uiState.value.busy || !uiState.value.deleteConfirmation) return
+        uiState.update { it.copy(busy = true, deleteError = null) }
+        viewModelScope.launch {
+            try {
+                repository.delete(item.id).fold(
+                    onSuccess = {
+                        uiState.update { it.copy(detail = null, deleteConfirmation = false) }
+                        changes.notifyChanged()
+                        refresh()
+                    },
+                    onFailure = { error ->
+                        if (error is kotlinx.coroutines.CancellationException) throw error
+                        uiState.update { it.copy(deleteError = error.message ?: "删除失败，请重试") }
+                    },
+                )
+            } finally { uiState.update { it.copy(busy = false) } }
+        }
+    }
     fun retrySync() {
         viewModelScope.launch { remoteSync.retry(); refresh() }
     }

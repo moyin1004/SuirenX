@@ -9,4 +9,7 @@ interface BackendRepository {
     suspend fun initialize(): Result<Unit>
     suspend fun saveAndSelect(address: String, name: String): Result<Unit>
     suspend fun select(url: String): Result<Unit>
+    suspend fun remove(url: String): Result<Unit>
+    suspend fun saveServer(originalUrl: String?, address: String, name: String): Result<String> = Result.failure(UnsupportedOperationException())
+    suspend fun testConnection(address: String): Result<String> = Result.failure(UnsupportedOperationException())
 }

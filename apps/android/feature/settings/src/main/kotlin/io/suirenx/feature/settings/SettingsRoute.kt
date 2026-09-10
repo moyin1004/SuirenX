@@ -4,6 +4,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -26,20 +31,32 @@ fun SettingsRoute(
     val themeViewModel: ThemeSettingsViewModel = hiltViewModel()
     val theme by themeViewModel.theme.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) { viewModel.refreshLocalSummary() }
     var exportContent by remember { mutableStateOf<String?>(null) }
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         val content = exportContent
-        if (uri != null && content != null) {
-            context.contentResolver.openOutputStream(uri)?.use { it.write(content.toByteArray()) }
+        if (uri != null && content != null) scope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    checkNotNull(context.contentResolver.openOutputStream(uri)) { "无法写入备份文件" }.use { it.write(content.toByteArray()) }
+                }
+                viewModel.message("备份已导出")
+            } catch (error: CancellationException) { throw error }
+            catch (error: Exception) { viewModel.message(error.message ?: "导出失败，请重试") }
+            finally { exportContent = null }
         }
     }
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) {
-            runCatching {
-                context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-                    ?: error("无法读取备份文件")
-            }.onSuccess(viewModel::inspectBackup)
-                .onFailure { viewModel.inspectBackup("invalid") }
+        if (uri != null) scope.launch {
+            try {
+                val content = withContext(Dispatchers.IO) {
+                    context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                        ?: error("无法读取备份文件")
+                }
+                viewModel.inspectBackup(content)
+            } catch (error: CancellationException) { throw error }
+            catch (error: Exception) { viewModel.message(error.message ?: "读取备份失败") }
         }
     }
     LaunchedEffect(viewModel, exportLauncher) {
@@ -49,7 +66,7 @@ fun SettingsRoute(
                     exportContent = event.content
                     exportLauncher.launch("suirenx-backup.json")
                 }
-                is BackendEvent.Message -> Unit
+                is BackendEvent.Message -> viewModel.message(event.text)
             }
         }
     }
@@ -58,10 +75,17 @@ fun SettingsRoute(
         onAddressChanged = viewModel::onAddressChanged,
         onNameChanged = viewModel::onNameChanged,
         onSave = viewModel::save,
+        onOpenServer = viewModel::openServer,
+        onEditServer = viewModel::editServer,
+        onTestConnection = viewModel::testConnection,
         onSelect = viewModel::select,
+        onDeleteServer = viewModel::removeServer,
         onRetry = viewModel::load,
         onUseLocal = viewModel::useLocal,
         onUseRemote = viewModel::useRemote,
+        onCancelSync = viewModel::cancelSync,
+        onResolveConflict = viewModel::resolveConflict,
+        onSyncNow = viewModel::syncNow, onSyncSchedule = viewModel::selectSyncSchedule,
         onExportBackup = viewModel::exportBackup,
         onImportBackup = { importLauncher.launch("application/json") },
         onConfirmRestore = viewModel::confirmRestore,
@@ -72,6 +96,7 @@ fun SettingsRoute(
         onAuthUsernameChanged = viewModel::onAuthUsernameChanged,
         onAuthPasswordChanged = viewModel::onAuthPasswordChanged,
         onRegister = viewModel::register,
+        onResetAuthForm = viewModel::resetAuthForm,
         onLogin = viewModel::login,
         onLogout = viewModel::logout,
         onPreviewMigration = viewModel::previewMigration,

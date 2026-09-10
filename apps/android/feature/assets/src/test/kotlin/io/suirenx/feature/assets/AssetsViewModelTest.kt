@@ -88,7 +88,7 @@ class AssetsViewModelTest {
         assertEquals(2, vm.uiState.value.assets.size)
     }
 
-    @Test fun switchingBackendReloadsAndResetsFilter() = runTest(dispatcher) {
+    @Test fun switchingSyncServerPreservesLocalListAndFilter() = runTest(dispatcher) {
         val repo = FakeRepository()
         val backends = FakeBackends()
         val vm = AssetsViewModel(GetAssetsUseCase(repo), backends, AssetChangeNotifier())
@@ -100,9 +100,9 @@ class AssetsViewModelTest {
         backends.settings.value = BackendSettings(activeUrl = "https://second.example/")
         advanceUntilIdle()
 
-        // Switching backend cancels the old state and reloads from scratch.
-        assertTrue(repo.listCalls > callsAfterFirstLoad)
-        assertEquals(AssetFilter.All, vm.uiState.value.selectedFilter)
+        // A sync endpoint is not the UI data source.
+        assertEquals(callsAfterFirstLoad, repo.listCalls)
+        assertEquals(AssetFilter.Retired, vm.uiState.value.selectedFilter)
         assertFalse(vm.uiState.value.isLoading)
     }
 
@@ -167,10 +167,12 @@ class AssetsViewModelTest {
         override val settings = MutableStateFlow<BackendSettings?>(BackendSettings(activeUrl = "https://first.example/"))
         override suspend fun initialize() = Result.success(Unit)
         override suspend fun saveAndSelect(address: String, name: String) = Result.success(Unit)
+        override suspend fun remove(url: String) = Result.success(Unit)
         override suspend fun select(url: String) = Result.success(Unit)
     }
 
     internal class FakeRepository : AssetRepository {
+    override suspend fun deleteAsset(id: String): Result<Unit> = Result.success(Unit)
         var createCalls = 0
         var updateCalls = 0
         var statusCalls = 0
