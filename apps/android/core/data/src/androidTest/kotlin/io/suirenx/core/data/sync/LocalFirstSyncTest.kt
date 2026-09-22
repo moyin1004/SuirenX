@@ -1,5 +1,6 @@
 package io.suirenx.core.data.sync
 
+import android.content.ContextWrapper
 import androidx.room.Room
 import androidx.room.withTransaction
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -34,11 +35,18 @@ class LocalFirstSyncTest {
     private lateinit var old: RemoteDatabase
     private lateinit var assets: LocalAssetRepository
     private lateinit var expiry: LocalExpiryRepository
+    private lateinit var backup: LocalBackupRepositoryImpl
     private lateinit var sync: LocalFirstSyncRepository
     private val json = Json { encodeDefaults = true; ignoreUnknownKeys = true }
     private val records = linkedMapOf<String, SyncAppliedChange>()
     private val responses = mutableMapOf<String, SyncResponse>()
     private val keys = mutableListOf<String>()
+    private val tokenContext = object : ContextWrapper(InstrumentationRegistry.getInstrumentation().targetContext) {
+        private val prefix = "sync-auth-${java.util.UUID.randomUUID()}-"
+        override fun getSharedPreferences(name: String, mode: Int) = super.getSharedPreferences(prefix + name, mode)
+    }
+    private lateinit var tokens: AuthTokenStore
+    private lateinit var backendSettings: MutableStateFlow<BackendSettings?>
     private var loseResponse = false
     private var duringRequest: (() -> Unit)? = null
     private val date = LocalDate.of(2020, 1, 1)
@@ -62,8 +70,9 @@ class LocalFirstSyncTest {
             override suspend fun login(username: String, password: String) = Result.success(Unit)
             override suspend fun logout() = Result.success(Unit)
         }
+        backendSettings = MutableStateFlow(BackendSettings(listOf(BackendServer("https://sync.test/", "Sync")), "https://sync.test/"))
         val backends = object : BackendRepository {
-            override val settings = MutableStateFlow<BackendSettings?>(BackendSettings(activeUrl = "https://sync.test/"))
+            override val settings = backendSettings
             override suspend fun initialize() = Result.success(Unit)
             override suspend fun saveAndSelect(address: String, name: String) = Result.success(Unit)
         override suspend fun remove(url: String) = Result.success(Unit)
@@ -98,13 +107,22 @@ class LocalFirstSyncTest {
                 .body(json.encodeToString(result).toResponseBody("application/json".toMediaType())).build()
         }.build()
         val provider = SyncApiProvider(backends, client, json)
-        val tokens = AuthTokenStore(context).also { it.save("https://sync.test/", "sync-test", "test-token") }
-        val backup = LocalBackupRepositoryImpl(context, db, assets, expiry, json, Dispatchers.IO)
+        tokens = AuthTokenStore(tokenContext).also { it.save("https://sync.test/", "sync-test", "test-token") }
+        backup = LocalBackupRepositoryImpl(context, db, assets, expiry, json, Dispatchers.IO)
         sync = LocalFirstSyncRepository(db, assets, expiry, journal, codec, json, provider, tokens, auth, modes,
             backup, DataChangeNotifier(), RemoteAssetSyncStore(old, provider, auth, json, clock), old, Dispatchers.IO)
     }
 
-    @After fun tearDown() { db.close(); old.close(); context.deleteDatabase(databaseName) }
+    @After fun tearDown() { tokens.clear(); db.close(); old.close(); context.deleteDatabase(databaseName) }
+
+    @Test fun missingCredentialForNewServerPromptsLogoutWithoutSendingAnything() = runBlocking {
+        backendSettings.value = BackendSettings(listOf(BackendServer("https://new.test/", "New")), "https://new.test/")
+        assertTrue(sync.retry().isFailure)
+        assertTrue(sync.status.value.needsLogin)
+        assertTrue(sync.status.value.error.orEmpty().contains("先注销账号，再登录"))
+        assertTrue(keys.isEmpty())
+        assertNull(db.syncDao().session())
+    }
 
     @Test fun changingTargetRebasesFrozenBatchAndRetainsLocalData() = runBlocking {
         val asset = assets.createAsset(NewAsset("Retained", 123, date)).getOrThrow()
@@ -253,6 +271,69 @@ class LocalFirstSyncTest {
         assertEquals("Kitchen", conflict.local!!.location)
         assertEquals("Fridge", conflict.remote!!.location)
         assertEquals("Remote note", conflict.remote!!.notes)
+    }
+
+    @Test fun restoreWhileResponseIsLostPreservesRestoredRevisionAndDeletion() = runBlocking {
+        val asset = assets.createAsset(NewAsset("Backup", 100, date)).getOrThrow()
+        val content = backup.export().getOrThrow()
+        assets.updateAsset(asset.id, NewAsset("Later edit", 200, date)).getOrThrow()
+        val removed = assets.createAsset(NewAsset("After backup", 300, date)).getOrThrow()
+        loseResponse = true
+        assertTrue(sync.retry().isFailure)
+        val frozen = db.syncDao().session()!!
+        backup.restore(content).getOrThrow()
+        assertEquals(frozen, db.syncDao().session())
+        assertEquals("Backup", assets.getAsset(asset.id).getOrThrow().name)
+        assertTrue(assets.getAsset(removed.id).isFailure)
+        assertTrue(json.decodeFromString<SyncAssetPayload>(db.syncDao().get("asset", removed.id)!!.payload).deleted)
+        sync.retry().getOrThrow()
+        assertEquals(keys[0], keys[1])
+        assertEquals("Backup", assets.getAsset(asset.id).getOrThrow().name)
+        assertEquals("Backup", records[asset.id]!!.asset.name)
+        assertTrue(records[removed.id]!!.asset.deleted)
+        assertEquals(0, sync.status.value.pendingOperations)
+    }
+
+    @Test fun restoreFailureRollsBackBothKindsAndJournalAndKeepsSafetyBackup() = runBlocking {
+        val asset = assets.createAsset(NewAsset("Backup", 100, date)).getOrThrow()
+        val item = expiry.create(NewExpiryItem("Milk", "Food", LocalDate.of(2030, 1, 1))).getOrThrow()
+        expiry.updateArchive(item.id, true).getOrThrow()
+        val content = backup.export().getOrThrow()
+        assets.updateAsset(asset.id, NewAsset("Current", 200, date)).getOrThrow()
+        val before = backup.snapshot().getOrThrow()
+        val journal = db.syncDao().all()
+        val directory = context.getDir("backups", android.content.Context.MODE_PRIVATE)
+        val existing = directory.listFiles().orEmpty().toSet()
+        db.openHelper.writableDatabase.execSQL(
+            "CREATE TRIGGER reject_restore BEFORE INSERT ON expiry_items BEGIN SELECT RAISE(ABORT, 'test restore failure'); END",
+        )
+        try {
+            assertTrue(backup.restore(content).isFailure)
+            assertEquals(before, backup.snapshot().getOrThrow())
+            assertEquals(journal, db.syncDao().all())
+            val safety = directory.listFiles().orEmpty().filter { it !in existing && it.name.startsWith("pre-restore-") }.single()
+            assertTrue(backup.inspect(safety.readText()).isSuccess)
+            assertTrue(safety.readText().contains("Current"))
+        } finally {
+            db.openHelper.writableDatabase.execSQL("DROP TRIGGER reject_restore")
+            directory.listFiles().orEmpty().filter { it !in existing }.forEach { it.delete() }
+        }
+        backup.restore(content).getOrThrow()
+        assertEquals("Backup", assets.getAsset(asset.id).getOrThrow().name)
+        assertNotNull(expiry.get(item.id).getOrThrow().archivedAt)
+        assertEquals("", expiry.get(item.id).getOrThrow().location)
+        assertTrue(db.syncDao().get("expiry", item.id)!!.dirty)
+    }
+
+    @Test fun invalidBackupTimestampIsRejectedBeforeRestore() = runBlocking {
+        assets.createAsset(NewAsset("Unchanged", 100, date)).getOrThrow()
+        val content = backup.export().getOrThrow()
+        val invalid = content.replace("\"createdAt\":\"", "\"createdAt\":\"invalid")
+        val before = db.syncDao().all()
+        assertTrue(backup.inspect(invalid).isFailure)
+        assertTrue(backup.restore(invalid).isFailure)
+        assertEquals(before, db.syncDao().all())
+        assertEquals("Unchanged", assets.getAssets().getOrThrow().single().name)
     }
 
     @Test fun transactionFailureRollsBackBusinessAndJournal() = runBlocking {

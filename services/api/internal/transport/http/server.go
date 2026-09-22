@@ -17,11 +17,15 @@ type Server struct{ h *server.Hertz }
 
 type ServerOption func(*Server, *server.Hertz)
 
-func WithM5(db *gorm.DB) ServerOption {
+func WithM5(db *gorm.DB, jwtSecret string) ServerOption {
 	return func(s *Server, h *server.Hertz) {
-		authService := auth.NewService(repository.NewGormAuthRepository(db))
+		authService, err := auth.NewService(repository.NewGormAuthRepository(db), []byte(jwtSecret))
+		if err != nil {
+			panic(err)
+		}
 		syncService := service.NewSyncService(repository.NewGormAssetRepository(db))
 		h.Use(handlers.WithSyncActions(&m5Handlers{auth: authService, sync: syncService}))
+		h.Use(withM5Auth(authService))
 		_ = s
 	}
 }

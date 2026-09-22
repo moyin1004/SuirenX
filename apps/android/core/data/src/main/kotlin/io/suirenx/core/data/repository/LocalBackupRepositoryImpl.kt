@@ -144,6 +144,8 @@ class LocalBackupRepositoryImpl @Inject constructor(
             require(status == AssetStatus.Active && retired == null || status == AssetStatus.Retired && retired != null && retired >= purchase) {
                 "备份包含不一致的退役资料"
             }
+            asset.createdAt.takeIf(String::isNotBlank)?.let(Instant::parse)
+            asset.updatedAt.takeIf(String::isNotBlank)?.let(Instant::parse)
             asset.archivedAt?.let(Instant::parse)
             asset.warrantyEndDate?.let(LocalDate::parse)
             require(asset.tags.size <= 20 && asset.tags.all { it.length <= 30 }) { "备份包含过多或过长标签" }
@@ -155,6 +157,8 @@ class LocalBackupRepositoryImpl @Inject constructor(
             LocalDate.parse(item.packageExpiryDate)
             val opened = item.openedDate?.let(LocalDate::parse)
             require((opened == null) == (item.openedValidityDays == null) && (item.openedValidityDays == null || item.openedValidityDays > 0)) { "备份包含不一致的开封期限" }
+            item.createdAt.takeIf(String::isNotBlank)?.let(Instant::parse)
+            item.updatedAt.takeIf(String::isNotBlank)?.let(Instant::parse)
             item.archivedAt?.let(Instant::parse)
             require(item.notes.length <= 2000) { "备份备注过长" }
             ExpiryItemStatus.valueOf(item.status)

@@ -15,15 +15,7 @@ type AccountRecord struct {
 	CreatedAt    time.Time `gorm:"not null"`
 }
 
-type AuthTokenRecord struct {
-	TokenHash string    `gorm:"primaryKey"`
-	OwnerID   string    `gorm:"index;not null"`
-	CreatedAt time.Time `gorm:"not null"`
-	ExpiresAt time.Time `gorm:"not null"`
-}
-
-func (AccountRecord) TableName() string   { return "accounts" }
-func (AuthTokenRecord) TableName() string { return "auth_tokens" }
+func (AccountRecord) TableName() string { return "accounts" }
 
 type GormAuthRepository struct{ db *gorm.DB }
 
@@ -43,20 +35,4 @@ func (r *GormAuthRepository) FindAccount(username string) (*auth.Account, error)
 		return nil, err
 	}
 	return &auth.Account{ID: record.ID, Username: record.Username, PasswordHash: record.PasswordHash, CreatedAt: record.CreatedAt}, nil
-}
-
-func (r *GormAuthRepository) SaveToken(tokenHash, ownerID string, createdAt, expiresAt time.Time) error {
-	return r.db.Create(&AuthTokenRecord{TokenHash: tokenHash, OwnerID: ownerID, CreatedAt: createdAt, ExpiresAt: expiresAt}).Error
-}
-
-func (r *GormAuthRepository) FindToken(tokenHash string, now time.Time) (string, error) {
-	var record AuthTokenRecord
-	if err := r.db.Where("token_hash = ? AND expires_at > ?", tokenHash, now).First(&record).Error; err != nil {
-		return "", err
-	}
-	return record.OwnerID, nil
-}
-
-func (r *GormAuthRepository) RevokeTokens(ownerID string) error {
-	return r.db.Where("owner_id = ?", ownerID).Delete(&AuthTokenRecord{}).Error
 }

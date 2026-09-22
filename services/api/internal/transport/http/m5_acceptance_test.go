@@ -24,7 +24,7 @@ func TestM5ConcurrentEditorsAndDatabaseRestore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := NewServer(":0", service.NewAssetService(repository.NewGormAssetRepository(db)), WithM5(db))
+	s := NewServer(":0", service.NewAssetService(repository.NewGormAssetRepository(db)), WithM5(db, testJWTSecret))
 	tokenResponse := request(s, "POST", "/api/v1/auth/register", `{"username":"concurrent","password":"correct horse battery staple"}`)
 	if tokenResponse.Code != 201 {
 		t.Fatalf("register: %d %s", tokenResponse.Code, tokenResponse.Body)
@@ -43,20 +43,31 @@ func TestM5ConcurrentEditorsAndDatabaseRestore(t *testing.T) {
 	update := func(key, name string) string {
 		return `{"cursor":1,"idempotency_key":"` + key + `","changes":[{"id":"device-asset","base_version":1,"name":"` + name + `","price_cents":100,"purchase_date":"2020-01-01","status":"ACTIVE","image_url":"","retired_date":"","archived_at":"","icon_key":"devices","purchase_channel":"","warranty_end_date":"","notes":"","tags":[]}]}`
 	}
-	responses := make(chan string, 2)
+	type syncResponse struct {
+		code int
+		body string
+	}
+	responses := make(chan syncResponse, 2)
+	start := make(chan struct{})
 	var group sync.WaitGroup
 	for _, item := range []struct{ key, name string }{{"editor-a", "Phone A"}, {"editor-b", "Phone B"}} {
 		group.Add(1)
 		go func(key, name string) {
 			defer group.Done()
-			responses <- requestBearer(s, "POST", "/api/v1/sync/assets", update(key, name), token.AccessToken).Body.String()
+			<-start
+			response := requestBearer(s, "POST", "/api/v1/sync/assets", update(key, name), token.AccessToken)
+			responses <- syncResponse{response.Code, response.Body.String()}
 		}(item.key, item.name)
 	}
+	close(start)
 	group.Wait()
 	close(responses)
 	conflicts := 0
-	for body := range responses {
-		if strings.Contains(body, `"conflicts":[{`) {
+	for response := range responses {
+		if response.code != 200 {
+			t.Fatalf("concurrent sync: status %d, body %s", response.code, response.body)
+		}
+		if strings.Contains(response.body, `"conflicts":[{`) {
 			conflicts++
 		}
 	}
@@ -84,7 +95,7 @@ func TestM5ConcurrentEditorsAndDatabaseRestore(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = recoveredSQL.Close() })
-	recoveredServer := NewServer(":0", service.NewAssetService(repository.NewGormAssetRepository(recovered)), WithM5(recovered))
+	recoveredServer := NewServer(":0", service.NewAssetService(repository.NewGormAssetRepository(recovered)), WithM5(recovered, testJWTSecret))
 	pull := requestBearer(recoveredServer, "POST", "/api/v1/sync/assets", `{"cursor":0,"idempotency_key":"after-restore","changes":[]}`, token.AccessToken)
 	if pull.Code != 200 || !strings.Contains(pull.Body.String(), "device-asset") {
 		t.Fatalf("restored database lost sync data: %d %s", pull.Code, pull.Body)

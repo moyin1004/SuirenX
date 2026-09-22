@@ -57,12 +57,14 @@ import io.suirenx.core.ui.theme.SuirenXTheme
 import io.suirenx.feature.assets.AssetDetailRoute
 import io.suirenx.feature.assets.AssetFormRoute
 import io.suirenx.feature.assets.AssetsRoute
+import io.suirenx.feature.assets.AssetsViewModel
 import io.suirenx.feature.settings.BackendGate
 import io.suirenx.feature.settings.SettingsRoute
+import io.suirenx.feature.settings.SettingsEntry
 import io.suirenx.feature.settings.ThemeSettingsViewModel
 import io.suirenx.feature.tools.ToolsRoute
 import io.suirenx.feature.expiry.ExpiryRoute
-import io.suirenx.feature.expiry.ExpirySummaryBanner
+import io.suirenx.feature.expiry.ExpiryViewModel
 
 // Navigation is owned by the app module; feature modules never reference each other.
 private object Routes {
@@ -71,6 +73,8 @@ private object Routes {
     const val ASSET_CREATE = "new-asset"
     const val ASSET_EDIT = "assets/{id}/edit"
     const val EXPIRY = "expiry"
+    const val SYNC_STATUS = "settings/sync"
+    const val SYNC_CONFLICTS = "settings/conflicts"
 
     fun assetDetail(id: String) = "assets/$id"
     fun assetEdit(id: String) = "assets/$id/edit"
@@ -121,7 +125,32 @@ private fun SuirenXApp() {
                     onAssetClick = { id -> navController.navigate(Routes.assetDetail(id)) },
                     onAddAsset = { navController.navigate(Routes.ASSET_CREATE) },
                     onOpenExpiry = { navController.navigate(Routes.EXPIRY) },
+                    onOpenSync = { conflicts ->
+                        navController.navigate(if (conflicts) Routes.SYNC_CONFLICTS else Routes.SYNC_STATUS) {
+                            launchSingleTop = true
+                        }
+                    },
                 )
+            }
+        }
+        listOf(Routes.SYNC_STATUS to SettingsEntry.Sync, Routes.SYNC_CONFLICTS to SettingsEntry.Conflicts).forEach { (route, entry) ->
+            composable(route) {
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                    SettingsRoute(entry = entry, onExit = { navController.popBackStack() })
+                    FloatingTabBar(
+                        currentRoute = HomeTab.Settings.route,
+                        onTabSelected = { tab ->
+                            if (navController.currentDestination?.route == route) navController.popBackStack()
+                            tabNavController.navigate(tab.route) {
+                                popUpTo(tabNavController.graph.findStartDestination().id) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
+                        onAddAsset = { navController.navigate(Routes.ASSET_CREATE) },
+                        modifier = Modifier.align(Alignment.BottomCenter),
+                    )
+                }
             }
         }
         composable(
@@ -195,10 +224,15 @@ private fun MainScaffold(
     onAssetClick: (String) -> Unit,
     onAddAsset: () -> Unit,
     onOpenExpiry: () -> Unit,
+    onOpenSync: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val currentBackStackEntry by tabNavController.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry?.destination?.route
+    // Scope the main data ViewModels to the outer main destination so switching
+    // tabs cannot recreate them and briefly replace real text with loading text.
+    val assetsViewModel: AssetsViewModel = hiltViewModel()
+    val expiryViewModel: ExpiryViewModel = hiltViewModel()
 
     Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         // Each tab is a separate navigation destination; saveState/restoreState
@@ -216,6 +250,8 @@ private fun MainScaffold(
         ) {
             composable(HomeTab.Overview.route) {
                 OverviewRoute(
+                    assetsViewModel = assetsViewModel,
+                    expiryViewModel = expiryViewModel,
                     onAssets = {
                         tabNavController.navigate(HomeTab.Assets.route) {
                             popUpTo(tabNavController.graph.findStartDestination().id) { saveState = true }
@@ -224,13 +260,13 @@ private fun MainScaffold(
                         }
                     },
                     onSupplies = onOpenExpiry,
+                    onSync = onOpenSync,
                 )
             }
             composable(HomeTab.Assets.route) {
-                AssetsRoute(onAssetClick = onAssetClick)
+                AssetsRoute(onAssetClick = onAssetClick, viewModel = assetsViewModel)
             }
             composable(HomeTab.Tools.route) {
-                val expiryViewModel: io.suirenx.feature.expiry.ExpiryViewModel = hiltViewModel()
                 val expiry by expiryViewModel.uiState.collectAsStateWithLifecycle()
                 val pendingCount = if (expiry.loading || expiry.error != null) null else expiry.items.count {
                     it.archivedAt == null && it.bucket(java.time.LocalDate.now(), expiry.soonDays) in setOf(

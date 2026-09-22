@@ -3,6 +3,7 @@ package io.suirenx.feature.assets
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
+import java.time.LocalDate
 
 class AssetFormStateTest {
     @Test
@@ -40,6 +41,16 @@ class AssetFormStateTest {
         }
         assertThrows(IllegalArgumentException::class.java) {
             AssetFormState("  ", "1", "2026-09-05").toNewAsset()
+        }
+    }
+
+    @Test
+    fun rejectsFuturePurchaseAndWarrantyBeforePurchase() {
+        assertThrows(IllegalArgumentException::class.java) {
+            AssetFormState("Keyboard", "1", LocalDate.now().plusDays(1).toString()).toNewAsset()
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            AssetFormState("Keyboard", "1", "2026-09-05", warrantyEndDate = "2026-09-04").toNewAsset()
         }
     }
 }

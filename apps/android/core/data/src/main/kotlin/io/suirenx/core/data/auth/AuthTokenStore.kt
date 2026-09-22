@@ -7,7 +7,7 @@ import javax.inject.Singleton
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.json.JSONObject
 
-/** One credential per saved server. Old single-server preferences migrate atomically. */
+/** One app-wide login credential, pinned to the server that issued it. */
 @Singleton
 class AuthTokenStore @Inject constructor(@ApplicationContext context: Context) {
     private val preferences = context.getSharedPreferences("auth", Context.MODE_PRIVATE)
@@ -51,8 +51,16 @@ class AuthTokenStore @Inject constructor(@ApplicationContext context: Context) {
 
     @Synchronized fun save(serverUrl: String, username: String, token: String) {
         val stored = accounts()
-        stored.put(serverUrl, JSONObject().put("username", username).put("token", token))
-        persist(stored)
+        check(stored.length() == 0 || stored.has(serverUrl)) { "当前已有登录账号，请先退出后再登录" }
+        persist(JSONObject().put(serverUrl, JSONObject().put("username", username).put("token", token)))
+    }
+
+    @Synchronized fun retainOnly(serverUrl: String?) {
+        val stored = accounts()
+        if (stored.length() <= 1) return
+        val selected = serverUrl?.takeIf(stored::has) ?: stored.keys().asSequence().firstOrNull()
+        val keep = selected?.let { stored.optJSONObject(it)?.let { account -> JSONObject().put(it, account) } } ?: JSONObject()
+        persist(keep)
     }
 
     @Synchronized fun clearFor(serverUrl: String) { val stored = accounts(); stored.remove(serverUrl); persist(stored) }

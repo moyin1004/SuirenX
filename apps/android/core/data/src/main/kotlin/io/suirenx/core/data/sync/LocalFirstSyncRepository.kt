@@ -59,7 +59,7 @@ class LocalFirstSyncRepository @Inject constructor(
         try {
             val url = apiProvider.currentUrl()
             val target = "$url|${tokens.username(apiProvider.currentUrl())}"
-            val token = tokens.tokenFor(url) ?: error("登录已过期，请重新登录")
+            val token = tokens.tokenFor(url) ?: throw LoginRequiredException()
             val api = apiProvider.current()
             val existing = database.syncDao().session()
             if (existing == null || existing.target != target) {
@@ -109,7 +109,8 @@ class LocalFirstSyncRepository @Inject constructor(
         } catch (error: Exception) {
             if (error is CancellationException) throw error
             val message = syncFailureMessage(error)
-            mutableStatus.value = mutableStatus.value.copy(error = message, waitingForNetwork = error is java.net.UnknownHostException || error is java.net.ConnectException, needsLogin = error is retrofit2.HttpException && error.code() == 401)
+            val needsLogin = error is LoginRequiredException || error is retrofit2.HttpException && error.code() == 401
+            mutableStatus.value = mutableStatus.value.copy(error = message, waitingForNetwork = error is java.net.UnknownHostException || error is java.net.ConnectException, needsLogin = needsLogin)
             throw IllegalStateException(message, error)
         } finally {
             mutableStatus.value = mutableStatus.value.copy(syncing = false)
@@ -319,3 +320,5 @@ class LocalFirstSyncRepository @Inject constructor(
     } catch (error: CancellationException) { throw error }
     catch (error: Exception) { Result.failure(error) }
 }
+
+private class LoginRequiredException : IllegalStateException("当前服务器无法验证已登录账号，请先注销账号，再登录后重试")

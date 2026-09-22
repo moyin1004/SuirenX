@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -33,6 +34,34 @@ class AssetsViewModelTest {
 
     @Before fun setUp() = Dispatchers.setMain(dispatcher)
     @After fun tearDown() = Dispatchers.resetMain()
+
+    @Test fun localReadFailureRemainsVisibleWithConflictAndRetryDoesNotUpload() = runTest(dispatcher) {
+        val asset = Asset("a1", "One", 100, LocalDate.now(), AssetStatus.Active, "", 1, 100)
+        val repo = FakeRepository().apply { seed(asset); failList = true }
+        var uploads = 0
+        val sync = object : io.suirenx.core.domain.RemoteSyncRepository {
+            override val status = MutableStateFlow(io.suirenx.core.domain.RemoteSyncStatus(
+                conflicts = listOf(io.suirenx.core.domain.AssetSyncConflict("a1", asset, asset, 1, 2)),
+            ))
+            override suspend fun refreshStatus() = Result.success(Unit)
+            override suspend fun retry(): Result<Unit> { uploads++; return Result.success(Unit) }
+            override suspend fun resolveConflict(assetId: String, resolution: io.suirenx.core.domain.SyncConflictResolution) = Result.success(Unit)
+            override suspend fun resolveExpiryConflict(expiryId: String, resolution: io.suirenx.core.domain.SyncConflictResolution) = Result.success(Unit)
+        }
+        val vm = AssetsViewModel(GetAssetsUseCase(repo), FakeBackends(), AssetChangeNotifier(), remoteSync = sync)
+        advanceUntilIdle()
+        assertEquals("无法读取本机数据，请重试", vm.uiState.value.errorMessage)
+        assertFalse(vm.uiState.value.isLoading)
+        assertEquals(1, vm.uiState.value.syncStatus.conflicts.size)
+
+        repo.failList = false
+        vm.refresh()
+        advanceUntilIdle()
+        assertEquals(null, vm.uiState.value.errorMessage)
+        assertEquals(listOf(asset), vm.uiState.value.assets)
+        assertEquals(1, vm.uiState.value.syncStatus.conflicts.size)
+        assertEquals(0, uploads)
+    }
 
     @Test fun overviewCoversAllAssetsButDailyCostOnlyActive() = runTest(dispatcher) {
         val repo = FakeRepository().apply {
@@ -86,6 +115,46 @@ class AssetsViewModelTest {
         notifier.notifyAssetChanged()
         advanceUntilIdle()
         assertEquals(2, vm.uiState.value.assets.size)
+    }
+
+    @Test fun sortingAndTagFiltersStayLocalAndCanBeCombined() = runTest(dispatcher) {
+        val repo = FakeRepository().apply {
+            seed(Asset("a1", "Desk", 300, LocalDate.of(2026, 1, 1), AssetStatus.Active, "", 10, 30, tags = listOf("工作", "桌面")))
+            seed(Asset("a2", "Camera", 900, LocalDate.of(2026, 2, 1), AssetStatus.Active, "", 20, 45, tags = listOf("旅行")))
+            seed(Asset("a3", "Keyboard", 100, LocalDate.of(2026, 3, 1), AssetStatus.Active, "", 30, 4, tags = listOf("工作", "桌面")))
+        }
+        val vm = AssetsViewModel(GetAssetsUseCase(repo), FakeBackends(), AssetChangeNotifier())
+        advanceUntilIdle()
+        val callsAfterLoad = repo.listCalls
+
+        vm.onSortSelected(AssetSort.Price)
+        vm.toggleTag("工作")
+        vm.toggleTag("桌面")
+
+        assertEquals(listOf("Desk", "Keyboard"), vm.uiState.value.visibleAssets.map { it.name })
+        assertEquals(callsAfterLoad, repo.listCalls)
+        vm.toggleSortDirection()
+        assertEquals(listOf("Keyboard", "Desk"), vm.uiState.value.visibleAssets.map { it.name })
+    }
+
+    @Test fun refreshKeepsExistingAssetsVisibleUntilNewReadCompletes() = runTest(dispatcher) {
+        val asset = Asset("a1", "One", 100, LocalDate.now(), AssetStatus.Active, "", 1, 100)
+        val repo = FakeRepository().apply { seed(asset) }
+        val vm = AssetsViewModel(GetAssetsUseCase(repo), FakeBackends(), AssetChangeNotifier())
+        advanceUntilIdle()
+
+        repo.listPending = CompletableDeferred()
+        vm.refresh()
+        runCurrent()
+
+        assertEquals(listOf(asset), vm.uiState.value.assets)
+        assertFalse(vm.uiState.value.isLoading)
+        assertTrue(vm.uiState.value.isRefreshing)
+
+        repo.listPending?.complete(Unit)
+        advanceUntilIdle()
+        assertFalse(vm.uiState.value.isRefreshing)
+        assertTrue(vm.uiState.value.hasLoaded)
     }
 
     @Test fun switchingSyncServerPreservesLocalListAndFilter() = runTest(dispatcher) {
@@ -178,8 +247,10 @@ class AssetsViewModelTest {
         var statusCalls = 0
         var archiveCalls = 0
         var listCalls = 0
+        var failList = false
         var fail = false
         var pending: CompletableDeferred<Unit>? = null
+        var listPending: CompletableDeferred<Unit>? = null
         private val assets = mutableListOf<Asset>()
 
         fun seed(asset: Asset) { assets += asset }
@@ -191,6 +262,8 @@ class AssetsViewModelTest {
 
         override suspend fun getAssets(status: AssetStatus?, includeArchived: Boolean): Result<List<Asset>> {
             listCalls++
+            listPending?.await()
+            if (failList) return Result.failure(IllegalStateException("read failed"))
             return Result.success(assets.filter { (status == null || it.status == status) && (includeArchived || !it.isArchived) })
         }
 

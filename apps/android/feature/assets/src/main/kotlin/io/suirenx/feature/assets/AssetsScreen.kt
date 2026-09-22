@@ -36,6 +36,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -89,6 +91,10 @@ fun AssetsRoute(
         searching = searching,
         onQueryChange = { query = it },
         onSearch = { searching = !searching; query = "" },
+        onSortSelected = viewModel::onSortSelected,
+        onSortDirectionToggle = viewModel::toggleSortDirection,
+        onTagToggle = viewModel::toggleTag,
+        onClearTags = viewModel::clearTags,
     )
 }
 
@@ -103,6 +109,10 @@ fun AssetsScreen(
     searching: Boolean = false,
     onQueryChange: (String) -> Unit = {},
     onSearch: () -> Unit = {},
+    onSortSelected: (AssetSort) -> Unit = {},
+    onSortDirectionToggle: () -> Unit = {},
+    onTagToggle: (String) -> Unit = {},
+    onClearTags: () -> Unit = {},
 ) {
     val listState = rememberLazyListState()
     val overviewIndex = 1 + (if (searching) 1 else 0)
@@ -130,11 +140,25 @@ fun AssetsScreen(
                         color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
                         Row(Modifier.padding(14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(NumberFormat.getCurrencyInstance(Locale.CHINA).format(state.overview.totalPriceCents / 100.0), fontSize = 18.sp, fontFamily = SuirenNumberFont)
-                            Text("总资产 · ${state.overview.activeCount} 件服役中", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("购入总额 · ${state.overview.activeCount} 件服役中", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
                 FilterChips(state.selectedFilter, onFilterSelected)
+                if (state.availableTags.isNotEmpty()) {
+                    TagFilters(state.availableTags, state.selectedTags, onTagToggle, onClearTags)
+                }
+            }
+        }
+        if (searching || state.visibleAssets.isNotEmpty()) {
+            item {
+                SortControls(
+                    sort = state.sort,
+                    descending = state.sortDescending,
+                    onSortSelected = onSortSelected,
+                    onDirectionToggle = onSortDirectionToggle,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
             }
         }
         item {
@@ -204,13 +228,76 @@ private fun FilterChips(selected: AssetFilter, onSelected: (AssetFilter) -> Unit
 }
 
 @Composable
+private fun TagFilters(
+    tags: List<String>,
+    selectedTags: Set<String>,
+    onToggle: (String) -> Unit,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyRow(
+        modifier = modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (selectedTags.isNotEmpty()) {
+            item {
+                Surface(onClick = onClear, shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {
+                    Text("清除标签", modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp), fontSize = 11.sp)
+                }
+            }
+        }
+        items(tags) { tag ->
+            val selected = tag in selectedTags
+            Surface(
+                onClick = { onToggle(tag) },
+                shape = CircleShape,
+                color = if (selected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.surface,
+                contentColor = if (selected) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outlineVariant),
+            ) { Text(tag, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp), fontSize = 11.sp) }
+        }
+    }
+}
+
+@Composable
+private fun SortControls(
+    sort: AssetSort,
+    descending: Boolean,
+    onSortSelected: (AssetSort) -> Unit,
+    onDirectionToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text("排序", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.size(6.dp))
+        Box {
+            OutlinedButton(onClick = { expanded = true }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)) {
+                Text(sort.label, fontSize = 11.sp)
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                AssetSort.entries.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option.label) },
+                        onClick = { onSortSelected(option); expanded = false },
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.weight(1f))
+        TextButton(onClick = onDirectionToggle) { Text(if (descending) "降序" else "升序", fontSize = 11.sp) }
+    }
+}
+
+@Composable
 private fun AssetOverviewCard(overview: AssetOverview, modifier: Modifier = Modifier, longestHeldDays: Int = 0) {
     val currency = NumberFormat.getCurrencyInstance(Locale.CHINA).apply { minimumFractionDigits = 0 }
     Surface(modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
         Column(Modifier.padding(18.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                Text("当前总资产", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.weight(1f))
+                Text("未归档资产购入总额", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.weight(1f))
                 Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.size(30.dp)) {
                     Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }
                 }
@@ -221,7 +308,7 @@ private fun AssetOverviewCard(overview: AssetOverview, modifier: Modifier = Modi
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Row(Modifier.fillMaxWidth().padding(top = 14.dp).height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OverviewMetric("日均成本", currency.format(overview.totalDailyCostCents / 100.0), Modifier.weight(1f))
+                OverviewMetric("服役中日均成本", currency.format(overview.totalDailyCostCents / 100.0), Modifier.weight(1f))
                 VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 OverviewMetric("服役中", "${overview.activeCount}", Modifier.weight(1f))
                 VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -341,9 +428,9 @@ private fun LoadingState(modifier: Modifier = Modifier) {
 private fun ErrorState(message: String, onRetry: () -> Unit, modifier: Modifier = Modifier) {
     Surface(modifier.padding(horizontal = 16.dp).fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("同步没有完成", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            Text("无法读取本机数据", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
             Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-            Button(onClick = onRetry) { Text("重新同步") }
+            Button(onClick = onRetry) { Text("重试读取") }
         }
     }
 }

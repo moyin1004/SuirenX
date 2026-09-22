@@ -19,12 +19,16 @@ import kotlinx.coroutines.flow.collect
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
-/**
- * The settings tab: backend address management without any gate or back stack.
- */
+enum class SettingsEntry(internal val page: String) {
+    Home("home"), Sync("sync"), Conflicts("conflicts"),
+}
+
+/** Settings can be opened from its tab or a contextual problem entry. */
 @Composable
 fun SettingsRoute(
     modifier: Modifier = Modifier,
+    entry: SettingsEntry = SettingsEntry.Home,
+    onExit: (() -> Unit)? = null,
     viewModel: BackendViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -103,5 +107,7 @@ fun SettingsRoute(
         onConfirmMigration = viewModel::confirmMigration,
         onCancelMigration = viewModel::cancelMigration,
         modifier = modifier,
+        entry = entry,
+        onExit = onExit,
     )
 }

@@ -86,11 +86,15 @@ repository boundaries.
   conflict state. Retain local records and tombstones; same-ID differences use
   explicit conflict resolution. Saving/selecting a server or logging in alone
   never starts uploading. Legacy cache enrollment remains account-scoped.
-- Server configuration owns its account session. Store credentials per normalized
-  server URL; logging into or out of a non-current server never changes the
-  active sync account. Editing a URL replaces that entry and clears its old
-  credential; renaming preserves it. Health probes never send credentials,
-  save settings, or enable sync. Probe success means reachability only.
+- Account and server-address settings are independent. The app has at most one
+  signed-in account; its credential remains bound to the normalized server URL
+  that issued it and is never sent to a different address. Changing, selecting,
+  or removing a saved address must not silently clear account credentials.
+  Adding or changing an address requires a successful health probe of that exact
+  address. Health probes never send credentials, save settings, or enable sync;
+  success means reachability only. If sync authentication fails or the account
+  is absent on the selected server, tell the user to explicitly log out before
+  signing in again; do not silently switch or clear accounts.
 - Expiry item location is optional on both Android and the sync API; never invent
   placeholder business values to satisfy mismatched server validation.
 - Deletion is explicit and separate from archive: remove the visible local row,

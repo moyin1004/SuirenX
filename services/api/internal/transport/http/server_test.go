@@ -11,6 +11,8 @@ import (
 	"testing"
 )
 
+const testJWTSecret = "test-secret-with-at-least-32-bytes-long"
+
 func request(s *Server, method, path, body string) *ut.ResponseRecorder {
 	return ut.PerformRequest(s.h.Engine, method, path,
 		&ut.Body{Body: strings.NewReader(body), Len: len(body)},
@@ -34,7 +36,7 @@ func TestM5AccountIsolationVersionedSyncAndIdempotency(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = sqlDB.Close() })
-	s := NewServer(":0", service.NewAssetService(repository.NewGormAssetRepository(db)), WithM5(db))
+	s := NewServer(":0", service.NewAssetService(repository.NewGormAssetRepository(db)), WithM5(db, testJWTSecret))
 
 	for _, password := range []string{"short", strings.Repeat("a", 73), strings.Repeat("中", 25)} {
 		body, _ := json.Marshal(map[string]string{"username": "invalid-password", "password": password})
@@ -119,7 +121,7 @@ func TestM5AccountIsolationVersionedSyncAndIdempotency(t *testing.T) {
 		t.Fatalf("logout: %d %s", logout.Code, logout.Body)
 	}
 	afterLogout := requestBearer(s, "POST", "/api/v1/sync/assets", `{"cursor":0,"idempotency_key":"after-logout","changes":[]}`, alice)
-	if afterLogout.Code != 401 {
-		t.Fatalf("revoked token: %d %s", afterLogout.Code, afterLogout.Body)
+	if afterLogout.Code != 200 {
+		t.Fatalf("stateless jwt after logout: %d %s", afterLogout.Code, afterLogout.Body)
 	}
 }

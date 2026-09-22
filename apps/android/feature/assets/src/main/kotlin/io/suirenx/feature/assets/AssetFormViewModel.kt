@@ -35,6 +35,22 @@ data class AssetFormUiState(
     val warrantyEndDate: String = "",
     val notes: String = "",
     val tags: String = "",
+    val isDirty: Boolean = false,
+)
+
+private data class AssetFormDraft(
+    val name: String,
+    val price: String,
+    val purchaseDate: String,
+    val iconKey: String,
+    val purchaseChannel: String,
+    val warrantyEndDate: String,
+    val notes: String,
+    val tags: String,
+)
+
+private fun AssetFormUiState.draft() = AssetFormDraft(
+    name, price, purchaseDate, iconKey, purchaseChannel, warrantyEndDate, notes, tags,
 )
 
 /**
@@ -59,6 +75,7 @@ class AssetFormViewModel @Inject constructor(
 
     private var saveJob: Job? = null
     private val assetId: String? = savedStateHandle.get<String>("id")?.takeIf { it.isNotBlank() }
+    private var baseline = AssetFormUiState().draft()
 
     init {
         val id = assetId
@@ -68,7 +85,7 @@ class AssetFormViewModel @Inject constructor(
                 getAsset(id).fold(
                     onSuccess = { asset ->
                         uiState.update {
-                            it.copy(
+                            val loaded = it.copy(
                                 isLoading = false,
                                 name = asset.name,
                                 price = BigDecimal(asset.priceCents).movePointLeft(2).toPlainString(),
@@ -79,6 +96,8 @@ class AssetFormViewModel @Inject constructor(
                                 notes = asset.notes,
                                 tags = asset.tags.joinToString(", "),
                             )
+                            baseline = loaded.draft()
+                            loaded.copy(isDirty = false)
                         }
                     },
                     onFailure = {
@@ -107,7 +126,9 @@ class AssetFormViewModel @Inject constructor(
 
     private fun update(transform: (AssetFormUiState) -> AssetFormUiState) {
         uiState.update { state ->
-            if (state.isSaving || state.isLoading) state else transform(state)
+            if (state.isSaving || state.isLoading) state else transform(state).let { next ->
+                next.copy(isDirty = next.draft() != baseline)
+            }
         }
     }
 

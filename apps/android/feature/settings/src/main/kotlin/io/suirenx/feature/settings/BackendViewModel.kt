@@ -40,6 +40,7 @@ data class BackendUiState(
     val accounts: Map<String, AuthState> = emptyMap(),
     val testingConnection: Boolean = false,
     val connectionTest: String? = null,
+    val connectionTestAddress: String? = null,
     val connectionTestFailed: Boolean = false,
     val name: String = "",
     val busy: Boolean = false,
@@ -150,28 +151,30 @@ class BackendViewModel @Inject constructor(
 
     fun onAddressChanged(value: String) {
         connectionTestJob?.cancel()
-        uiState.update { it.copy(address = value, error = null, testingConnection = false, connectionTest = null) }
+        uiState.update { it.copy(address = value, error = null, testingConnection = false, connectionTest = null, connectionTestAddress = null, connectionTestFailed = false) }
     }
     fun openServer(url: String) {
         connectionTestJob?.cancel()
         val server = uiState.value.settings?.servers?.find { it.url == url }
         uiState.update { it.copy(inspectedServerUrl = url, editingServerUrl = url,
             address = url, name = server?.name.orEmpty(), authUsername = it.accounts[url]?.username.orEmpty(), authPassword = "", authError = null,
-            error = null, connectionTest = null, testingConnection = false) }
+            error = null, connectionTest = null, connectionTestAddress = null, connectionTestFailed = false, testingConnection = false) }
     }
     fun editServer(url: String?) {
         connectionTestJob?.cancel()
         val server = uiState.value.settings?.servers?.find { it.url == url }
         uiState.update { it.copy(editingServerUrl = url, address = server?.url.orEmpty(), name = server?.name.orEmpty(),
-            error = null, connectionTest = null, testingConnection = false) }
+            error = null, connectionTest = null, connectionTestAddress = null, connectionTestFailed = false, testingConnection = false) }
     }
     fun testConnection(address: String) {
         if (uiState.value.testingConnection) return
-        uiState.update { it.copy(testingConnection = true, connectionTest = null) }
+        val testedAddress = address.trim()
+        uiState.update { it.copy(testingConnection = true, connectionTest = null, connectionTestAddress = null, connectionTestFailed = false) }
         connectionTestJob = viewModelScope.launch {
-            repository.testConnection(address).fold(
-                onSuccess = { result -> uiState.update { it.copy(testingConnection = false, connectionTest = result, connectionTestFailed = false) } },
-                onFailure = { error -> uiState.update { it.copy(testingConnection = false, connectionTest = error.message, connectionTestFailed = true) } },
+            repository.testConnection(testedAddress).fold(
+                onSuccess = { result -> uiState.update { current -> current.copy(testingConnection = false, connectionTest = result,
+                    connectionTestAddress = testedAddress.takeIf { current.address.trim() == testedAddress }, connectionTestFailed = false) } },
+                onFailure = { error -> uiState.update { it.copy(testingConnection = false, connectionTest = error.message, connectionTestAddress = null, connectionTestFailed = true) } },
             )
         }
     }
@@ -180,11 +183,18 @@ class BackendViewModel @Inject constructor(
         val state = uiState.value
         perform {
             val editingCurrent = state.editingServerUrl != null && state.editingServerUrl == state.settings?.activeUrl
-            if (editingCurrent && state.address != state.editingServerUrl) sync.cancelCurrent()
+            val addressChanged = state.editingServerUrl != null && state.address.trim() != state.editingServerUrl
+            val requiresTest = state.editingServerUrl == null || addressChanged
+            if (requiresTest && state.connectionTestAddress != state.address.trim()) {
+                return@perform Result.failure(IllegalStateException("请先测试当前服务器地址，连接成功后才能保存"))
+            }
+            if (editingCurrent && addressChanged) {
+                sync.cancelCurrent()
+                modes.select(StorageMode.Local).getOrThrow()
+            }
             repository.saveServer(state.editingServerUrl, state.address, state.name).mapCatching { url ->
-                if (editingCurrent && url != state.editingServerUrl) modes.select(StorageMode.Local).getOrThrow()
                 authRepository.initialize().getOrThrow()
-                uiState.update { it.copy(inspectedServerUrl = url, editingServerUrl = url, address = url, serverSavedVersion = it.serverSavedVersion + 1, connectionTest = null) }
+                uiState.update { it.copy(inspectedServerUrl = url, editingServerUrl = url, address = url, serverSavedVersion = it.serverSavedVersion + 1, connectionTest = null, connectionTestAddress = null) }
             }
         }
     }
@@ -286,15 +296,14 @@ class BackendViewModel @Inject constructor(
     }
     fun login() = authenticate { url, username, password -> authRepository.loginAt(url, username, password) }
     fun logout() {
-        val target = uiState.value.inspectedServerUrl ?: uiState.value.settings?.activeUrl ?: return
+        if (uiState.value.accounts.isEmpty() && !uiState.value.auth.authenticated) return
         if (uiState.value.authBusy || uiState.value.busy || uiState.value.migrationBusy) return
         uiState.update { it.copy(authBusy = true, authError = null) }
         viewModelScope.launch {
             guarded {
-                if (target == repository.settings.value?.activeUrl) {
-                    sync.cancelCurrent(); modes.select(StorageMode.Local).getOrThrow()
-                }
-                authRepository.logoutAt(target)
+                sync.cancelCurrent()
+                modes.select(StorageMode.Local).getOrThrow()
+                authRepository.logout()
             }.fold(
                 onSuccess = { uiState.update { it.copy(authBusy = false, authUsername = "", authPassword = "", authError = null,
                     error = null, migrationError = null, migrationPreview = null, migrationResult = null) } },
@@ -307,6 +316,10 @@ class BackendViewModel @Inject constructor(
         val state = uiState.value
         val target = state.inspectedServerUrl ?: state.settings?.activeUrl ?: return
         if (state.authBusy || state.busy) return
+        if (state.auth.authenticated || state.accounts.isNotEmpty()) {
+            uiState.update { it.copy(authError = "当前已有登录账号，请先退出当前账号后再登录") }
+            return
+        }
         accountValidation(state.authUsername, state.authPassword)?.let { reason ->
             uiState.update { it.copy(authError = reason) }; return
         }

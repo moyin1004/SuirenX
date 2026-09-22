@@ -18,6 +18,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.util.concurrent.ConcurrentHashMap
 
 @Serializable
 private data class StoredServer(val url: String, val name: String)
@@ -29,11 +30,11 @@ private data class StoredSettings(val servers: List<StoredServer>, val activeUrl
 class LocalBackendRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val json: Json,
-    private val tokens: io.suirenx.core.data.auth.AuthTokenStore,
 ) : BackendRepository {
     private val mutableSettings = MutableStateFlow<BackendSettings?>(null)
     override val settings: StateFlow<BackendSettings?> = mutableSettings
     private val mutex = Mutex()
+    private val successfullyTested = ConcurrentHashMap.newKeySet<String>()
 
     private val preferences by lazy { context.getSharedPreferences("backends", Context.MODE_PRIVATE) }
 
@@ -48,8 +49,10 @@ class LocalBackendRepository @Inject constructor(
         val server = BackendServer(url, name.trim().ifEmpty { url })
         val servers = current.servers.toMutableList()
         val index = servers.indexOfFirst { it.url == url }
+        if (index < 0) require(successfullyTested.contains(url)) { "请先测试服务器地址，连接成功后才能添加" }
         if (index < 0) servers.add(server) else servers[index] = server
         persist(BackendSettings(servers, url))
+        if (index < 0) successfullyTested.remove(url)
     }
 
     override suspend fun saveServer(originalUrl: String?, address: String, name: String): Result<String> {
@@ -60,10 +63,13 @@ class LocalBackendRepository @Inject constructor(
             val current = requireNotNull(settings.value)
             if (originalUrl != null) require(current.servers.any { it.url == originalUrl }) { "该服务器已删除" }
             require(current.servers.none { it.url == url && it.url != originalUrl }) { "该地址已存在，请编辑已有服务器" }
+            if (originalUrl == null || originalUrl != url) {
+                require(successfullyTested.contains(url)) { "请先测试服务器地址，连接成功后才能添加" }
+            }
             val server = BackendServer(url, name.trim().ifEmpty { url })
             val servers = if (originalUrl == null) current.servers + server else current.servers.map { if (it.url == originalUrl) server else it }
-            if (originalUrl != null && originalUrl != url) tokens.clearFor(originalUrl)
             persist(BackendSettings(servers, if (originalUrl != null && current.activeUrl == originalUrl) url else current.activeUrl))
+            if (originalUrl == null || originalUrl != url) successfullyTested.remove(url)
             savedUrl = url
         }.map { savedUrl }
     }
@@ -71,6 +77,7 @@ class LocalBackendRepository @Inject constructor(
     override suspend fun testConnection(address: String): Result<String> = try {
         withContext(Dispatchers.IO) {
             val url = normalizeBackendAddress(address, BuildConfig.DEBUG)
+            successfullyTested.remove(url)
             // A probe never sends credentials or follows a redirect to another service.
             val client = okhttp3.OkHttpClient.Builder().connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
                 .callTimeout(8, java.util.concurrent.TimeUnit.SECONDS).followRedirects(false).build()
@@ -80,11 +87,13 @@ class LocalBackendRepository @Inject constructor(
                 val healthy = runCatching { kotlinx.serialization.json.Json.parseToJsonElement(body)
                     .let { it as? kotlinx.serialization.json.JsonObject }?.get("status")?.toString() == "\"ok\"" }.getOrDefault(false)
                 check(healthy) { "服务有响应，但不是预期的健康接口" }
+                successfullyTested.add(url)
                 Result.success("服务可达；账号登录和数据同步仍需单独验证")
             }
         }
     } catch (error: CancellationException) { throw error }
     catch (error: Exception) {
+        runCatching { normalizeBackendAddress(address, BuildConfig.DEBUG) }.getOrNull()?.let(successfullyTested::remove)
         val message = when (error) {
             is javax.net.ssl.SSLException -> "证书验证失败，请检查 HTTPS 配置"
             is java.net.SocketTimeoutException -> "连接超时，请检查地址和网络"
@@ -105,8 +114,8 @@ class LocalBackendRepository @Inject constructor(
         loadIfNeeded()
         val current = requireNotNull(settings.value)
         require(current.servers.any { it.url == url }) { "该地址已不存在" }
-        // Clear only this connection's credentials; local data and sync binding are untouched.
-        tokens.clearFor(url)
+        // Address configuration is independent from account login; removing a
+        // saved address must not silently log the user out.
         persist(current.copy(
             servers = current.servers.filterNot { it.url == url },
             activeUrl = current.activeUrl.takeUnless { it == url },

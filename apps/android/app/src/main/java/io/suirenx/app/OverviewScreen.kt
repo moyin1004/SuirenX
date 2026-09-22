@@ -22,7 +22,6 @@ import io.suirenx.core.ui.theme.SuirenNumberFont
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.suirenx.core.ui.icon.MaterialSymbol
 import io.suirenx.feature.assets.AssetsUiState
@@ -37,12 +36,17 @@ import java.text.NumberFormat
 import java.util.Locale
 
 @Composable
-internal fun OverviewRoute(onAssets: () -> Unit, onSupplies: () -> Unit, modifier: Modifier = Modifier) {
-    val assetsViewModel: AssetsViewModel = hiltViewModel()
-    val expiryViewModel: ExpiryViewModel = hiltViewModel()
+internal fun OverviewRoute(
+    assetsViewModel: AssetsViewModel,
+    expiryViewModel: ExpiryViewModel,
+    onAssets: () -> Unit,
+    onSupplies: () -> Unit,
+    onSync: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val assets by assetsViewModel.uiState.collectAsStateWithLifecycle()
     val expiry by expiryViewModel.uiState.collectAsStateWithLifecycle()
-    OverviewScreen(assets, expiry, onAssets, onSupplies,
+    OverviewScreen(assets, expiry, onAssets, onSupplies, onSync,
         onRefresh = { assetsViewModel.refresh(); expiryViewModel.refresh() }, modifier = modifier)
 }
 
@@ -52,6 +56,7 @@ private fun OverviewScreen(
     expiry: ExpiryUiState,
     onAssets: () -> Unit,
     onSupplies: () -> Unit,
+    onSync: (Boolean) -> Unit,
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -75,12 +80,12 @@ private fun OverviewScreen(
             OverviewCard(onClick = onAssets) {
                 OverviewHeading("资产总览", SuirenIcons.AssetBox,
                     when { assets.isLoading -> "读取中…"; assets.errorMessage != null -> "暂时无法读取"; else -> currency.format(assets.overview.totalPriceCents / 100.0) },
-                    if (assets.isLoading || assets.errorMessage != null) "" else "总资产")
+                    if (assets.isLoading || assets.errorMessage != null) "" else "购入总额")
                 Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     SummaryValue("服役中", if (assets.isLoading || assets.errorMessage != null) "—" else "${assets.overview.activeCount}", Modifier.weight(1f))
-                    SummaryValue("日均成本", if (assets.isLoading || assets.errorMessage != null) "—" else currency.format(assets.overview.totalDailyCostCents / 100.0), Modifier.weight(1f))
+                    SummaryValue("服役中日均成本", if (assets.isLoading || assets.errorMessage != null) "—" else currency.format(assets.overview.totalDailyCostCents / 100.0), Modifier.weight(1f))
                 }
-                OverviewFooter("查看全部资产", if (assets.isLoading || assets.errorMessage != null) "" else "${assets.overview.totalCount} 项记录")
+                OverviewFooter("查看全部资产", if (assets.isLoading || assets.errorMessage != null) "" else "${assets.overview.totalCount} 项未归档")
             }
             OverviewCard(onClick = onSupplies) {
                 OverviewHeading("用品 / 保质期", Icons.Default.Warning,
@@ -93,8 +98,18 @@ private fun OverviewScreen(
         if (assets.errorMessage != null || expiry.error != null) {
             Text("部分数据未能加载，请点击右上角刷新重试。", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
         }
-        if (assets.syncStatus.pendingOperations > 0 || assets.syncStatus.conflicts.isNotEmpty()) {
-            TextButton(onClick = onAssets) { Text("有数据待同步或需要确认 · 前往资产查看") }
+        val status = assets.syncStatus
+        val conflicts = status.conflicts.size + status.expiryConflicts.size
+        val notice = when {
+            conflicts > 0 -> "$conflicts 项冲突待处理 · 处理冲突"
+            status.needsLogin -> "账号需要验证 · 查看同步状态"
+            status.error != null -> "同步未完成 · 查看同步状态"
+            status.waitingForNetwork -> "正在等待网络 · 查看同步状态"
+            status.pendingOperations > 0 -> "${status.pendingOperations} 项修改待发送 · 查看同步状态"
+            else -> null
+        }
+        if (notice != null) {
+            TextButton(onClick = { onSync(conflicts > 0) }) { Text(notice) }
         }
     }
 }
@@ -151,6 +166,6 @@ private fun OverviewFooter(label: String, detail: String) {
 @Composable
 private fun OverviewPreview() {
     SuirenXTheme {
-        OverviewScreen(AssetsUiState(isLoading = false), ExpiryUiState(loading = false), {}, {}, {})
+        OverviewScreen(AssetsUiState(isLoading = false), ExpiryUiState(loading = false), {}, {}, {}, {})
     }
 }

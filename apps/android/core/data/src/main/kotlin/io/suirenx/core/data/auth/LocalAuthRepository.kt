@@ -38,9 +38,11 @@ class LocalAuthRepository @Inject constructor(
 
     override suspend fun initialize(): Result<Unit> = withContext(Dispatchers.IO) {
         val url = backends.settings.value?.activeUrl
-        val loggedIn = url != null && tokens.tokenFor(url) != null
-        accounts.value = tokens.savedAccounts().mapValues { AuthState(it.value, true) }
-        mutableState.value = AuthState(if (loggedIn) tokens.username(url) else "", loggedIn)
+        val saved = tokens.savedAccounts()
+        tokens.retainOnly(url?.takeIf(saved::containsKey))
+        val account = tokens.savedAccounts().entries.firstOrNull()
+        accounts.value = account?.let { mapOf(it.key to AuthState(it.value, true)) }.orEmpty()
+        mutableState.value = account?.let { AuthState(it.value, true) } ?: AuthState("", false)
         Result.success(Unit)
     }
 
@@ -54,7 +56,10 @@ class LocalAuthRepository @Inject constructor(
     override suspend fun login(username: String, password: String): Result<Unit> = authenticate(activeUrl(), username, password, AuthApi::login, true)
     override suspend fun loginAt(url: String, username: String, password: String): Result<Unit> = authenticate(url, username, password, AuthApi::login, false)
 
-    override suspend fun logout(): Result<Unit> = logoutAt(activeUrl())
+    override suspend fun logout(): Result<Unit> {
+        val url = tokens.savedAccounts().keys.firstOrNull() ?: return Result.success(Unit)
+        return logoutAt(url)
+    }
     override suspend fun logoutAt(url: String): Result<Unit> = attempt {
         mutex.withLock {
             try {
@@ -76,6 +81,7 @@ class LocalAuthRepository @Inject constructor(
         mutex.withLock {
         val normalized = username.trim()
         require(normalized.isNotEmpty() && password.isNotEmpty()) { "请输入账号和密码" }
+        check(tokens.savedAccounts().isEmpty()) { "当前已有登录账号，请先退出后再登录" }
         val knownAtStart = backends.settings.value?.servers?.any { it.url == url } == true
         val response = api(url).call(AuthRequest(normalized, password))
         require(response.tokenType.equals("Bearer", ignoreCase = true) && response.accessToken.isNotBlank()) { "服务器返回了无效登录凭据" }

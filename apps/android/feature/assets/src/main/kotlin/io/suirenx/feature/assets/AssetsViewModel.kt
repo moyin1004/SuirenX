@@ -30,6 +30,13 @@ enum class AssetFilter(val label: String, val status: AssetStatus?) {
     Archived("已归档", null),
 }
 
+enum class AssetSort(val label: String) {
+    PurchaseDate("购买日期"),
+    Price("购买金额"),
+    DailyCost("日均成本"),
+    HeldDays("持有天数"),
+}
+
 data class AssetOverview(
     val totalPriceCents: Long,
     val totalDailyCostCents: Long,
@@ -43,8 +50,13 @@ data class AssetsUiState(
     val assets: List<Asset> = emptyList(),
     val selectedFilter: AssetFilter = AssetFilter.All,
     val isLoading: Boolean = true,
+    val isRefreshing: Boolean = false,
+    val hasLoaded: Boolean = false,
     val errorMessage: String? = null,
     val syncStatus: RemoteSyncStatus = RemoteSyncStatus(),
+    val sort: AssetSort = AssetSort.PurchaseDate,
+    val sortDescending: Boolean = true,
+    val selectedTags: Set<String> = emptySet(),
 ) {
     private val currentAssets: List<Asset> get() = assets.filterNot { it.isArchived }
 
@@ -58,11 +70,22 @@ data class AssetsUiState(
             retiredCount = currentAssets.count { it.status == AssetStatus.Retired },
         )
 
+    val availableTags: List<String>
+        get() = assets.asSequence().flatMap { it.tags.asSequence() }.filter(String::isNotBlank).distinct().sorted().toList()
+
     val visibleAssets: List<Asset>
-        get() = when (selectedFilter) {
+        get() = (when (selectedFilter) {
             AssetFilter.Archived -> assets.filter { it.isArchived }
             AssetFilter.All -> currentAssets
             else -> currentAssets.filter { it.status == selectedFilter.status }
+        }).filter { asset -> selectedTags.all { it in asset.tags } }.let { filtered ->
+            val comparator = when (sort) {
+                AssetSort.PurchaseDate -> compareBy<Asset> { it.purchaseDate }
+                AssetSort.Price -> compareBy { it.priceCents }
+                AssetSort.DailyCost -> compareBy { it.dailyCostCents }
+                AssetSort.HeldDays -> compareBy { it.heldDays }
+            }
+            if (sortDescending) filtered.sortedWith(comparator.reversed()) else filtered.sortedWith(comparator)
         }
 }
 
@@ -98,23 +121,36 @@ class AssetsViewModel @Inject constructor(
         uiState.update { it.copy(selectedFilter = filter) }
     }
 
+    fun onSortSelected(sort: AssetSort) = uiState.update { it.copy(sort = sort) }
+    fun toggleSortDirection() = uiState.update { it.copy(sortDescending = !it.sortDescending) }
+    fun toggleTag(tag: String) = uiState.update {
+        it.copy(selectedTags = if (tag in it.selectedTags) it.selectedTags - tag else it.selectedTags + tag)
+    }
+    fun clearTags() = uiState.update { it.copy(selectedTags = emptySet()) }
+
     fun refresh() {
         refreshJob?.cancel()
         refreshJob = viewModelScope.launch {
-            uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            uiState.update { current ->
+                current.copy(
+                    // Keep already-rendered data stable during background refresh.
+                    isLoading = !current.hasLoaded,
+                    isRefreshing = true,
+                    errorMessage = null,
+                )
+            }
             val result = getAssets(null, includeArchived = true)
             ensureActive()
             result.fold(
                 onSuccess = { assets ->
-                    uiState.update { it.copy(assets = assets, isLoading = false) }
+                    uiState.update { it.copy(assets = assets, isLoading = false, isRefreshing = false, hasLoaded = true) }
                 },
                 onFailure = {
                     uiState.update {
                         it.copy(
                             isLoading = false,
-                            errorMessage = if (remoteSync.status.value.conflicts.isNotEmpty()) null else {
-                                "无法读取本机数据，请重试"
-                            },
+                            isRefreshing = false,
+                            errorMessage = "无法读取本机数据，请重试",
                         )
                     }
                 },

@@ -37,11 +37,13 @@ internal fun AssetFormState.toNewAsset(): NewAsset {
     } catch (_: DateTimeParseException) {
         throw IllegalArgumentException("请输入有效日期，格式为 YYYY-MM-DD")
     }
+    require(!date.isAfter(LocalDate.now())) { "购买日期不能在未来" }
     require(notes.length <= 2000) { "备注不能超过 2000 个字符" }
     val normalizedTags = tags.split(',').map(String::trim).filter(String::isNotEmpty).distinct()
     require(normalizedTags.size <= 20 && normalizedTags.all { it.length <= 30 }) { "标签最多 20 个，每个不超过 30 个字符" }
-    val warranty = warrantyEndDate.trim().takeIf(String::isNotEmpty)?.also {
-        try { LocalDate.parse(it) } catch (_: Exception) { throw IllegalArgumentException("请输入有效保修截止日，格式为 YYYY-MM-DD") }
+    val warranty = warrantyEndDate.trim().takeIf(String::isNotEmpty)?.let { value ->
+        try { LocalDate.parse(value) } catch (_: Exception) { throw IllegalArgumentException("请输入有效保修截止日，格式为 YYYY-MM-DD") }
     }
-    return NewAsset(name.trim(), cents, date, iconKey, purchaseChannel.trim().ifEmpty { null }, warranty?.let(LocalDate::parse), notes.trim(), normalizedTags)
+    require(warranty == null || !warranty.isBefore(date)) { "保修截止日不能早于购买日期" }
+    return NewAsset(name.trim(), cents, date, iconKey, purchaseChannel.trim().ifEmpty { null }, warranty, notes.trim(), normalizedTags)
 }

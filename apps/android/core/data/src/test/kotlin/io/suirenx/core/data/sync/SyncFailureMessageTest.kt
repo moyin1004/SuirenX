@@ -8,6 +8,13 @@ import retrofit2.HttpException
 import retrofit2.Response
 
 class SyncFailureMessageTest {
+    @Test fun unauthorizedSyncPromptsExplicitLogoutBeforeLogin() {
+        val response = Response.error<Unit>(401, "".toResponseBody("application/json".toMediaType()))
+        val message = syncFailureMessage(HttpException(response))
+        assertTrue(message.contains("无法验证已登录账号"))
+        assertTrue(message.contains("先注销账号，再登录"))
+    }
+
     @Test fun badRequestExplainsPreservedBatchAndFieldReason() {
         val response = Response.error<Unit>(400, """{"error":"invalid sync request: expiry[0] has invalid fields"}""".toResponseBody("application/json".toMediaType()))
         val message = syncFailureMessage(HttpException(response))

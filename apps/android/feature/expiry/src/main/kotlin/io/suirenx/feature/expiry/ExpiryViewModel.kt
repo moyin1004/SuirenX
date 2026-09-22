@@ -31,6 +31,22 @@ data class ExpiryEditorState(
     val location: String = "",
     val notes: String = "",
     val error: String? = null,
+    val isDirty: Boolean = false,
+)
+
+private data class ExpiryEditorDraft(
+    val id: String?,
+    val name: String,
+    val category: String,
+    val packageExpiryDate: String,
+    val openedDate: String,
+    val openedValidityDays: String,
+    val location: String,
+    val notes: String,
+)
+
+private fun ExpiryEditorState.draft() = ExpiryEditorDraft(
+    id, name, category, packageExpiryDate, openedDate, openedValidityDays, location, notes,
 )
 
 data class ExpiryUiState(
@@ -40,7 +56,10 @@ data class ExpiryUiState(
     val filter: ExpiryBucket? = null,
     val isArchivedFilter: Boolean = false,
     val loading: Boolean = true,
+    val refreshing: Boolean = false,
+    val hasLoaded: Boolean = false,
     val error: String? = null,
+    val query: String = "",
     val editor: ExpiryEditorState? = null,
     val detail: ExpiryItem? = null,
     val busy: Boolean = false,
@@ -53,6 +72,8 @@ data class ExpiryUiState(
         if (isArchivedFilter) item.archivedAt != null
         else item.archivedAt == null && (filter == null || item.bucket(LocalDate.now(), soonDays) == filter ||
             (filter == ExpiryBucket.ExpiringSoon && item.bucket(LocalDate.now(), soonDays) == ExpiryBucket.DueToday))
+    }.filter { item ->
+        query.isBlank() || listOf(item.name, item.category, item.location).any { value -> value.contains(query, ignoreCase = true) }
     }.sortedWith(compareBy<ExpiryItem> { it.bucket(LocalDate.now(), soonDays).ordinal }.thenBy { it.actualExpiryDate })
 }
 
@@ -66,6 +87,7 @@ class ExpiryViewModel @Inject constructor(
 ) : ViewModel() {
     val uiState: StateFlow<ExpiryUiState>
         field = MutableStateFlow(ExpiryUiState())
+    private var editorBaseline: ExpiryEditorDraft? = null
 
     init {
         viewModelScope.launch {
@@ -84,18 +106,34 @@ class ExpiryViewModel @Inject constructor(
 
     fun refresh() {
         viewModelScope.launch {
-            uiState.update { it.copy(loading = true, error = null) }
+            uiState.update { current ->
+                current.copy(
+                    // Keep the current list visible while a page refresh is in flight.
+                    loading = !current.hasLoaded,
+                    refreshing = true,
+                    error = null,
+                )
+            }
             repository.list(includeArchived = true).fold(
-                onSuccess = { items -> uiState.update { it.copy(items = items, loading = false) } },
-                onFailure = { error -> uiState.update { it.copy(loading = false, error = error.message ?: "无法读取用品") } },
+                onSuccess = { items -> uiState.update { it.copy(items = items, loading = false, refreshing = false, hasLoaded = true) } },
+                onFailure = { error -> uiState.update { it.copy(loading = false, refreshing = false, error = error.message ?: "无法读取用品") } },
             )
             remoteSync.refreshStatus()
         }
     }
     fun selectFilter(filter: ExpiryBucket?) = uiState.update { it.copy(filter = filter, isArchivedFilter = false) }
     fun selectArchived() = uiState.update { it.copy(isArchivedFilter = true, filter = null) }
-    fun openNew() = uiState.update { it.copy(editor = ExpiryEditorState()) }
-    fun openEdit(item: ExpiryItem) = uiState.update { it.copy(detail = null, editor = ExpiryEditorState(item.id, item.name, item.category, item.packageExpiryDate.toString(), item.openedDate?.toString().orEmpty(), item.openedValidityDays?.toString().orEmpty(), item.location, item.notes)) }
+    fun setQuery(query: String) = uiState.update { it.copy(query = query) }
+    fun openNew() {
+        val editor = ExpiryEditorState()
+        editorBaseline = editor.draft()
+        uiState.update { it.copy(editor = editor) }
+    }
+    fun openEdit(item: ExpiryItem) {
+        val editor = ExpiryEditorState(item.id, item.name, item.category, item.packageExpiryDate.toString(), item.openedDate?.toString().orEmpty(), item.openedValidityDays?.toString().orEmpty(), item.location, item.notes)
+        editorBaseline = editor.draft()
+        uiState.update { it.copy(detail = null, editor = editor) }
+    }
     fun closeEditor() = uiState.update { it.copy(editor = null) }
     fun openDetail(item: ExpiryItem) = uiState.update { it.copy(detail = item) }
     fun closeDetail() = uiState.update { it.copy(detail = null) }
@@ -118,6 +156,7 @@ class ExpiryViewModel @Inject constructor(
             openedDays = editor.openedValidityDays.trim().takeIf(String::isNotEmpty)?.toInt()?.also { require(it > 0) }
             require((openedDate == null) == (openedDays == null)) { "开封日与开封后有效天数需要成对填写" }
             require(openedDate == null || !openedDate.isAfter(LocalDate.now())) { "开封日不能在未来" }
+            require(openedDate == null || !openedDate.isAfter(packageDate)) { "开封日不能晚于包装到期日" }
             require(editor.notes.length <= 2000) { "备注不能超过 2000 个字符" }
         } catch (_: Exception) {
             uiState.update { it.copy(editor = editor.copy(error = "请检查名称、日期和开封期限")) }
@@ -178,5 +217,12 @@ class ExpiryViewModel @Inject constructor(
             )
         }
     }
-    private fun edit(transform: (ExpiryEditorState) -> ExpiryEditorState) { uiState.value.editor?.let { current -> uiState.update { it.copy(editor = transform(current)) } } }
+    private fun edit(transform: (ExpiryEditorState) -> ExpiryEditorState) {
+        uiState.value.editor?.let { current ->
+            uiState.update { state ->
+                val next = transform(current)
+                state.copy(editor = next.copy(isDirty = next.draft() != editorBaseline))
+            }
+        }
+    }
 }

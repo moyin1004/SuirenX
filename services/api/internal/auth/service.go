@@ -2,14 +2,20 @@ package auth
 
 import (
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
+)
+
+const (
+	TokenTTL        = 30 * 24 * time.Hour
+	MinimumKeyBytes = 32
+	issuer          = "suirenx"
 )
 
 var (
@@ -17,6 +23,7 @@ var (
 	ErrUsernameTaken      = errors.New("username is already registered")
 	ErrInvalidAccount     = errors.New("username and password are required")
 	ErrInvalidToken       = errors.New("invalid or expired bearer token")
+	ErrInvalidJWTConfig   = errors.New("jwt secret must be at least 32 bytes")
 )
 
 type Account struct {
@@ -26,97 +33,122 @@ type Account struct {
 	CreatedAt    time.Time
 }
 
-type Token struct {
-	Value     string
-	OwnerID   string
-	ExpiresAt time.Time
+// Claims is the application data carried by a signed JWT. The middleware is
+// the only place where these claims are trusted for authorization.
+type Claims struct {
+	Username string `json:"username"`
+	jwt.RegisteredClaims
 }
 
 type Repository interface {
 	CreateAccount(account *Account) error
 	FindAccount(username string) (*Account, error)
-	SaveToken(tokenHash, ownerID string, createdAt, expiresAt time.Time) error
-	FindToken(tokenHash string, now time.Time) (string, error)
-	RevokeTokens(ownerID string) error
 }
 
 type Service struct {
 	repository Repository
+	secret     []byte
 	now        func() time.Time
 	tokenTTL   time.Duration
 }
 
-func NewService(repository Repository) *Service {
-	return &Service{repository: repository, now: time.Now, tokenTTL: 30 * 24 * time.Hour}
+func NewService(repository Repository, secret []byte) (*Service, error) {
+	if len(secret) < MinimumKeyBytes {
+		return nil, ErrInvalidJWTConfig
+	}
+	return &Service{
+		repository: repository,
+		secret:     append([]byte(nil), secret...),
+		now:        time.Now,
+		tokenTTL:   TokenTTL,
+	}, nil
 }
 
-func (s *Service) Register(username, password string) (Token, error) {
+func (s *Service) Register(username, password string) (string, time.Time, error) {
 	username = strings.TrimSpace(username)
 	if username == "" || len(password) < 8 || len(password) > 72 || len(username) > 100 {
-		return Token{}, ErrInvalidAccount
+		return "", time.Time{}, ErrInvalidAccount
 	}
 	existing, err := s.repository.FindAccount(username)
 	if err != nil {
-		return Token{}, fmt.Errorf("find account: %w", err)
+		return "", time.Time{}, fmt.Errorf("find account: %w", err)
 	}
 	if existing != nil {
-		return Token{}, ErrUsernameTaken
+		return "", time.Time{}, ErrUsernameTaken
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return Token{}, fmt.Errorf("hash password: %w", err)
-	}
-	account := &Account{ID: newID(), Username: username, PasswordHash: hash, CreatedAt: s.now().UTC()}
-	if err := s.repository.CreateAccount(account); err != nil {
-		return Token{}, fmt.Errorf("create account: %w", err)
-	}
-	return s.issue(account.ID)
-}
-
-func (s *Service) Login(username, password string) (Token, error) {
-	account, err := s.repository.FindAccount(strings.TrimSpace(username))
-	if err != nil || account == nil || bcrypt.CompareHashAndPassword(account.PasswordHash, []byte(password)) != nil {
-		return Token{}, ErrInvalidCredentials
-	}
-	return s.issue(account.ID)
-}
-
-func (s *Service) Authenticate(value string) (string, error) {
-	if value == "" {
-		return "", ErrInvalidToken
-	}
-	hash := hashToken(value)
-	ownerID, err := s.repository.FindToken(hash, s.now().UTC())
-	if err != nil || ownerID == "" {
-		return "", ErrInvalidToken
-	}
-	return ownerID, nil
-}
-
-func (s *Service) Logout(ownerID string) error {
-	if ownerID == "" {
-		return ErrInvalidToken
-	}
-	return s.repository.RevokeTokens(ownerID)
-}
-
-func (s *Service) issue(ownerID string) (Token, error) {
-	var raw [32]byte
-	if _, err := rand.Read(raw[:]); err != nil {
-		return Token{}, fmt.Errorf("generate token: %w", err)
+		return "", time.Time{}, fmt.Errorf("hash password: %w", err)
 	}
 	now := s.now().UTC()
-	expires := now.Add(s.tokenTTL)
-	value := hex.EncodeToString(raw[:])
-	if err := s.repository.SaveToken(hashToken(value), ownerID, now, expires); err != nil {
-		return Token{}, fmt.Errorf("save token: %w", err)
+	account := &Account{ID: newID(), Username: username, PasswordHash: hash, CreatedAt: now}
+	if err := s.repository.CreateAccount(account); err != nil {
+		return "", time.Time{}, fmt.Errorf("create account: %w", err)
 	}
-	return Token{Value: value, OwnerID: ownerID, ExpiresAt: expires}, nil
+	return s.issue(account)
 }
 
-func hashToken(value string) string {
-	hash := sha256.Sum256([]byte(value))
-	return hex.EncodeToString(hash[:])
+func (s *Service) Login(username, password string) (string, time.Time, error) {
+	account, err := s.repository.FindAccount(strings.TrimSpace(username))
+	if err != nil || account == nil || bcrypt.CompareHashAndPassword(account.PasswordHash, []byte(password)) != nil {
+		return "", time.Time{}, ErrInvalidCredentials
+	}
+	return s.issue(account)
+}
+
+// Authenticate verifies the JWT signature, algorithm, issuer and registered
+// claims before returning application claims for authorization.
+func (s *Service) Authenticate(value string) (Claims, error) {
+	if strings.TrimSpace(value) == "" {
+		return Claims{}, ErrInvalidToken
+	}
+	var claims Claims
+	token, err := jwt.ParseWithClaims(value, &claims, func(token *jwt.Token) (any, error) {
+		if token.Method != jwt.SigningMethodHS256 {
+			return nil, ErrInvalidToken
+		}
+		return s.secret, nil
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithIssuer(issuer), jwt.WithAudience("suirenx-api"))
+	if err != nil || token == nil || !token.Valid || claims.Subject == "" {
+		return Claims{}, ErrInvalidToken
+	}
+	return claims, nil
+}
+
+// Parse decodes JWT claims without checking the signature. It is deliberately
+// separate from Authenticate and must never be used for identity or access
+// control decisions.
+func (s *Service) Parse(value string) (Claims, error) {
+	if strings.TrimSpace(value) == "" {
+		return Claims{}, ErrInvalidToken
+	}
+	var claims Claims
+	if _, _, err := jwt.NewParser().ParseUnverified(value, &claims); err != nil || claims.Subject == "" {
+		return Claims{}, ErrInvalidToken
+	}
+	return claims, nil
+}
+
+func (s *Service) issue(account *Account) (string, time.Time, error) {
+	now := s.now().UTC()
+	expires := now.Add(s.tokenTTL)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
+		Username: account.Username,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    issuer,
+			Subject:   account.ID,
+			Audience:  []string{"suirenx-api"},
+			ExpiresAt: jwt.NewNumericDate(expires),
+			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: jwt.NewNumericDate(now),
+			ID:        newID(),
+		},
+	})
+	value, err := token.SignedString(s.secret)
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("sign jwt: %w", err)
+	}
+	return value, expires, nil
 }
 
 func newID() string {

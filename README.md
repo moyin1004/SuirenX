@@ -52,10 +52,11 @@ Gradle、Android Gradle Plugin 和应用依赖由项目 Wrapper 自动管理，�
 
 ```shell
 cd services/api
+export SUIRENX_JWT_SECRET='replace-with-at-least-32-random-bytes'
 go run ./cmd/server
 ```
 
-默认监听 `http://localhost:8888`。首次启动会自动创建 `services/api/data/suirenx.db`，不会创建无主的匿名演示资产；该目录不会提交到 Git。
+默认监听 `http://localhost:8888`。`SUIRENX_JWT_SECRET` 是账号 API 的 HS256 签名密钥，至少 32 字节；首次启动会自动创建 `services/api/data/suirenx.db`，不会创建无主的匿名演示资产；该目录不会提交到 Git。
 
 验证健康接口：
 

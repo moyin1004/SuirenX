@@ -129,6 +129,16 @@ class AssetFormViewModelTest {
         assertFalse(vm.uiState.value.isSaving)
     }
 
+    @Test fun changingDraftMarksDirtyAndRestoringBaselineClearsIt() = runTest(dispatcher) {
+        val vm = viewModel(FakeRepository())
+
+        vm.onNameChanged("Kindle")
+        assertTrue(vm.uiState.value.isDirty)
+
+        vm.onNameChanged("")
+        assertFalse(vm.uiState.value.isDirty)
+    }
+
     @Test fun failedSaveKeepsInputAndCanRetry() = runTest(dispatcher) {
         val repo = FakeRepository().apply { fail = true }
         val vm = viewModel(repo)

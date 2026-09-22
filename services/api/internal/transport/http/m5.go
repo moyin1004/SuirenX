@@ -2,7 +2,6 @@ package http
 
 import (
 	"errors"
-	"strings"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
@@ -26,12 +25,12 @@ func (m *m5Handlers) Register(c *app.RequestContext) {
 		c.JSON(consts.StatusBadRequest, map[string]string{"error": "invalid account request"})
 		return
 	}
-	token, err := m.auth.Register(request.Username, request.Password)
+	value, expiresAt, err := m.auth.Register(request.Username, request.Password)
 	if err != nil {
 		writeM5Error(c, err)
 		return
 	}
-	c.JSON(consts.StatusCreated, map[string]any{"access_token": token.Value, "token_type": "Bearer", "expires_at": token.ExpiresAt.Format("2006-01-02T15:04:05Z07:00")})
+	c.JSON(consts.StatusCreated, map[string]any{"access_token": value, "token_type": "Bearer", "expires_at": expiresAt.Format("2006-01-02T15:04:05Z07:00")})
 }
 
 func (m *m5Handlers) Login(c *app.RequestContext) {
@@ -40,21 +39,17 @@ func (m *m5Handlers) Login(c *app.RequestContext) {
 		c.JSON(consts.StatusBadRequest, map[string]string{"error": "invalid account request"})
 		return
 	}
-	token, err := m.auth.Login(request.Username, request.Password)
+	value, expiresAt, err := m.auth.Login(request.Username, request.Password)
 	if err != nil {
 		writeM5Error(c, err)
 		return
 	}
-	c.JSON(consts.StatusOK, map[string]any{"access_token": token.Value, "token_type": "Bearer", "expires_at": token.ExpiresAt.Format("2006-01-02T15:04:05Z07:00")})
+	c.JSON(consts.StatusOK, map[string]any{"access_token": value, "token_type": "Bearer", "expires_at": expiresAt.Format("2006-01-02T15:04:05Z07:00")})
 }
 
 func (m *m5Handlers) Logout(c *app.RequestContext) {
-	ownerID, err := m.ownerID(c)
+	_, err := m.ownerID(c)
 	if err != nil {
-		writeM5Error(c, err)
-		return
-	}
-	if err := m.auth.Logout(ownerID); err != nil {
 		writeM5Error(c, err)
 		return
 	}
@@ -81,12 +76,12 @@ func (m *m5Handlers) SyncAssets(c *app.RequestContext) {
 }
 
 func (m *m5Handlers) ownerID(c *app.RequestContext) (string, error) {
-	value := strings.TrimSpace(string(c.GetHeader(consts.HeaderAuthorization)))
-	parts := strings.Fields(value)
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
+	value, exists := c.Get(authOwnerIDContextKey)
+	ownerID, ok := value.(string)
+	if !exists || !ok || ownerID == "" {
 		return "", auth.ErrInvalidToken
 	}
-	return m.auth.Authenticate(parts[1])
+	return ownerID, nil
 }
 
 func writeM5Error(c *app.RequestContext, err error) {
