@@ -27,10 +27,10 @@
 
 ## 参考代码与规划
 
-- [架构边界](architecture.md)
-- [API 契约](../api/proto)
-- [数据库策略](database-migrations.md)
-- [下一阶段产品规划](Outcome-Roadmap-2026.md)
-- [服务端 SQLite 初始化](../services/api/internal/database/database.go)
-- [Android 计算函数](../apps/android/core/model/src/main/kotlin/io/suirenx/core/model/AssetCalculations.kt)
-- [Go 计算与映射](../services/api/internal/service/asset_service.go)
+- [架构边界](../architecture.md)
+- [API 契约](../../api/proto)
+- [数据库策略](../database-migrations.md)
+- [下一阶段产品规划](../prd/roadmap.md)
+- [服务端 SQLite 初始化](../../services/api/internal/database/database.go)
+- [Android 计算函数](../../apps/android/core/model/src/main/kotlin/io/suirenx/core/model/AssetCalculations.kt)
+- [Go 计算与映射](../../services/api/internal/service/asset_service.go)

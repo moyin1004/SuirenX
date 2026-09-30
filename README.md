@@ -2,7 +2,7 @@
 
 SuirenX（燧人）是一个个人工具箱项目。第一版从“有数”式个人资产管理开始：记录设备和物品、查看服役状态、计算持有天数与日均成本。
 
-当前已经打通第一条端到端链路：Android 原生界面通过 HTTP 访问 Go/Hertz 服务，服务使用 GORM 将资产保存在 SQLite 中。
+当前准备发布 v0.1.0-preview 预发布版：Android 使用本地 Room 保存资产与用品，支持离线使用和 JSON 备份恢复；Go/Hertz 服务提供账号与可选增量同步。提醒功能和剩余后台可靠性验收安排在下一版本。
 
 ## 技术栈
 
@@ -10,7 +10,7 @@ SuirenX（燧人）是一个个人工具箱项目。第一版从“有数”式�
 - API：Go、Hertz、Protobuf IDL
 - 数据库：SQLite、GORM
 - 构建：Gradle 9.6、Version Catalog、Convention Plugins
-- 未来：原生 Swift/SwiftUI iOS、Web、PostgreSQL、渐进式 C++ 核心
+- 暂缓评估：iOS、Web、PostgreSQL 和 C++ 模块，尚未承诺版本
 
 Proto 描述的是 HTTP + JSON API 契约，并不强制使用 gRPC 或二进制 Protobuf。这样未来将 Go 模块替换为 C++ 时，移动端契约可以保持稳定。
 
@@ -33,7 +33,7 @@ Proto 描述的是 HTTP + JSON API 契约，并不强制使用 gRPC 或二进制
 └── services/api/                    Hertz + GORM + SQLite 服务
 ```
 
-更详细的边界见 [架构说明](docs/architecture.md)，待办事项见 [未完成任务](docs/TODO.md)。
+文档入口见 [docs](docs/README.md)；[v0.1.0 范围](docs/prd/v0.1.0.md)、[发布准备](docs/release-readiness.md)与[当前待办](docs/TODO.md)分别记录本版需求、发布步骤和剩余工作。
 
 ## 环境要求
 
@@ -111,7 +111,7 @@ HTTP JSON 使用 snake_case 字段名、整数金额和 `ACTIVE` / `RETIRED` 字
 | `GET` | `/healthz` | 健康检查 |
 | `POST` | `/api/v1/auth/register` | 注册账号并返回 bearer token |
 | `POST` | `/api/v1/auth/login` | 登录并返回 bearer token |
-| `POST` | `/api/v1/auth/logout` | 撤销当前账号 token |
+| `POST` | `/api/v1/auth/logout` | 确认本地会话结束（JWT 不即时撤销） |
 | `POST` | `/api/v1/sync/assets` | 版本化资产/用品批量同步与增量拉取 |
 
 ### API 示例

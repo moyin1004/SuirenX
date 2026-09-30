@@ -166,6 +166,9 @@ in the verification command instead of vendoring files from a module cache.
 - Preserve user changes and avoid broad formatting-only rewrites.
 - Do not commit secrets, signing keys, `local.properties`, generated build
   output, APKs, or local SQLite files.
-- Update `docs/TODO.md` when completing or introducing meaningful work.
+- Update `docs/TODO.md` when completing or introducing meaningful work. Keep it
+  focused on unfinished work by release. Product requirements belong in
+  `docs/prd`; completed execution evidence and decisions worth revisiting belong
+  in `docs/history`. Keep active architecture and operational rules outside history.
 - Update this file when an architectural decision becomes a repository-wide
   invariant.
