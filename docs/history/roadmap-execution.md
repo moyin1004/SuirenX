@@ -420,3 +420,13 @@
 - PR #1 已 squash 合并到 main（`adcb022`），`v0.1.0-preview` tag 与 GitHub Pre-release 已发布。首次云端构建在 setup-android 默认请求已不可用的 `tools` 包时失败，未进入编译/签名。修复为只安装 `platform-tools`，增加 workflow_dispatch 对既有发布 tag 重建；不移动已发布 tag。为从 main 发起重建，release 环境额外允许 main 分支。
 
 - 第二次云端构建确认 SDK 包名应为 `platforms;android-37.0`（与本地 package.xml 一致），并固定新版 Android command-line tools 15859902；仅修复工具安装，编译 API 37 和既有发布 tag 不变。
+
+### v0.1.0-preview publication verified (2026-09-30)
+
+- Published Pre-release: https://github.com/moyin1004/SuirenX/releases/tag/v0.1.0-preview
+- Immutable source tag: `adcb0228783a6d2489f1d1f5eac9aa899f2df51e` (PR #1 squash).
+- Successful signed build: https://github.com/moyin1004/SuirenX/actions/runs/36688875719 (fixed workflow on main, original tagged source).
+- Signed APK, SHA-256 and public certificate report uploaded. Independent local apksigner verification passed v2/v3; versionName=0.1.0-preview, versionCode=1, minSdk=26, targetSdk=36.
+- APK SHA-256: `1fde84e2c4bb359cbc6727389b22f7b4c15867da43c19b291e7dec5fab23bdd3`, matching the GitHub Release asset digest.
+- Certificate SHA-256: `AF:B8:A5:7C:C8:6D:FC:D5:65:90:E2:E7:14:4F:B5:55:24:1D:85:0F:F6:B8:EB:29:17:58:15:32:41:85:4F:55`, matching the delivered JKS.
+- Signed-device installation, upgrade, cloud backup and privacy acceptance remain pending. Private signing files remain outside this repository.
