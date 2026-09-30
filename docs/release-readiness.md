@@ -13,7 +13,7 @@
 
 - 本地 Debug 使用默认调试签名；禁止把 keystore、密码、`local.properties` 或签名配置提交到 Git。
 - 发布签名材料由维护者保存在受控密钥管理设施中。CI 发布任务只通过受保护的环境 secret 注入，不在 pull request 工作流中签名。
-- Release workflow 使用名为 `release` 的 GitHub Environment，并接受四个 Environment secrets：`SUIRENX_ANDROID_KEYSTORE_BASE64`、`SUIRENX_ANDROID_KEYSTORE_PASSWORD`、`SUIRENX_ANDROID_KEY_ALIAS` 和 `SUIRENX_ANDROID_KEY_PASSWORD`。环境已限制为 `v*` tag；密钥与密码在仓库外交付维护者备份。四项均未配置时只生成 unsigned artifact；配置不完整时任务失败；四项齐全时额外校验 zipalign、签名并通过 `apksigner verify`，再上传 APK、SHA-256 与证书摘要。2026-09-30 已按维护者授权生成持久签名密钥并配置四项 Environment secrets；实际签名产物将在本次预发布中验证。
+- Release workflow 使用名为 `release` 的 GitHub Environment，并接受四个 Environment secrets：`SUIRENX_ANDROID_KEYSTORE_BASE64`、`SUIRENX_ANDROID_KEYSTORE_PASSWORD`、`SUIRENX_ANDROID_KEY_ALIAS` 和 `SUIRENX_ANDROID_KEY_PASSWORD`。环境已限制为 `v*` tag 与 `main` 分支；密钥与密码在仓库外交付维护者备份。四项均未配置时只生成 unsigned artifact；配置不完整时任务失败；四项齐全时额外校验 zipalign、签名并通过 `apksigner verify`，再上传 APK、SHA-256 与证书摘要。2026-09-30 已按维护者授权生成持久签名密钥并配置四项 Environment secrets；实际签名产物将在本次预发布中验证。
 - 配置时重新核验 GitHub Environment、保护规则与 secrets 状态；过去查询结果见 [历史记录](history/roadmap-execution.md)，不据此推断当前远端状态。
 - 发布前生成并保管签名证书指纹，测试同一签名的升级安装、冷启动、备份/恢复，以及 Android 支持的最低和目标版本。
 - 生成 APK/AAB 后记录版本、Git commit、SHA-256 和签名证书指纹；分发渠道和回滚操作由发布者确认。
@@ -39,7 +39,7 @@ Android Auto Backup 默认包含 SharedPreferences；登录 token 保存在 `aut
 
 ## 预发布
 
-2026-09-30：维护者要求将 dev squash 合并到 main，并创建 `v0.1.0-preview` tag 与同名 GitHub Pre-release。已创建 `release` Environment（仅允许 `v*` tag）并配置四项签名 secrets；此次预发布验证签名构建，设备分发验收继续保留。workflow 仍在 published 事件后构建；无签名 secrets 时只有 unsigned artifact，不作为可安装的正式 APK。
+2026-09-30：维护者要求将 dev squash 合并到 main，并创建 `v0.1.0-preview` tag 与同名 GitHub Pre-release。已创建 `release` Environment（允许 `v*` tag 与从 `main` 手动重建）并配置四项签名 secrets；此次预发布验证签名构建，设备分发验收继续保留。workflow 仍在 published 事件后构建；无签名 secrets 时只有 unsigned artifact，不作为可安装的正式 APK。
 
 ## 正式版发布顺序
 

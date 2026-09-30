@@ -416,3 +416,5 @@
 - Go `go test ./...`、asset/m5 Proto descriptor 编译、Android Debug 构建、core:model / core:data / feature:settings 单元测试通过；本地 Markdown 链接与 diff 空白检查通过。
 - 按维护者授权生成长期 RSA 4096 位 JKS 签名密钥，存放仓库外并以仅当前用户可读文件交付；未将密钥或密码写入仓库。
 - 已创建 GitHub `release` Environment，仅允许 `v*` tag，四项签名 secrets 已配置。维护者仍需另行安全备份密钥与密码；设备安装、同签名升级和隐私验收仍待完成。
+
+- PR #1 已 squash 合并到 main（`adcb022`），`v0.1.0-preview` tag 与 GitHub Pre-release 已发布。首次云端构建在 setup-android 默认请求已不可用的 `tools` 包时失败，未进入编译/签名。修复为只安装 `platform-tools`，增加 workflow_dispatch 对既有发布 tag 重建；不移动已发布 tag。为从 main 发起重建，release 环境额外允许 main 分支。
