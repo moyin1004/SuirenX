@@ -4,7 +4,7 @@
 
 ## v0.1.0-preview 预发布
 
-- [ ] 将当前 dev（含文档整理）squash 合并到 main，创建 `v0.1.0-preview` tag 与 GitHub Pre-release，核验构建结果。
+- [ ] 修复首次云端构建的 Android SDK tools 安装问题，完成 `v0.1.0-preview` 签名产物验签与附件上传（squash、tag 和 Pre-release 已完成）。
 - 预发布不代表安装、隐私或后台可靠性验收完成；`release` Environment 与四项签名 secrets 已配置，待核验实际签名产物。
 
 ## v0.1.0 正式发布
