@@ -46,14 +46,67 @@ repository boundaries.
 
 ## Data rules
 
+- Asset visuals use built-in icons identified by stable `icon_key` strings.
+  Render icon-library objects only in UI modules; do not add image upload/storage.
 - Store money as integer cents (`int64`/`Long`), never floating point.
 - Exchange date-only values as `YYYY-MM-DD` and timestamps as RFC 3339.
 - An active asset's held days include both its purchase day and today.
-- Keep SQLite-specific behavior inside the GORM repository.
-- Do not rely on GORM `AutoMigrate` for production schema changes; replace it
-  with versioned migrations before the first distributable release.
+- Retirement uses `retired_date` (`YYYY-MM-DD`, empty for active assets); held
+  days include the retirement day. Retirement dates must be between purchase
+  day and today. Reactivation clears the date and resumes counting from purchase.
+- Keep SQLite-specific behavior in the database/migration infrastructure and
+  GORM repository, outside business services.
+- During pre-release development, keep the entire server SQL schema in the sole
+  `services/api/internal/database/migrations/001_init.sql`; consolidate changes
+  into 001 and do not add 002 or later files. Never call GORM `AutoMigrate`.
+  Keep checksum validation and transactional rollback. Never automatically delete
+  or rewrite an existing development database to bypass a baseline mismatch;
+  back up/export data before explicitly rebuilding it. After the first production
+  release, update this AGENTS.md rule to require immutable, append-only numbered
+  migrations with upgrade and rollback tests before adding further migrations.
+- Archive is reversible and independent of lifecycle status. Archived assets
+  are excluded from default lists and totals, remain readable, and must be
+  restored before editing. Never auto-delete archived records.
 - Runtime databases under `services/api/data` are local artifacts and must not
   be committed.
+- Android assets and expiry items always use the local Room database as the
+  sole source of truth. The persisted legacy `StorageMode` controls only whether
+  background synchronization is enabled; changing it never changes the UI data
+  source. Every write/delete and its sync journal entry commit in one transaction.
+- The server exposes authentication, incremental synchronization and health
+  endpoints only, not asset/expiry CRUD. Use `m5/v1/m5.proto` to generate routes.
+- Sync batches and idempotency keys are durable before HTTP; retries reuse the
+  identical batch. Never hold a Room transaction across network I/O. Acknowledging
+  an older revision must not overwrite a newer local edit. Conflicts pause only
+  the affected record and preserve both versions until explicit resolution.
+- A local dataset may synchronize to a different server/account after the user
+  signs in and explicitly enables sync. Do not block on a previous target binding.
+  Before changing targets, back up local data and old sync recovery metadata,
+  then transactionally reset target-specific versions, cursors, batches and
+  conflict state. Retain local records and tombstones; same-ID differences use
+  explicit conflict resolution. Saving/selecting a server or logging in alone
+  never starts uploading. Legacy cache enrollment remains account-scoped.
+- Account and server-address settings are independent. The app has at most one
+  signed-in account; its credential remains bound to the normalized server URL
+  that issued it and is never sent to a different address. Changing, selecting,
+  or removing a saved address must not silently clear account credentials.
+  Adding or changing an address requires a successful health probe of that exact
+  address. Health probes never send credentials, save settings, or enable sync;
+  success means reachability only. If sync authentication fails or the account
+  is absent on the selected server, tell the user to explicitly log out before
+  signing in again; do not silently switch or clear accounts.
+- Expiry item location is optional on both Android and the sync API; never invent
+  placeholder business values to satisfy mismatched server validation.
+- Deletion is explicit and separate from archive: remove the visible local row,
+  retain a sync tombstone, and never garbage-collect tombstones without a device
+  acknowledgement or full-resync protocol. Archive remains reversible.
+- Local JSON backups are versioned, target the local Room database only,
+  include archived records and expiry items, exclude credentials, and restore
+  through validation plus an automatic pre-restore backup.
+- Android platform backups must exclude authentication credentials from cloud
+  backup and device transfer. Keep both the legacy `fullBackupContent` and the
+  Android 12+ `dataExtractionRules` exclusion for the `auth.xml` preferences
+  file; retain the other app data backup behavior.
 
 ## Android rules
 
@@ -65,12 +118,13 @@ repository boundaries.
 - Launch ViewModel work in `viewModelScope`; rethrow `CancellationException`.
 - Remote DTOs must be mapped into `core:model` types in the data layer.
 - Cleartext HTTP is permitted only in the Debug manifest for local development.
-- Do not add Room until offline source-of-truth and conflict behavior are
-  explicitly designed.
+- Room schema changes require explicit migrations; never reset an installed
+  database as an upgrade strategy. See docs/data-sync.md for synchronization rules.
 
-AGP 9 built-in Kotlin is temporarily disabled because the initial project uses
-Hilt with kapt. The compatibility flags are intentionally visible in
-`gradle.properties`; migrate to built-in Kotlin plus KSP before AGP 10.
+AGP 9 built-in Kotlin is enabled. Android annotation processors use KSP; keep
+Hilt and Room processors on KSP when adding or updating generated Android code.
+Pure Kotlin/JVM modules continue to use the Kotlin JVM plugin. Check processor
+support before adding another annotation-processing dependency.
 
 ## Go rules
 
@@ -96,11 +150,25 @@ git diff --check
 If the locally installed `hz` version changes, update the Protobuf include path
 in the verification command instead of vendoring files from a module cache.
 
+## Design and implementation consistency
+
+- Use the current OpenDesign UI artifact as the reference for application UI.
+- If the design differs from real data, domain rules, available capabilities,
+  or required interaction states, update the OpenDesign artifact first. Only
+  then implement the corresponding app/UI changes; never silently diverge in
+  code or substitute fabricated fields, counts, timestamps, or status values.
+- Keep the updated design and application consistent. If OpenDesign is blocked,
+  record the discrepancy and leave dependent UI work pending; continue unrelated
+  authorized work. Do not add an approval step unless the user requested one.
+
 ## Change discipline
 
 - Preserve user changes and avoid broad formatting-only rewrites.
 - Do not commit secrets, signing keys, `local.properties`, generated build
   output, APKs, or local SQLite files.
-- Update `docs/TODO.md` when completing or introducing meaningful work.
+- Update `docs/TODO.md` when completing or introducing meaningful work. Keep it
+  focused on unfinished work by release. Product requirements belong in
+  `docs/prd`; completed execution evidence and decisions worth revisiting belong
+  in `docs/history`. Keep active architecture and operational rules outside history.
 - Update this file when an architectural decision becomes a repository-wide
   invariant.

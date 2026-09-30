@@ -2,19 +2,91 @@ package http
 
 import (
 	"encoding/json"
-	"path/filepath"
-	"strings"
-	"testing"
-	"time"
-
 	"github.com/cloudwego/hertz/pkg/common/ut"
 	"github.com/moyin1004/suirenx/services/api/internal/database"
 	"github.com/moyin1004/suirenx/services/api/internal/repository"
 	"github.com/moyin1004/suirenx/services/api/internal/service"
+	"gorm.io/gorm"
+	"path/filepath"
+	"strings"
+	"testing"
 )
 
-func testServer(t *testing.T) (*Server, func()) {
+const testJWTSecret = "test-secret-with-at-least-32-bytes-long"
+
+func request(s *Server, method, path, body string) *ut.ResponseRecorder {
+	return ut.PerformRequest(s.h.Engine, method, path,
+		&ut.Body{Body: strings.NewReader(body), Len: len(body)},
+		ut.Header{Key: "Content-Type", Value: "application/json"})
+}
+
+func requestBearer(s *Server, method, path, body, token string) *ut.ResponseRecorder {
+	return ut.PerformRequest(s.h.Engine, method, path,
+		&ut.Body{Body: strings.NewReader(body), Len: len(body)},
+		ut.Header{Key: "Content-Type", Value: "application/json"},
+		ut.Header{Key: "Authorization", Value: "Bearer " + token})
+}
+
+func TestRequestIDsAndErrorEnvelope(t *testing.T) {
+	s := NewServer(":0", service.NewAssetService(nil), WithM5(openAuthTestDB(t), testJWTSecret))
+	response := ut.PerformRequest(s.h.Engine, "POST", "/api/v1/sync/assets",
+		&ut.Body{Body: strings.NewReader(`{}`), Len: 2},
+		ut.Header{Key: "Content-Type", Value: "application/json"},
+		ut.Header{Key: requestIDHeader, Value: "client-request_123"},
+	)
+	if response.Code != 401 {
+		t.Fatalf("unauthenticated request should return 401, got %d", response.Code)
+	}
+	if got := response.Header().Get(requestIDHeader); got != "client-request_123" {
+		t.Fatalf("request id header = %q", got)
+	}
+	var body errorResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Code != "invalid_token" || body.Error == "" || body.RequestID != "client-request_123" {
+		t.Fatalf("unexpected error envelope: %+v", body)
+	}
+
+	invalidJSON := ut.PerformRequest(s.h.Engine, "POST", "/api/v1/auth/register",
+		&ut.Body{Body: strings.NewReader(`{`), Len: 1},
+		ut.Header{Key: "Content-Type", Value: "application/json"},
+		ut.Header{Key: requestIDHeader, Value: "generated-error-456"},
+	)
+	if invalidJSON.Code != 400 {
+		t.Fatalf("invalid JSON should return 400, got %d", invalidJSON.Code)
+	}
+	if err := json.Unmarshal(invalidJSON.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Code != "invalid_request" || body.RequestID != "generated-error-456" {
+		t.Fatalf("unexpected generated transport error envelope: %+v", body)
+	}
+
+	unsafe := ut.PerformRequest(s.h.Engine, "GET", "/healthz", &ut.Body{Body: strings.NewReader(""), Len: 0},
+		ut.Header{Key: requestIDHeader, Value: "bad value!"},
+	)
+	if got := unsafe.Header().Get(requestIDHeader); !safeRequestID.MatchString(got) || got == "bad value!" {
+		t.Fatalf("unsafe request id was not replaced: %q", got)
+	}
+}
+
+func openAuthTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
+	db, err := database.Open(filepath.Join(t.TempDir(), "request-id.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		sqlDB, err := db.DB()
+		if err == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	return db
+}
+
+func TestM5AccountIsolationVersionedSyncAndIdempotency(t *testing.T) {
 	db, err := database.Open(filepath.Join(t.TempDir(), "assets.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -23,262 +95,93 @@ func testServer(t *testing.T) (*Server, func()) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	closeDB := func() { _ = sqlDB.Close() }
-	t.Cleanup(closeDB)
-	return NewServer(":0", service.NewAssetService(repository.NewGormAssetRepository(db))), closeDB
-}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	s := NewServer(":0", service.NewAssetService(repository.NewGormAssetRepository(db)), WithM5(db, testJWTSecret))
 
-func request(s *Server, method, path, body string) *ut.ResponseRecorder {
-	return ut.PerformRequest(s.h.Engine, method, path,
-		&ut.Body{Body: strings.NewReader(body), Len: len(body)},
-		ut.Header{Key: "Content-Type", Value: "application/json"})
-}
-
-func TestAssetJSONRoundTrip(t *testing.T) {
-	s, _ := testServer(t)
-	empty := request(s, "GET", "/api/v1/assets", "")
-	if empty.Code != 200 || empty.Body.String() != `{"assets":[]}` {
-		t.Fatalf("empty list: %d %s", empty.Code, empty.Body)
-	}
-	today := time.Now().Format(time.DateOnly)
-	created := request(s, "POST", "/api/v1/assets", `{"name":" Keyboard ","price_cents":0,"purchase_date":"`+today+`","image_url":""}`)
-	if created.Code != 201 {
-		t.Fatalf("create: %d %s", created.Code, created.Body)
-	}
-	var response struct {
-		Asset map[string]json.RawMessage `json:"asset"`
-	}
-	if err := json.Unmarshal(created.Body.Bytes(), &response); err != nil {
-		t.Fatal(err)
-	}
-	for key, want := range map[string]string{
-		"name": `"Keyboard"`, "price_cents": "0", "purchase_date": `"` + today + `"`,
-		"status": `"ACTIVE"`, "image_url": `""`, "held_days": "1", "daily_cost_cents": "0",
-	} {
-		if string(response.Asset[key]) != want {
-			t.Errorf("%s: got %s, want %s", key, response.Asset[key], want)
-		}
-	}
-	for _, key := range []string{"created_at", "updated_at"} {
-		var stamp string
-		if err := json.Unmarshal(response.Asset[key], &stamp); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := time.Parse(time.RFC3339, stamp); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if string(response.Asset["id"]) == `""` || response.Asset["id"] == nil {
-		t.Fatal("missing ID")
-	}
-	for _, filter := range []string{"", "?status=ACTIVE", "?status=active"} {
-		listed := request(s, "GET", "/api/v1/assets"+filter, "")
-		var list struct {
-			Assets []map[string]json.RawMessage `json:"assets"`
-		}
-		if listed.Code != 200 {
-			t.Fatalf("list: %d %s", listed.Code, listed.Body)
-		}
-		if err := json.Unmarshal(listed.Body.Bytes(), &list); err != nil {
-			t.Fatal(err)
-		}
-		if len(list.Assets) != 1 || string(list.Assets[0]["id"]) != string(response.Asset["id"]) {
-			t.Fatalf("list mismatch: %s", listed.Body)
-		}
-	}
-	retired := request(s, "GET", "/api/v1/assets?status=RETIRED", "")
-	if retired.Code != 200 || retired.Body.String() != `{"assets":[]}` {
-		t.Fatalf("retired list: %d %s", retired.Code, retired.Body)
-	}
-	// The HTTP contract uses integer JSON numbers, including values above float64's exact range.
-	large := request(s, "POST", "/api/v1/assets", `{"name":"Large","price_cents":9007199254740993,"purchase_date":"`+today+`"}`)
-	if large.Code != 201 || !strings.Contains(large.Body.String(), `"price_cents":9007199254740993`) {
-		t.Fatalf("integer precision: %d %s", large.Code, large.Body)
-	}
-}
-
-func TestGetAssetByID(t *testing.T) {
-	s, _ := testServer(t)
-	today := time.Now().Format(time.DateOnly)
-	created := request(s, "POST", "/api/v1/assets", `{"name":"Keyboard","price_cents":10000,"purchase_date":"`+today+`"}`)
-	if created.Code != 201 {
-		t.Fatalf("create: %d %s", created.Code, created.Body)
-	}
-	var createdResponse struct {
-		Asset struct {
-			ID string `json:"id"`
-		} `json:"asset"`
-	}
-	if err := json.Unmarshal(created.Body.Bytes(), &createdResponse); err != nil {
-		t.Fatal(err)
-	}
-
-	found := request(s, "GET", "/api/v1/assets/"+createdResponse.Asset.ID, "")
-	if found.Code != 200 {
-		t.Fatalf("get: %d %s", found.Code, found.Body)
-	}
-	var response struct {
-		Asset map[string]json.RawMessage `json:"asset"`
-	}
-	if err := json.Unmarshal(found.Body.Bytes(), &response); err != nil {
-		t.Fatal(err)
-	}
-	if string(response.Asset["id"]) != `"`+createdResponse.Asset.ID+`"` {
-		t.Fatalf("id mismatch: %s", found.Body)
-	}
-	if string(response.Asset["name"]) != `"Keyboard"` || string(response.Asset["price_cents"]) != "10000" {
-		t.Fatalf("payload mismatch: %s", found.Body)
-	}
-
-	missing := request(s, "GET", "/api/v1/assets/does-not-exist", "")
-	if missing.Code != 404 {
-		t.Fatalf("missing: got %d %s, want 404", missing.Code, missing.Body)
-	}
-	var failure struct {
-		Error string `json:"error"`
-	}
-	if err := json.Unmarshal(missing.Body.Bytes(), &failure); err != nil || failure.Error == "" {
-		t.Fatalf("expected JSON error: %s", missing.Body)
-	}
-}
-
-func TestUpdateAssetByID(t *testing.T) {
-	s, _ := testServer(t)
-	today := time.Now().Format(time.DateOnly)
-	created := request(s, "POST", "/api/v1/assets", `{"name":"Keyboard","price_cents":10000,"purchase_date":"`+today+`"}`)
-	if created.Code != 201 {
-		t.Fatalf("create: %d %s", created.Code, created.Body)
-	}
-	var createdResponse struct {
-		Asset struct {
-			ID string `json:"id"`
-		} `json:"asset"`
-	}
-	if err := json.Unmarshal(created.Body.Bytes(), &createdResponse); err != nil {
-		t.Fatal(err)
-	}
-
-	// Two days ago keeps held-days derived values deterministic regardless of run date.
-	purchaseDate := time.Now().AddDate(0, 0, -2).Format(time.DateOnly)
-	updated := request(s, "PUT", "/api/v1/assets/"+createdResponse.Asset.ID,
-		`{"name":" Mechanical Keyboard ","price_cents":20000,"purchase_date":"`+purchaseDate+`"}`)
-	if updated.Code != 200 {
-		t.Fatalf("update: %d %s", updated.Code, updated.Body)
-	}
-	var response struct {
-		Asset map[string]json.RawMessage `json:"asset"`
-	}
-	if err := json.Unmarshal(updated.Body.Bytes(), &response); err != nil {
-		t.Fatal(err)
-	}
-	for key, want := range map[string]string{
-		"id":               `"` + createdResponse.Asset.ID + `"`,
-		"name":             `"Mechanical Keyboard"`,
-		"price_cents":      "20000",
-		"purchase_date":    `"` + purchaseDate + `"`,
-		"status":           `"ACTIVE"`,
-		"held_days":        "3",
-		"daily_cost_cents": "6667",
-	} {
-		if string(response.Asset[key]) != want {
-			t.Errorf("%s: got %s, want %s", key, response.Asset[key], want)
+	for _, password := range []string{"short", strings.Repeat("a", 73), strings.Repeat("中", 25)} {
+		body, _ := json.Marshal(map[string]string{"username": "invalid-password", "password": password})
+		response := request(s, "POST", "/api/v1/auth/register", string(body))
+		if response.Code != 400 {
+			t.Fatalf("invalid registration should be 400, got %d", response.Code)
 		}
 	}
 
-	// The change is persisted and visible through GET.
-	found := request(s, "GET", "/api/v1/assets/"+createdResponse.Asset.ID, "")
-	if found.Code != 200 || !strings.Contains(found.Body.String(), `"name":"Mechanical Keyboard"`) ||
-		!strings.Contains(found.Body.String(), `"price_cents":20000`) {
-		t.Fatalf("get after update: %d %s", found.Code, found.Body)
+	register := func(username string) string {
+		response := request(s, "POST", "/api/v1/auth/register", `{"username":"`+username+`","password":"correct horse battery staple"}`)
+		if response.Code != 201 {
+			t.Fatalf("register %s: %d %s", username, response.Code, response.Body)
+		}
+		var payload struct {
+			AccessToken string `json:"access_token"`
+		}
+		if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil || payload.AccessToken == "" {
+			t.Fatalf("register token: %s", response.Body)
+		}
+		return payload.AccessToken
+	}
+	alice, bob := register("alice"), register("bob")
+	for _, method := range []string{"GET", "POST", "PUT", "DELETE"} {
+		if response := requestBearer(s, method, "/api/v1/assets", `{}`, alice); response.Code != 404 {
+			t.Fatalf("removed CRUD endpoint %s returned %d", method, response.Code)
+		}
+	}
+	if response := request(s, "POST", "/api/v1/sync/assets", `{}`); response.Code != 401 {
+		t.Fatalf("unauthenticated sync returned %d", response.Code)
+	}
+	assetID := "cross-device-asset"
+	create := `{"cursor":0,"idempotency_key":"create-1","changes":[{"id":"` + assetID + `","base_version":0,"name":"Keyboard","price_cents":10000,"purchase_date":"2020-01-01","status":"ACTIVE","image_url":"","retired_date":"","archived_at":"","icon_key":"devices","purchase_channel":"","warranty_end_date":"","notes":"","tags":[]}]}`
+	first := requestBearer(s, "POST", "/api/v1/sync/assets", create, alice)
+	if first.Code != 200 || !strings.Contains(first.Body.String(), `"version":1`) {
+		t.Fatalf("create sync: %d %s", first.Code, first.Body)
+	}
+	retry := requestBearer(s, "POST", "/api/v1/sync/assets", create, alice)
+	if retry.Code != 200 || retry.Body.String() != first.Body.String() {
+		t.Fatalf("idempotent retry differs: %d %s vs %s", retry.Code, retry.Body, first.Body)
 	}
 
-	missing := request(s, "PUT", "/api/v1/assets/does-not-exist",
-		`{"name":"Keyboard","price_cents":10000,"purchase_date":"`+today+`"}`)
-	if missing.Code != 404 {
-		t.Fatalf("missing: got %d %s, want 404", missing.Code, missing.Body)
+	bobPull := requestBearer(s, "POST", "/api/v1/sync/assets", `{"cursor":0,"idempotency_key":"bob-pull","changes":[]}`, bob)
+	if bobPull.Code != 200 || strings.Contains(bobPull.Body.String(), "Keyboard") || strings.Contains(bobPull.Body.String(), assetID) {
+		t.Fatalf("owner isolation leaked: %d %s", bobPull.Code, bobPull.Body)
 	}
-	var failure struct {
-		Error string `json:"error"`
-	}
-	if err := json.Unmarshal(missing.Body.Bytes(), &failure); err != nil || failure.Error == "" {
-		t.Fatalf("expected JSON error: %s", missing.Body)
+	alicePull := requestBearer(s, "POST", "/api/v1/sync/assets", `{"cursor":0,"idempotency_key":"alice-pull","changes":[]}`, alice)
+	if alicePull.Code != 200 || !strings.Contains(alicePull.Body.String(), "Keyboard") {
+		t.Fatalf("owner pull missing asset: %d %s", alicePull.Code, alicePull.Body)
 	}
 
-	for _, tc := range []struct{ name, body string }{
-		{"malformed", "{"},
-		{"empty", "{}"},
-		{"blank name", `{"name":"  ","price_cents":10000,"purchase_date":"2026-09-03"}`},
-		{"negative price", `{"name":"A","price_cents":-1,"purchase_date":"2026-09-03"}`},
-		{"invalid date", `{"name":"A","price_cents":10000,"purchase_date":"09/03/2026"}`},
-	} {
-		t.Run("invalid "+tc.name, func(t *testing.T) {
-			got := request(s, "PUT", "/api/v1/assets/"+createdResponse.Asset.ID, tc.body)
-			if got.Code != 400 {
-				t.Fatalf("got %d: %s", got.Code, got.Body)
-			}
-			var bad struct {
-				Error string `json:"error"`
-			}
-			if err := json.Unmarshal(got.Body.Bytes(), &bad); err != nil || bad.Error == "" {
-				t.Fatalf("expected JSON error: %s", got.Body)
-			}
-		})
+	expiry := `{"cursor":0,"expiry_cursor":0,"idempotency_key":"expiry-1","changes":[],"expiry_changes":[{"id":"expiry-1","base_version":0,"name":"Milk","category":"Food","package_expiry_date":"2030-01-01","opened_date":"","opened_validity_days":0,"location":"","notes":"","status":"IN_USE","archived_at":""}]}`
+	expiryResponse := requestBearer(s, "POST", "/api/v1/sync/assets", expiry, alice)
+	if expiryResponse.Code != 200 || !strings.Contains(expiryResponse.Body.String(), `"applied_expiry"`) || !strings.Contains(expiryResponse.Body.String(), `"next_expiry_cursor":1`) {
+		t.Fatalf("expiry sync: %d %s", expiryResponse.Code, expiryResponse.Body)
+	}
+	bobExpiryPull := requestBearer(s, "POST", "/api/v1/sync/assets", `{"cursor":0,"expiry_cursor":0,"idempotency_key":"bob-expiry-pull","changes":[]}`, bob)
+	if bobExpiryPull.Code != 200 || strings.Contains(bobExpiryPull.Body.String(), "Milk") {
+		t.Fatalf("expiry owner isolation leaked: %d %s", bobExpiryPull.Code, bobExpiryPull.Body)
 	}
 
-	// Rejected updates must not mutate the stored asset.
-	after := request(s, "GET", "/api/v1/assets/"+createdResponse.Asset.ID, "")
-	if !strings.Contains(after.Body.String(), `"name":"Mechanical Keyboard"`) ||
-		!strings.Contains(after.Body.String(), `"price_cents":20000`) {
-		t.Fatalf("asset mutated by rejected update: %s", after.Body)
+	conflict := requestBearer(s, "POST", "/api/v1/sync/assets", strings.Replace(create, "create-1", "conflict-1", 1), alice)
+	if conflict.Code != 200 || !strings.Contains(conflict.Body.String(), `"conflicts"`) || !strings.Contains(conflict.Body.String(), `"remote_version":1`) {
+		t.Fatalf("conflict not reported: %d %s", conflict.Code, conflict.Body)
 	}
-}
+	update := strings.Replace(strings.Replace(create, "create-1", "update-1", 1), `"base_version":0`, `"base_version":1`, 1)
+	update = strings.Replace(update, `"Keyboard"`, `"Mechanical Keyboard"`, 1)
+	updated := requestBearer(s, "POST", "/api/v1/sync/assets", update, alice)
+	if updated.Code != 200 || !strings.Contains(updated.Body.String(), `"version":2`) {
+		t.Fatalf("versioned update: %d %s", updated.Code, updated.Body)
+	}
 
-func TestInvalidAssetRequests(t *testing.T) {
-	s, _ := testServer(t)
-	cases := []struct{ name, method, path, body string }{
-		{"status", "GET", "/api/v1/assets?status=UNKNOWN", ""},
-		{"numeric status", "GET", "/api/v1/assets?status=1", ""},
-		{"malformed", "POST", "/api/v1/assets", "{"},
-		{"empty", "POST", "/api/v1/assets", "{}"},
-		{"blank name", "POST", "/api/v1/assets", `{"name":"  ","purchase_date":"2026-09-05"}`},
-		{"negative price", "POST", "/api/v1/assets", `{"name":"A","price_cents":-1,"purchase_date":"2026-09-05"}`},
-		{"fractional price", "POST", "/api/v1/assets", `{"name":"A","price_cents":1.5,"purchase_date":"2026-09-05"}`},
-		{"overflow", "POST", "/api/v1/assets", `{"name":"A","price_cents":9223372036854775808,"purchase_date":"2026-09-05"}`},
-		{"invalid date", "POST", "/api/v1/assets", `{"name":"A","purchase_date":"2026-02-30"}`},
+	deleted := strings.Replace(strings.Replace(create, "create-1", "delete-1", 1), `"base_version":0`, `"base_version":2`, 1)
+	deleted = strings.Replace(deleted, `"changes":[{`, `"changes":[{"deleted":true,`, 1)
+	deletedResponse := requestBearer(s, "POST", "/api/v1/sync/assets", deleted, alice)
+	if deletedResponse.Code != 200 || !strings.Contains(deletedResponse.Body.String(), `"deleted_at":"`) {
+		t.Fatalf("tombstone: %d %s", deletedResponse.Code, deletedResponse.Body)
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := request(s, tc.method, tc.path, tc.body)
-			var failure struct {
-				Error string `json:"error"`
-			}
-			if got.Code != 400 {
-				t.Fatalf("got %d: %s", got.Code, got.Body)
-			}
-			if err := json.Unmarshal(got.Body.Bytes(), &failure); err != nil || failure.Error == "" {
-				t.Fatalf("expected JSON error: %s", got.Body)
-			}
-		})
-	}
-	listed := request(s, "GET", "/api/v1/assets", "")
-	if listed.Body.String() != `{"assets":[]}` {
-		t.Fatalf("invalid requests persisted data: %s", listed.Body)
-	}
-}
 
-func TestDatabaseErrors(t *testing.T) {
-	s, closeDB := testServer(t)
-	closeDB()
-	for _, tc := range []struct{ method, path string }{
-		{"GET", "/api/v1/assets"},
-		{"POST", "/api/v1/assets"},
-		{"PUT", "/api/v1/assets/does-not-exist"},
-	} {
-		t.Run(tc.method, func(t *testing.T) {
-			got := request(s, tc.method, tc.path, `{"name":"A","price_cents":100,"purchase_date":"2026-09-05"}`)
-			if got.Code != 500 || got.Body.String() != `{"error":"internal server error"}` {
-				t.Fatalf("database error: %d %s", got.Code, got.Body)
-			}
-		})
+	logout := requestBearer(s, "POST", "/api/v1/auth/logout", `{}`, alice)
+	if logout.Code != 200 {
+		t.Fatalf("logout: %d %s", logout.Code, logout.Body)
+	}
+	afterLogout := requestBearer(s, "POST", "/api/v1/sync/assets", `{"cursor":0,"idempotency_key":"after-logout","changes":[]}`, alice)
+	if afterLogout.Code != 200 {
+		t.Fatalf("stateless jwt after logout: %d %s", afterLogout.Code, afterLogout.Body)
 	}
 }

@@ -1,9 +1,13 @@
 package io.suirenx.feature.assets
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,18 +23,27 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.outlined.Devices
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -44,7 +57,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.suirenx.core.ui.icon.MaterialSymbol
 import io.suirenx.core.ui.theme.SuirenXTheme
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
 
 @Composable
 fun AssetFormRoute(
@@ -53,15 +70,35 @@ fun AssetFormRoute(
     viewModel: AssetFormViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    var showDiscard by rememberSaveable { mutableStateOf(false) }
+    val requestClose = {
+        if (state.isDirty && !state.isSaving) showDiscard = true else onClose()
+    }
     LaunchedEffect(viewModel) { viewModel.saved.collect { onClose() } }
-    BackHandler(enabled = !state.isSaving) { onClose() }
+    BackHandler(enabled = !state.isSaving) { requestClose() }
+    if (showDiscard) {
+        AlertDialog(
+            onDismissRequest = { showDiscard = false },
+            title = { Text("放弃未保存修改？") },
+            text = { Text("当前表单还有未保存内容，离开后这些修改会丢失。") },
+            confirmButton = { TextButton(onClick = { showDiscard = false; onClose() }) { Text("放弃修改") } },
+            dismissButton = { TextButton(onClick = { showDiscard = false }) { Text("继续编辑") } },
+        )
+    }
     AssetFormScreen(
         state = state,
         onNameChanged = viewModel::onNameChanged,
         onPriceChanged = viewModel::onPriceChanged,
         onPurchaseDateChanged = viewModel::onPurchaseDateChanged,
+        onPurchaseChannelChanged = viewModel::onPurchaseChannelChanged,
+        onWarrantyEndDateChanged = viewModel::onWarrantyEndDateChanged,
+        onNotesChanged = viewModel::onNotesChanged,
+        onTagsChanged = viewModel::onTagsChanged,
+        onOpenIconPicker = viewModel::openIconPicker,
+        onCloseIconPicker = viewModel::closeIconPicker,
+        onIconSelected = viewModel::onIconSelected,
         onSave = viewModel::save,
-        onClose = onClose,
+        onClose = requestClose,
         modifier = modifier,
     )
 }
@@ -72,10 +109,20 @@ fun AssetFormScreen(
     onNameChanged: (String) -> Unit,
     onPriceChanged: (String) -> Unit,
     onPurchaseDateChanged: (String) -> Unit,
+    onPurchaseChannelChanged: (String) -> Unit,
+    onWarrantyEndDateChanged: (String) -> Unit,
+    onNotesChanged: (String) -> Unit,
+    onTagsChanged: (String) -> Unit,
     onSave: () -> Unit,
     onClose: () -> Unit,
+    onOpenIconPicker: () -> Unit,
+    onCloseIconPicker: () -> Unit,
+    onIconSelected: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    if (state.isIconPickerOpen) {
+        AssetIconPicker(state.iconKey, onIconSelected, onCloseIconPicker)
+    }
     Scaffold(
         modifier = modifier,
         containerColor = MaterialTheme.colorScheme.background,
@@ -107,7 +154,7 @@ fun AssetFormScreen(
                         Button(onClick = onClose) { Text("关闭") }
                     }
                 }
-                else -> FormBody(state, onNameChanged, onPriceChanged, onPurchaseDateChanged)
+                else -> FormBody(state, onNameChanged, onPriceChanged, onPurchaseDateChanged, onPurchaseChannelChanged, onWarrantyEndDateChanged, onNotesChanged, onTagsChanged, onOpenIconPicker, onIconSelected, onSave)
             }
         }
     }
@@ -129,7 +176,7 @@ private fun FormTopBar(
     ) {
         Surface(
             onClick = { if (!isSaving) onClose() },
-            shape = CircleShape,
+            shape = RoundedCornerShape(14.dp),
             color = MaterialTheme.colorScheme.surface,
             contentColor = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier
@@ -151,9 +198,9 @@ private fun FormTopBar(
         )
         Surface(
             onClick = { if (!isSaving) onSave() },
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.secondary,
+            contentColor = MaterialTheme.colorScheme.onSecondary,
             modifier = Modifier
                 .align(Alignment.CenterEnd)
                 .size(44.dp),
@@ -183,6 +230,13 @@ private fun FormBody(
     onNameChanged: (String) -> Unit,
     onPriceChanged: (String) -> Unit,
     onPurchaseDateChanged: (String) -> Unit,
+    onPurchaseChannelChanged: (String) -> Unit,
+    onWarrantyEndDateChanged: (String) -> Unit,
+    onNotesChanged: (String) -> Unit,
+    onTagsChanged: (String) -> Unit,
+    onOpenIconPicker: () -> Unit,
+    onIconSelected: (String) -> Unit,
+    onSave: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -194,48 +248,86 @@ private fun FormBody(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Spacer(Modifier.height(8.dp))
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            Surface(
-                shape = RoundedCornerShape(32.dp),
-                color = MaterialTheme.colorScheme.surface,
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Devices,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .padding(26.dp)
-                        .size(56.dp),
-                )
+        FormSection(title = "选择图标") {
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                val choices = (listOf(assetIconOption(state.iconKey)) + assetIconOptions.take(5)).distinctBy { it.key }
+                choices.forEach { option ->
+                    val selected = option.key == state.iconKey
+                    Surface(onClick = { onIconSelected(option.key) }, enabled = !state.isSaving,
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (selected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = if (selected) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(48.dp)) {
+                        Box(contentAlignment = Alignment.Center) {
+                            MaterialSymbol(glyph = option.glyph, contentDescription = option.label, size = 26.dp)
+                        }
+                    }
+                }
             }
+            androidx.compose.material3.TextButton(onClick = onOpenIconPicker, enabled = !state.isSaving) { Text("查看全部图标") }
         }
-        OutlinedTextField(
-            value = state.name,
-            onValueChange = onNameChanged,
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text(stringResource(R.string.asset_name_label)) },
-            enabled = !state.isSaving,
-            singleLine = true,
-        )
-        OutlinedTextField(
-            value = state.price,
-            onValueChange = onPriceChanged,
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text(stringResource(R.string.asset_price_label)) },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            enabled = !state.isSaving,
-            singleLine = true,
-        )
-        OutlinedTextField(
-            value = state.purchaseDate,
-            onValueChange = onPurchaseDateChanged,
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text(stringResource(R.string.asset_purchase_date_label)) },
-            supportingText = { Text("YYYY-MM-DD") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-            enabled = !state.isSaving,
-            singleLine = true,
-        )
+        FormSection(title = "基本信息") {
+            OutlinedTextField(
+                value = state.name,
+                onValueChange = onNameChanged,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.asset_name_label)) },
+                enabled = !state.isSaving,
+                singleLine = true,
+            )
+            OutlinedTextField(
+                value = state.price,
+                onValueChange = onPriceChanged,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.asset_price_label)) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                enabled = !state.isSaving,
+                singleLine = true,
+            )
+            DateInputField(
+                value = state.purchaseDate,
+                onValueChange = onPurchaseDateChanged,
+                label = stringResource(R.string.asset_purchase_date_label),
+                enabled = !state.isSaving,
+            )
+            OutlinedTextField(
+                value = state.purchaseChannel,
+                onValueChange = onPurchaseChannelChanged,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("购买渠道（选填）") },
+                singleLine = true,
+                enabled = !state.isSaving,
+            )
+        }
+        FormSection(title = "生命周期") {
+            DateInputField(
+                value = state.warrantyEndDate,
+                onValueChange = onWarrantyEndDateChanged,
+                label = "保修截止日（选填）",
+                enabled = !state.isSaving,
+                allowEmpty = true,
+            )
+            OutlinedTextField(
+                value = state.tags,
+                onValueChange = onTagsChanged,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("标签（选填，用逗号分隔）") },
+                supportingText = { Text("最多 20 个") },
+                singleLine = false,
+                enabled = !state.isSaving,
+            )
+        }
+        FormSection(title = "备注") {
+            OutlinedTextField(
+                value = state.notes,
+                onValueChange = onNotesChanged,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("备注（选填）") },
+                minLines = 3,
+                maxLines = 8,
+                enabled = !state.isSaving,
+            )
+        }
         state.errorMessage?.let { message ->
             Text(
                 text = message,
@@ -243,7 +335,86 @@ private fun FormBody(
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             )
         }
-        Spacer(Modifier.height(8.dp))
+        Button(onClick = onSave, enabled = !state.isSaving, modifier = Modifier.fillMaxWidth().height(48.dp),
+            shape = RoundedCornerShape(14.dp),
+            colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary, contentColor = MaterialTheme.colorScheme.onSecondary)) {
+            Text(if (state.isSaving) "保存中…" else "保存资产")
+        }
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun DateInputField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    enabled: Boolean,
+    allowEmpty: Boolean = false,
+    modifier: Modifier = Modifier,
+) {
+    var showPicker by rememberSaveable { mutableStateOf(false) }
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier.fillMaxWidth(),
+        label = { Text(label) },
+        supportingText = { Text(if (allowEmpty) "YYYY-MM-DD，可留空" else "YYYY-MM-DD") },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+        enabled = enabled,
+        singleLine = true,
+        trailingIcon = {
+            IconButton(onClick = { showPicker = true }, enabled = enabled) {
+                Icon(Icons.Default.DateRange, contentDescription = "选择日期")
+            }
+        },
+    )
+    if (showPicker) {
+        val pickerState = rememberDatePickerState(initialSelectedDateMillis = value.toLocalDateMillis())
+        DatePickerDialog(
+            onDismissRequest = { showPicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pickerState.selectedDateMillis?.let { onValueChange(it.toLocalDateUtc().toString()) }
+                        showPicker = false
+                    },
+                    enabled = pickerState.selectedDateMillis != null,
+                ) { Text("确定") }
+            },
+            dismissButton = { TextButton(onClick = { showPicker = false }) { Text("取消") } },
+        ) { DatePicker(state = pickerState) }
+    }
+}
+
+private fun String.toLocalDateMillis(): Long? = runCatching {
+    LocalDate.parse(this).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+}.getOrNull()
+
+private fun Long.toLocalDateUtc(): LocalDate = Instant.ofEpochMilli(this).atZone(ZoneOffset.UTC).toLocalDate()
+
+@Composable
+private fun FormSection(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        color = MaterialTheme.colorScheme.surface,
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            content = {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                content()
+            },
+        )
     }
 }
 
@@ -261,8 +432,15 @@ private fun AssetFormScreenPreview() {
             onNameChanged = {},
             onPriceChanged = {},
             onPurchaseDateChanged = {},
+            onPurchaseChannelChanged = {},
+            onWarrantyEndDateChanged = {},
+            onNotesChanged = {},
+            onTagsChanged = {},
             onSave = {},
             onClose = {},
+            onOpenIconPicker = {},
+            onCloseIconPicker = {},
+            onIconSelected = {},
         )
     }
 }

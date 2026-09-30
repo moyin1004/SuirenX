@@ -1,0 +1,247 @@
+package io.suirenx.feature.expiry
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.lifecycle.HiltViewModel
+import io.suirenx.core.domain.ExpiryRepository
+import io.suirenx.core.domain.DataChangeNotifier
+import io.suirenx.core.domain.ExpirySettingsRepository
+import io.suirenx.core.domain.RemoteSyncRepository
+import io.suirenx.core.domain.RemoteSyncStatus
+import io.suirenx.core.domain.SyncConflictResolution
+import io.suirenx.core.domain.StorageModeRepository
+import io.suirenx.core.model.ExpiryBucket
+import io.suirenx.core.model.ExpiryItem
+import io.suirenx.core.model.ExpiryItemStatus
+import io.suirenx.core.model.NewExpiryItem
+import java.time.LocalDate
+import javax.inject.Inject
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+data class ExpiryEditorState(
+    val id: String? = null,
+    val name: String = "",
+    val category: String = "日用品",
+    val packageExpiryDate: String = LocalDate.now().toString(),
+    val openedDate: String = "",
+    val openedValidityDays: String = "",
+    val location: String = "",
+    val notes: String = "",
+    val error: String? = null,
+    val isDirty: Boolean = false,
+)
+
+private data class ExpiryEditorDraft(
+    val id: String?,
+    val name: String,
+    val category: String,
+    val packageExpiryDate: String,
+    val openedDate: String,
+    val openedValidityDays: String,
+    val location: String,
+    val notes: String,
+)
+
+private fun ExpiryEditorState.draft() = ExpiryEditorDraft(
+    id, name, category, packageExpiryDate, openedDate, openedValidityDays, location, notes,
+)
+
+internal fun ExpiryEditorState.toNewExpiryItem(): NewExpiryItem {
+    require(name.isNotBlank()) { "请输入用品名称" }
+
+    fun parseDate(value: String, label: String): LocalDate {
+        require(value.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
+            "${label}请输入有效日期，格式为 YYYY-MM-DD"
+        }
+        return runCatching { LocalDate.parse(value) }.getOrElse {
+            throw IllegalArgumentException("${label}请输入有效日期，格式为 YYYY-MM-DD")
+        }
+    }
+
+    val packageDate = parseDate(packageExpiryDate, "包装到期日")
+    val openedDate = openedDate.trim().takeIf(String::isNotEmpty)?.let {
+        parseDate(it, "开封日")
+    }
+    val openedDays = openedValidityDays.trim().takeIf(String::isNotEmpty)?.let {
+        runCatching { it.toInt() }.getOrElse {
+            throw IllegalArgumentException("开封后有效天数请输入正整数")
+        }.also { days -> require(days > 0) { "开封后有效天数请输入正整数" } }
+    }
+
+    require((openedDate == null) == (openedDays == null)) { "开封日与开封后有效天数需要成对填写" }
+    require(openedDate == null || !openedDate.isAfter(LocalDate.now())) { "开封日不能在未来" }
+    require(openedDate == null || !openedDate.isAfter(packageDate)) { "开封日不能晚于包装到期日" }
+    require(notes.length <= 2000) { "备注不能超过 2000 个字符" }
+
+    return NewExpiryItem(name.trim(), category.trim(), packageDate, openedDate, openedDays, location.trim(), notes.trim())
+}
+
+data class ExpiryUiState(
+    val deleteConfirmation: Boolean = false,
+    val deleteError: String? = null,
+    val items: List<ExpiryItem> = emptyList(),
+    val filter: ExpiryBucket? = null,
+    val isArchivedFilter: Boolean = false,
+    val loading: Boolean = true,
+    val refreshing: Boolean = false,
+    val hasLoaded: Boolean = false,
+    val error: String? = null,
+    val query: String = "",
+    val editor: ExpiryEditorState? = null,
+    val detail: ExpiryItem? = null,
+    val busy: Boolean = false,
+    val soonDays: Int = 7,
+    val syncStatus: RemoteSyncStatus = RemoteSyncStatus(),
+    val remoteMode: Boolean = false,
+) {
+    val expiredCount get() = items.count { it.bucket(LocalDate.now(), soonDays) == ExpiryBucket.Expired }
+    val visibleItems get() = items.filter { item ->
+        if (isArchivedFilter) item.archivedAt != null
+        else item.archivedAt == null && (filter == null || item.bucket(LocalDate.now(), soonDays) == filter ||
+            (filter == ExpiryBucket.ExpiringSoon && item.bucket(LocalDate.now(), soonDays) == ExpiryBucket.DueToday))
+    }.filter { item ->
+        query.isBlank() || listOf(item.name, item.category, item.location).any { value -> value.contains(query, ignoreCase = true) }
+    }.sortedWith(compareBy<ExpiryItem> { it.bucket(LocalDate.now(), soonDays).ordinal }.thenBy { it.actualExpiryDate })
+}
+
+@HiltViewModel
+class ExpiryViewModel @Inject constructor(
+    private val repository: ExpiryRepository,
+    private val changes: DataChangeNotifier,
+    private val settings: ExpirySettingsRepository,
+    private val remoteSync: RemoteSyncRepository,
+    private val modes: StorageModeRepository,
+) : ViewModel() {
+    val uiState: StateFlow<ExpiryUiState>
+        field = MutableStateFlow(ExpiryUiState())
+    private var editorBaseline: ExpiryEditorDraft? = null
+
+    init {
+        viewModelScope.launch {
+            settings.initialize()
+            settings.soonDays.collect { days -> uiState.update { it.copy(soonDays = days) } }
+        }
+        refresh()
+        viewModelScope.launch { changes.events.collect { refresh() } }
+        viewModelScope.launch { remoteSync.status.collect { status -> uiState.update { it.copy(syncStatus = status) } } }
+        viewModelScope.launch { modes.mode.collect { mode -> uiState.update { it.copy(remoteMode = mode == io.suirenx.core.model.StorageMode.Remote) } } }
+    }
+
+    fun setSoonDays(days: Int) {
+        viewModelScope.launch { settings.selectSoonDays(days) }
+    }
+
+    fun refresh() {
+        viewModelScope.launch {
+            uiState.update { current ->
+                current.copy(
+                    // Keep the current list visible while a page refresh is in flight.
+                    loading = !current.hasLoaded,
+                    refreshing = true,
+                    error = null,
+                )
+            }
+            repository.list(includeArchived = true).fold(
+                onSuccess = { items -> uiState.update { it.copy(items = items, loading = false, refreshing = false, hasLoaded = true) } },
+                onFailure = { error -> uiState.update { it.copy(loading = false, refreshing = false, error = error.message ?: "无法读取用品") } },
+            )
+            remoteSync.refreshStatus()
+        }
+    }
+    fun selectFilter(filter: ExpiryBucket?) = uiState.update { it.copy(filter = filter, isArchivedFilter = false) }
+    fun selectArchived() = uiState.update { it.copy(isArchivedFilter = true, filter = null) }
+    fun setQuery(query: String) = uiState.update { it.copy(query = query) }
+    fun openNew() {
+        val editor = ExpiryEditorState()
+        editorBaseline = editor.draft()
+        uiState.update { it.copy(editor = editor) }
+    }
+    fun openEdit(item: ExpiryItem) {
+        val editor = ExpiryEditorState(item.id, item.name, item.category, item.packageExpiryDate.toString(), item.openedDate?.toString().orEmpty(), item.openedValidityDays?.toString().orEmpty(), item.location, item.notes)
+        editorBaseline = editor.draft()
+        uiState.update { it.copy(detail = null, editor = editor) }
+    }
+    fun closeEditor() = uiState.update { it.copy(editor = null) }
+    fun openDetail(item: ExpiryItem) = uiState.update { it.copy(detail = item) }
+    fun closeDetail() = uiState.update { it.copy(detail = null) }
+    fun editName(value: String) = edit { it.copy(name = value, error = null) }
+    fun editCategory(value: String) = edit { it.copy(category = value, error = null) }
+    fun editPackageExpiry(value: String) = edit { it.copy(packageExpiryDate = value, error = null) }
+    fun editOpenedDate(value: String) = edit { it.copy(openedDate = value, error = null) }
+    fun editOpenedDays(value: String) = edit { it.copy(openedValidityDays = value, error = null) }
+    fun editLocation(value: String) = edit { it.copy(location = value, error = null) }
+    fun editNotes(value: String) = edit { it.copy(notes = value, error = null) }
+    fun saveEditor() {
+        val editor = uiState.value.editor ?: return
+        val draft = try {
+            editor.toNewExpiryItem()
+        } catch (error: IllegalArgumentException) {
+            uiState.update { it.copy(editor = editor.copy(error = error.message ?: "请检查名称、日期和开封期限")) }
+            return
+        }
+        uiState.update { it.copy(busy = true) }
+        viewModelScope.launch {
+            val result = editor.id?.let { repository.update(it, draft) } ?: repository.create(draft)
+            result.fold(
+                onSuccess = { uiState.update { it.copy(editor = null, busy = false) }; changes.notifyChanged(); refresh() },
+                onFailure = { error -> uiState.update { it.copy(busy = false, editor = editor.copy(error = error.message ?: "保存失败")) } },
+            )
+        }
+    }
+    fun updateStatus(status: ExpiryItemStatus) = mutate { item -> repository.updateStatus(item.id, status) }
+    fun archive(archive: Boolean) = mutate { item -> repository.updateArchive(item.id, archive) }
+    fun requestDelete() {
+        if (!uiState.value.busy && uiState.value.detail != null) uiState.update { it.copy(deleteConfirmation = true, deleteError = null) }
+    }
+    fun dismissDelete() {
+        if (!uiState.value.busy) uiState.update { it.copy(deleteConfirmation = false, deleteError = null) }
+    }
+    fun confirmDelete() {
+        val item = uiState.value.detail ?: return
+        if (uiState.value.busy || !uiState.value.deleteConfirmation) return
+        uiState.update { it.copy(busy = true, deleteError = null) }
+        viewModelScope.launch {
+            try {
+                repository.delete(item.id).fold(
+                    onSuccess = {
+                        uiState.update { it.copy(detail = null, deleteConfirmation = false) }
+                        changes.notifyChanged()
+                        refresh()
+                    },
+                    onFailure = { error ->
+                        if (error is kotlinx.coroutines.CancellationException) throw error
+                        uiState.update { it.copy(deleteError = error.message ?: "删除失败，请重试") }
+                    },
+                )
+            } finally { uiState.update { it.copy(busy = false) } }
+        }
+    }
+    fun retrySync() {
+        viewModelScope.launch { remoteSync.retry(); refresh() }
+    }
+    fun resolveSyncConflict(id: String, resolution: SyncConflictResolution) {
+        viewModelScope.launch { remoteSync.resolveExpiryConflict(id, resolution); refresh() }
+    }
+    private fun mutate(action: suspend (ExpiryItem) -> Result<ExpiryItem>) {
+        val item = uiState.value.detail ?: return
+        if (uiState.value.busy) return
+        uiState.update { it.copy(busy = true) }
+        viewModelScope.launch {
+            action(item).fold(
+                onSuccess = { uiState.update { it.copy(detail = null, busy = false) }; changes.notifyChanged(); refresh() },
+                onFailure = { error -> uiState.update { it.copy(busy = false, error = error.message ?: "操作失败") } },
+            )
+        }
+    }
+    private fun edit(transform: (ExpiryEditorState) -> ExpiryEditorState) {
+        uiState.value.editor?.let { current ->
+            uiState.update { state ->
+                val next = transform(current)
+                state.copy(editor = next.copy(isDirty = next.draft() != editorBaseline))
+            }
+        }
+    }
+}

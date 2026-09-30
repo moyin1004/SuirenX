@@ -7,7 +7,7 @@ import javax.inject.Inject
 class GetAssetsUseCase @Inject constructor(
     private val repository: AssetRepository,
 ) {
-    suspend operator fun invoke(status: AssetStatus? = null): Result<List<Asset>> =
-        repository.getAssets(status)
+    suspend operator fun invoke(status: AssetStatus? = null, includeArchived: Boolean = false): Result<List<Asset>> =
+        repository.getAssets(status, includeArchived)
 }
 
