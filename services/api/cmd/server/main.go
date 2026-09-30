@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"log/slog"
 	"os"
 
 	"github.com/moyin1004/suirenx/services/api/internal/database"
@@ -11,16 +11,19 @@ import (
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
 	databasePath := envOrDefault("SUIRENX_DATABASE_PATH", "data/suirenx.db")
 	address := envOrDefault("SUIRENX_HTTP_ADDRESS", ":8888")
 	jwtSecret := os.Getenv("SUIRENX_JWT_SECRET")
 	if len([]byte(jwtSecret)) < 32 {
-		log.Fatalf("SUIRENX_JWT_SECRET must be at least 32 bytes")
+		slog.Error("invalid server configuration", "setting", "SUIRENX_JWT_SECRET", "reason", "must be at least 32 bytes")
+		os.Exit(1)
 	}
 
 	db, err := database.Open(databasePath)
 	if err != nil {
-		log.Fatalf("open database: %v", err)
+		slog.Error("open database", "error", err)
+		os.Exit(1)
 	}
 
 	repo := repository.NewGormAssetRepository(db)

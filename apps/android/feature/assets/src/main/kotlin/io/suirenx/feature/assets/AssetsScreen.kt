@@ -25,7 +25,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.material.icons.filled.Refresh
@@ -41,7 +44,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
@@ -90,7 +92,7 @@ fun AssetsRoute(
         query = query,
         searching = searching,
         onQueryChange = { query = it },
-        onSearch = { searching = !searching; query = "" },
+        onSearch = { searching = !searching },
         onSortSelected = viewModel::onSortSelected,
         onSortDirectionToggle = viewModel::toggleSortDirection,
         onTagToggle = viewModel::toggleTag,
@@ -115,7 +117,7 @@ fun AssetsScreen(
     onClearTags: () -> Unit = {},
 ) {
     val listState = rememberLazyListState()
-    val overviewIndex = 1 + (if (searching) 1 else 0)
+    val overviewIndex = 1
     val compact by remember(listState, overviewIndex) { derivedStateOf { listState.firstVisibleItemIndex > overviewIndex } }
     val visibleAssets = state.visibleAssets.filter { it.name.contains(query, ignoreCase = true) || it.tags.any { tag -> tag.contains(query, ignoreCase = true) } }
     LazyColumn(
@@ -124,10 +126,7 @@ fun AssetsScreen(
         contentPadding = PaddingValues(bottom = 132.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        item { Header(onRefresh = onRefresh, onSearch = onSearch, modifier = Modifier.padding(horizontal = 16.dp)) }
-        if (searching) {
-            item { OutlinedTextField(value = query, onValueChange = onQueryChange, placeholder = { Text("搜索资产名称或标签") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), shape = RoundedCornerShape(14.dp)) }
-        }
+        item { Header(onRefresh = onRefresh, modifier = Modifier.padding(horizontal = 16.dp)) }
         if (state.assets.isNotEmpty()) {
             item {
                 AssetOverviewCard(state.overview, Modifier.padding(horizontal = 16.dp), state.assets.filterNot { it.isArchived }.maxOfOrNull { it.heldDays } ?: 0)
@@ -150,26 +149,49 @@ fun AssetsScreen(
                 }
             }
         }
-        if (searching || state.visibleAssets.isNotEmpty()) {
-            item {
-                SortControls(
+        item {
+            if (searching) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = onSearch) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回资产列表")
+                    }
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = onQueryChange,
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("搜索名称、类型或标签") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp),
+                        trailingIcon = {
+                            if (query.isNotEmpty()) {
+                                IconButton(onClick = { onQueryChange("") }) {
+                                    Icon(Icons.Default.Close, contentDescription = "清除搜索")
+                                }
+                            }
+                        },
+                    )
+                }
+            } else {
+                AssetListToolbar(
                     sort = state.sort,
                     descending = state.sortDescending,
+                    onSearch = onSearch,
                     onSortSelected = onSortSelected,
                     onDirectionToggle = onSortDirectionToggle,
-                    modifier = Modifier.padding(horizontal = 16.dp),
+                    modifier = Modifier.padding(horizontal = 12.dp),
                 )
             }
         }
         item {
-            Row(
+            Text(
+                "状态：${state.selectedFilter.label} · 搜索：${query.ifBlank { "全部" }} · ${visibleAssets.size} 项",
                 modifier = Modifier.padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.Bottom,
-            ) {
-                Text("我的资产", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.weight(1f))
-                Text("${visibleAssets.size} 项记录", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
-            }
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp,
+            )
         }
         when {
             state.isLoading -> item { LoadingState() }
@@ -184,13 +206,10 @@ fun AssetsScreen(
 }
 
 @Composable
-private fun Header(onRefresh: () -> Unit, onSearch: () -> Unit, modifier: Modifier = Modifier) {
+private fun Header(onRefresh: () -> Unit, modifier: Modifier = Modifier) {
     SuirenHeader(modifier) {
         Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onSearch, modifier = Modifier.size(44.dp)) {
-                    Icon(Icons.Default.Search, contentDescription = "搜索", modifier = Modifier.size(21.dp))
-                }
                 IconButton(onClick = onRefresh, modifier = Modifier.size(44.dp)) {
                     Icon(Icons.Default.Refresh, contentDescription = "刷新", modifier = Modifier.size(21.dp))
                 }
@@ -261,20 +280,42 @@ private fun TagFilters(
 }
 
 @Composable
-private fun SortControls(
+private fun AssetListToolbar(
     sort: AssetSort,
     descending: Boolean,
+    onSearch: () -> Unit,
     onSortSelected: (AssetSort) -> Unit,
     onDirectionToggle: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text("排序", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.size(6.dp))
+        Text("我的资产", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        IconButton(onClick = onSearch, modifier = Modifier.size(40.dp)) {
+            Icon(Icons.Default.Search, contentDescription = "搜索资产", modifier = Modifier.size(20.dp))
+        }
         Box {
-            OutlinedButton(onClick = { expanded = true }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)) {
-                Text(sort.label, fontSize = 11.sp)
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(
+                        onClick = { expanded = true },
+                        modifier = Modifier.height(32.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                    ) {
+                        Text(sort.label, fontSize = 11.sp)
+                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(16.dp))
+                    }
+                    VerticalDivider(
+                        modifier = Modifier.height(18.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                    )
+                    IconButton(onClick = onDirectionToggle, modifier = Modifier.size(32.dp)) {
+                        Text(if (descending) "↓" else "↑", fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
+                    }
+                }
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 AssetSort.entries.forEach { option ->
@@ -285,8 +326,6 @@ private fun SortControls(
                 }
             }
         }
-        Spacer(Modifier.weight(1f))
-        TextButton(onClick = onDirectionToggle) { Text(if (descending) "降序" else "升序", fontSize = 11.sp) }
     }
 }
 

@@ -11,6 +11,13 @@ import (
 	"github.com/moyin1004/suirenx/services/api/internal/repository"
 	"github.com/moyin1004/suirenx/services/api/internal/service"
 	"gorm.io/gorm"
+	"time"
+)
+
+const (
+	httpReadTimeout  = 10 * time.Second
+	httpWriteTimeout = 30 * time.Second
+	httpIdleTimeout  = 60 * time.Second
 )
 
 type Server struct{ h *server.Hertz }
@@ -31,9 +38,15 @@ func WithM5(db *gorm.DB, jwtSecret string) ServerOption {
 }
 
 func NewServer(address string, assets *service.AssetService, options ...ServerOption) *Server {
-	h := server.Default(server.WithHostPorts(address))
+	h := server.Default(
+		server.WithHostPorts(address),
+		server.WithReadTimeout(httpReadTimeout),
+		server.WithWriteTimeout(httpWriteTimeout),
+		server.WithIdleTimeout(httpIdleTimeout),
+	)
 	_ = assets // Kept in constructor for internal service-test compatibility.
 	s := &Server{h: h}
+	h.Use(withRequestContext())
 	for _, option := range options {
 		option(s, h)
 	}

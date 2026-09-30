@@ -22,7 +22,7 @@ type authRequest struct {
 func (m *m5Handlers) Register(c *app.RequestContext) {
 	var request authRequest
 	if err := c.BindAndValidate(&request); err != nil {
-		c.JSON(consts.StatusBadRequest, map[string]string{"error": "invalid account request"})
+		writeAPIError(c, consts.StatusBadRequest, "invalid_account_request", "invalid account request")
 		return
 	}
 	value, expiresAt, err := m.auth.Register(request.Username, request.Password)
@@ -36,7 +36,7 @@ func (m *m5Handlers) Register(c *app.RequestContext) {
 func (m *m5Handlers) Login(c *app.RequestContext) {
 	var request authRequest
 	if err := c.BindAndValidate(&request); err != nil {
-		c.JSON(consts.StatusBadRequest, map[string]string{"error": "invalid account request"})
+		writeAPIError(c, consts.StatusBadRequest, "invalid_account_request", "invalid account request")
 		return
 	}
 	value, expiresAt, err := m.auth.Login(request.Username, request.Password)
@@ -64,7 +64,7 @@ func (m *m5Handlers) SyncAssets(c *app.RequestContext) {
 	}
 	var request service.SyncBatchInput
 	if err := c.BindAndValidate(&request); err != nil {
-		c.JSON(consts.StatusBadRequest, map[string]string{"error": "invalid sync request"})
+		writeAPIError(c, consts.StatusBadRequest, "invalid_sync_request", "invalid sync request")
 		return
 	}
 	result, err := m.sync.Apply(ownerID, request)
@@ -86,17 +86,21 @@ func (m *m5Handlers) ownerID(c *app.RequestContext) (string, error) {
 
 func writeM5Error(c *app.RequestContext, err error) {
 	status := consts.StatusInternalServerError
+	code := "internal_server_error"
 	switch {
 	case errors.Is(err, auth.ErrInvalidCredentials), errors.Is(err, auth.ErrInvalidToken):
 		status = consts.StatusUnauthorized
+		code = "invalid_credentials"
 	case errors.Is(err, auth.ErrInvalidAccount), errors.Is(err, auth.ErrUsernameTaken), errors.Is(err, service.ErrInvalidSyncRequest):
 		status = consts.StatusBadRequest
+		code = "invalid_request"
 	case errors.Is(err, service.ErrSyncConflict):
 		status = consts.StatusConflict
+		code = "sync_conflict"
 	}
 	message := err.Error()
 	if status == consts.StatusInternalServerError {
 		message = "internal server error"
 	}
-	c.JSON(status, map[string]string{"error": message})
+	writeAPIError(c, status, code, message)
 }

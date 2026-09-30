@@ -117,6 +117,7 @@ private fun SuirenXApp() {
         popExitTransition = { ExitTransition.None },
         predictivePopEnterTransition = { EnterTransition.None },
         predictivePopExitTransition = { ExitTransition.None },
+        sizeTransform = { null },
     ) {
         composable(Routes.MAIN) {
             BackendGate {
@@ -246,6 +247,7 @@ private fun MainScaffold(
             popExitTransition = { ExitTransition.None },
             predictivePopEnterTransition = { EnterTransition.None },
             predictivePopExitTransition = { ExitTransition.None },
+            sizeTransform = { null },
             modifier = Modifier.fillMaxSize(),
         ) {
             composable(HomeTab.Overview.route) {

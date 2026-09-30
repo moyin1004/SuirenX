@@ -19,18 +19,39 @@ import kotlinx.coroutines.flow.StateFlow
 class SyncScheduler @Inject constructor(@ApplicationContext private val context: Context) : SyncScheduleRepository {
     private val preferences = context.getSharedPreferences("sync_schedule", Context.MODE_PRIVATE)
     private val current = MutableStateFlow(SyncSchedule.entries.firstOrNull { it.name == preferences.getString("schedule", "") } ?: SyncSchedule.OnChange)
+    private var periodicWorkName = "suirenx-sync-periodic"
+    private var changeWorkName = "suirenx-sync-change"
+    private var requiredNetworkType = NetworkType.CONNECTED
     override val schedule: StateFlow<SyncSchedule> = current
+
+    internal constructor(
+        context: Context,
+        testWorkNameSuffix: String,
+        testNetworkType: NetworkType = NetworkType.CONNECTED,
+    ) : this(context) {
+        periodicWorkName = "suirenx-sync-periodic-$testWorkNameSuffix"
+        changeWorkName = "suirenx-sync-change-$testWorkNameSuffix"
+        requiredNetworkType = testNetworkType
+    }
+
     override fun select(schedule: SyncSchedule) {
         preferences.edit().putString("schedule", schedule.name).apply()
         current.value = schedule
-        initialize()
+        enqueuePeriodicWork(ExistingPeriodicWorkPolicy.UPDATE)
     }
     override fun initialize() {
+        // Application.onCreate also runs when JobScheduler starts our Worker.
+        // Keep an existing request so startup does not replace its generation
+        // while WorkManager is recovering or executing it.
+        enqueuePeriodicWork(ExistingPeriodicWorkPolicy.KEEP)
+    }
+
+    private fun enqueuePeriodicWork(policy: ExistingPeriodicWorkPolicy) {
         // The recovery job also drains changes committed just before process death.
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-            "suirenx-sync-periodic", ExistingPeriodicWorkPolicy.UPDATE,
+            periodicWorkName, policy,
             PeriodicWorkRequestBuilder<LocalSyncWorker>(current.value.intervalMinutes, TimeUnit.MINUTES)
-                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .setConstraints(workConstraints())
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS).build(),
         )
     }
@@ -39,13 +60,17 @@ class SyncScheduler @Inject constructor(@ApplicationContext private val context:
     override fun onLocalChange() {
         if (current.value != SyncSchedule.OnChange) return
         WorkManager.getInstance(context).enqueueUniqueWork(
-            "suirenx-sync-change", ExistingWorkPolicy.REPLACE,
+            changeWorkName, ExistingWorkPolicy.REPLACE,
             OneTimeWorkRequestBuilder<LocalSyncWorker>()
                 .setInitialDelay(2, TimeUnit.SECONDS)
-                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .setConstraints(workConstraints())
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS).build(),
         )
     }
+
+    private fun workConstraints() = Constraints.Builder()
+        .setRequiredNetworkType(requiredNetworkType)
+        .build()
 }
 
 @EntryPoint

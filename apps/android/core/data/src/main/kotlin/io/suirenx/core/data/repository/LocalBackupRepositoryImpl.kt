@@ -17,6 +17,7 @@ import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
@@ -131,7 +132,11 @@ class LocalBackupRepositoryImpl @Inject constructor(
     }
 
     private fun parse(content: String): LocalBackup {
-        val backup = json.decodeFromString<LocalBackup>(content)
+        val backup = try {
+            json.decodeFromString<LocalBackup>(content)
+        } catch (error: SerializationException) {
+            throw IllegalArgumentException("备份文件格式无效或内容损坏", error)
+        }
         require(backup.format == LOCAL_BACKUP_FORMAT) { "不是 SuirenX 本地备份文件" }
         require(backup.version == LOCAL_BACKUP_VERSION) { "不支持的备份版本" }
         val ids = HashSet<String>()

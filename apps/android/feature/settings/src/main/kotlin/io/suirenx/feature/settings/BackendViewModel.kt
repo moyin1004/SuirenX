@@ -384,7 +384,7 @@ class BackendViewModel @Inject constructor(
                     schedule.onLocalChange()
                     events.tryEmit(BackendEvent.Message("已恢复 ${summary.assetCount} 件资产、${summary.expiryItemCount} 件用品"))
                 },
-                onFailure = { error -> uiState.update { it.copy(backupBusy = false, backupError = error.message ?: "恢复失败，原数据未改变") } },
+                onFailure = { uiState.update { it.copy(backupBusy = false, backupError = "恢复失败，原数据未改变") } },
             )
         }
     }

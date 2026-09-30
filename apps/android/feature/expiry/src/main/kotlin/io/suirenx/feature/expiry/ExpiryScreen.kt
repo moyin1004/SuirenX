@@ -36,6 +36,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -88,6 +90,7 @@ fun ExpiryRoute(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var showDiscard by rememberSaveable { mutableStateOf(false) }
+    var searching by rememberSaveable { mutableStateOf(false) }
     val requestEditorClose = {
         if (state.editor?.isDirty == true && !state.busy) showDiscard = true else viewModel.closeEditor()
     }
@@ -102,8 +105,11 @@ fun ExpiryRoute(
     }
     ExpiryScreen(
         state = state, onBack = onBack, onAdd = { viewModel.openNew(); onAdd() },
-        onRetry = viewModel::refresh, onFilter = viewModel::selectFilter, onArchived = viewModel::selectArchived,
+        onRetry = viewModel::refresh, onRefresh = viewModel::refresh,
+        onFilter = viewModel::selectFilter, onArchived = viewModel::selectArchived,
         onQueryChanged = viewModel::setQuery,
+        searching = searching,
+        onSearch = { searching = !searching },
         onOpen = viewModel::openDetail, onCloseDetail = viewModel::closeDetail, onEdit = viewModel::openEdit,
         onStatus = viewModel::updateStatus, onArchive = viewModel::archive,
         onDelete = viewModel::requestDelete, onConfirmDelete = viewModel::confirmDelete, onDismissDelete = viewModel::dismissDelete,
@@ -142,6 +148,7 @@ fun ExpiryScreen(
     onBack: () -> Unit,
     onAdd: () -> Unit,
     onRetry: () -> Unit,
+    onRefresh: () -> Unit = {},
     onFilter: (ExpiryBucket?) -> Unit,
     onArchived: () -> Unit,
     onQueryChanged: (String) -> Unit = {},
@@ -159,6 +166,8 @@ fun ExpiryScreen(
     onEditorOpenedDays: (String) -> Unit,
     onEditorLocation: (String) -> Unit,
     onEditorNotes: (String) -> Unit,
+    searching: Boolean = false,
+    onSearch: () -> Unit = {},
     modifier: Modifier = Modifier,
     onDelete: () -> Unit = {},
     onConfirmDelete: () -> Unit = {},
@@ -238,9 +247,31 @@ fun ExpiryScreen(
         }
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("提醒列表", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                Text("按日期排序", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                IconButton(onClick = onAdd) { Icon(Icons.Default.Add, contentDescription = "新增用品", modifier = Modifier.size(20.dp)) }
+                if (searching) {
+                    IconButton(onClick = onSearch) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回用品列表")
+                    }
+                    OutlinedTextField(
+                        value = state.query,
+                        onValueChange = onQueryChanged,
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("搜索名称、分类或位置") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp),
+                        trailingIcon = {
+                            if (state.query.isNotEmpty()) {
+                                IconButton(onClick = { onQueryChanged("") }) {
+                                    Icon(Icons.Default.Close, contentDescription = "清除搜索")
+                                }
+                            }
+                        },
+                    )
+                } else {
+                    Text("提醒列表", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    IconButton(onClick = onSearch) { Icon(Icons.Default.Search, contentDescription = "搜索用品", modifier = Modifier.size(20.dp)) }
+                    IconButton(onClick = onRefresh) { Icon(Icons.Default.Refresh, contentDescription = "刷新用品列表", modifier = Modifier.size(20.dp)) }
+                    IconButton(onClick = onAdd) { Icon(Icons.Default.Add, contentDescription = "新增用品", modifier = Modifier.size(20.dp)) }
+                }
             }
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(null to "全部", ExpiryBucket.Expired to "已过期", ExpiryBucket.ExpiringSoon to "临期", ExpiryBucket.Normal to "正常").forEach { (bucket, label) ->
@@ -248,19 +279,6 @@ fun ExpiryScreen(
                 }
                 FilterChip(selected = state.isArchivedFilter, onClick = onArchived, label = { Text("已归档", fontSize = 11.sp) }, shape = RoundedCornerShape(50))
             }
-            OutlinedTextField(
-                value = state.query,
-                onValueChange = onQueryChanged,
-                modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
-                label = { Text("搜索用品") },
-                placeholder = { Text("名称、分类或位置") },
-                singleLine = true,
-                trailingIcon = {
-                    if (state.query.isNotEmpty()) {
-                        TextButton(onClick = { onQueryChanged("") }) { Text("清除", fontSize = 11.sp) }
-                    }
-                },
-            )
         }
         when {
             state.loading -> item { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }

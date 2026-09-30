@@ -56,7 +56,7 @@ export SUIRENX_JWT_SECRET='replace-with-at-least-32-random-bytes'
 go run ./cmd/server
 ```
 
-默认监听 `http://localhost:8888`。`SUIRENX_JWT_SECRET` 是账号 API 的 HS256 签名密钥，至少 32 字节；首次启动会自动创建 `services/api/data/suirenx.db`，不会创建无主的匿名演示资产；该目录不会提交到 Git。
+默认监听 `http://localhost:8888`。`SUIRENX_JWT_SECRET` 是账号 API 的 HS256 签名密钥，至少 32 字节；首次启动会自动创建 `services/api/data/suirenx.db`，不会创建无主的匿名演示资产；该目录不会提交到 Git。生产环境应通过部署平台的 secret store 注入密钥，并为每个环境使用独立密钥。
 
 验证健康接口：
 
@@ -86,7 +86,7 @@ API 启动时按编号执行内置 SQL 迁移，迁移记录保存在 `schema_mi
 
 首次启动直接使用本地 Room，无需服务器。设置中可选开启同步、配置账号与地址，选择每次修改后同步或定时同步；始终可手动同步。后台失败保留本机数据和待发送批次。备份/恢复始终针对本机完整数据，恢复前自动备份。
 
-模拟器通过 `http://10.0.2.2:8888/` 连接开发服务；明文 HTTP 仅 Debug 开放。首次同步将经过备份并整理当前账号旧缓存；更换账号不会自动上传已绑定的数据集。真实多设备验收范围见 [TODO](docs/TODO.md)。
+模拟器通过 `http://10.0.2.2:8888/` 连接开发服务；明文 HTTP 仅 Debug 开放。首次同步前应用会备份并整理当前账号旧缓存；更换账号不会自动上传已绑定的数据集。真实多设备验收范围见 [TODO](docs/TODO.md)。
 
 直接构建 APK：
 
@@ -114,6 +114,33 @@ HTTP JSON 使用 snake_case 字段名、整数金额和 `ACTIVE` / `RETIRED` 字
 | `POST` | `/api/v1/auth/logout` | 撤销当前账号 token |
 | `POST` | `/api/v1/sync/assets` | 版本化资产/用品批量同步与增量拉取 |
 
+### API 示例
+
+注册与登录都接受同一请求结构。密码只在 HTTPS 传输中发送，服务端保存经哈希处理的凭据；不要把真实密码写入 shell 历史或日志。
+
+```http
+POST /api/v1/auth/register
+Content-Type: application/json
+
+{"username":"alice","password":"a-long-password"}
+```
+
+成功时返回 `201`。客户端应将 `access_token` 作为 bearer token 保存，并仅发送给签发它的服务器地址。注销接口要求认证，但 JWT 是无状态令牌；注销只确认本地会话结束，不会让已签发令牌立即失效，令牌在过期前仍可被接受。
+
+同步请求使用稳定的幂等键；客户端必须先持久化整个批次，网络重试时复用完全相同的键和内容。下面是空批次增量拉取示例：
+
+```http
+POST /api/v1/sync/assets
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+{"cursor":0,"expiry_cursor":0,"idempotency_key":"<stable-unique-key>","changes":[],"expiry_changes":[]}
+```
+
+响应包含已应用批次、增量变化、冲突及下一游标。资产与用品 CRUD 仍由 Android 本机 Room 管理；同步接口不提供通用远端 CRUD。字段和验证规则以 [`m5.proto`](api/proto/suirenx/m5/v1/m5.proto) 与[数据同步说明](docs/data-sync.md)为准。
+
+服务端响应会回传 `X-Request-ID`；错误响应保留可读的 `error` 字符串，并附带稳定的 `code` 与 `request_id`，便于客户端展示错误和维护者关联结构化服务日志。服务端默认读、写、空闲超时分别为 10、30、60 秒；Android 普通请求超时为连接 10 秒、总调用 30 秒，健康探测使用较短的 5/8 秒预算。
+
 ## 开发约定
 
 - 金额统一存储为整数“分”。
@@ -126,8 +153,9 @@ HTTP JSON 使用 snake_case 字段名、整数金额和 `ACTIVE` / `RETIRED` 字
 ## 验证
 
 ```shell
-cd services/api && go test ./...
+cd services/api && go test ./... && go vet ./...
 ./gradlew :apps:android:app:assembleDebug
+./gradlew :apps:android:feature:assets:testDebugUnitTest :apps:android:feature:expiry:testDebugUnitTest
 git diff --check
 ```
 

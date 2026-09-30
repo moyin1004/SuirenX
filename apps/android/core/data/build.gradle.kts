@@ -1,7 +1,7 @@
 plugins {
     alias(libs.plugins.suirenx.android.library)
     alias(libs.plugins.kotlin.serialization)
-    alias(libs.plugins.kotlin.kapt)
+    alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
 }
 
@@ -22,7 +22,7 @@ dependencies {
     testImplementation(libs.junit4)
 
     implementation(libs.hilt.android)
-    kapt(libs.hilt.compiler)
+    ksp(libs.hilt.compiler)
 
     implementation(libs.retrofit.core)
     implementation(libs.retrofit.kotlinx.serialization)
@@ -32,9 +32,5 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
-    kapt(libs.androidx.room.compiler)
-}
-
-kapt {
-    correctErrorTypes = true
+    ksp(libs.androidx.room.compiler)
 }

@@ -6,6 +6,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import io.suirenx.core.data.BuildConfig
 import io.suirenx.core.data.auth.AuthTokenStore
+import io.suirenx.core.data.network.HttpTimeouts
 import javax.inject.Singleton
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
@@ -25,8 +26,8 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideOkHttpClient(tokens: AuthTokenStore): OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-        .callTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .connectTimeout(HttpTimeouts.CONNECT_MILLIS, java.util.concurrent.TimeUnit.MILLISECONDS)
+        .callTimeout(HttpTimeouts.CALL_MILLIS, java.util.concurrent.TimeUnit.MILLISECONDS)
         .addInterceptor(
             HttpLoggingInterceptor().apply {
                 level = if (BuildConfig.DEBUG) {
@@ -36,6 +37,12 @@ object NetworkModule {
                 }
             },
         )
+        .addInterceptor { chain ->
+            val request = chain.request().newBuilder()
+                .header("X-Request-ID", java.util.UUID.randomUUID().toString())
+                .build()
+            chain.proceed(request)
+        }
         .addInterceptor { chain ->
             val token = tokens.tokenFor(chain.request().url.toString())
             val request = if (token.isNullOrBlank() || chain.request().header("Authorization") != null) chain.request() else chain.request().newBuilder()

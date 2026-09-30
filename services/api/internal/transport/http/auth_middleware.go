@@ -24,12 +24,14 @@ func withM5Auth(authService *auth.Service) app.HandlerFunc {
 		value := strings.TrimSpace(string(c.GetHeader(consts.HeaderAuthorization)))
 		parts := strings.Fields(value)
 		if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
-			c.AbortWithStatusJSON(consts.StatusUnauthorized, map[string]string{"error": auth.ErrInvalidToken.Error()})
+			c.Abort()
+			writeAPIError(c, consts.StatusUnauthorized, "invalid_token", auth.ErrInvalidToken.Error())
 			return
 		}
 		claims, err := authService.Authenticate(parts[1])
 		if err != nil {
-			c.AbortWithStatusJSON(consts.StatusUnauthorized, map[string]string{"error": auth.ErrInvalidToken.Error()})
+			c.Abort()
+			writeAPIError(c, consts.StatusUnauthorized, "invalid_token", auth.ErrInvalidToken.Error())
 			return
 		}
 		c.Set(authOwnerIDContextKey, claims.Subject)

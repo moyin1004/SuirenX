@@ -24,7 +24,9 @@
 - Worker 执行时重读偏好、权限和 Room；唯一调度与发送互斥，避免并行任务重复通知。
 - 使用固定通知 ID 使同日重试替换已有通知；平台发送与数据库提交不能构成一个事务，应设计进程中断后的补偿，不能只靠内存布尔值去重。
 - 系统调度与后台返回触发同一规则，界面显示与通知共享同一日期/临期口径。
-- 实施前核对 Android 官方通知权限、渠道和 WorkManager 文档；遵循当前目标 SDK 要求。这里尚未确定最终调度实现。
+- 2026-09-28 Android 调度决策：用户配置的每日本地时间使用一次性 `AlarmManager.setAndAllowWhileIdle(RTC_WAKEUP, ...)`，每次触发后按当前时区与偏好重算下一次；重启、时区/日期变化和修改提醒时间时重新注册。每日摘要不申请精确闹钟权限，系统仍可限流或延迟；Receiver 只触发轻量调度，Worker 再读取 Room、偏好和权限并更新通知。WorkManager 周期任务最小间隔为 15 分钟且受系统调度影响，不适合作为本地 09:00 的日历时刻入口。
+- Android 13（API 33）及以上仅在用户主动开启提醒时请求 `POST_NOTIFICATIONS`；Android 8（API 26）及以上先建立提醒通知渠道。被拒绝或系统关闭通知时，保留应用内待处理入口并显示实际权限状态。
+- 依据：[Android AlarmManager 官方参考](https://developer.android.com/reference/android/app/AlarmManager#setAndAllowWhileIdle(int,long,android.app.PendingIntent))、[Android 闹钟调度指南](https://developer.android.com/develop/background-work/services/alarms)、[WorkManager 周期任务约束](https://developer.android.com/develop/background-work/background-tasks/persistent/getting-started/define-work)、[通知运行时权限](https://developer.android.com/develop/ui/compose/notifications/notification-permission)、[通知渠道](https://developer.android.com/develop/ui/compose/notifications/channels)。
 
 ## 验收
 

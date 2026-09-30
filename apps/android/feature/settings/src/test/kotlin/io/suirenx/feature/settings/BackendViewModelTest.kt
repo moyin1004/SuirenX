@@ -48,6 +48,7 @@ class BackendViewModelTest {
     private var imports = 0
     private var cancelImport = false
     private var failImport = false
+    private var failRestore = false
     private val importer = object : RemoteImportRepository {
         override suspend fun preview() = Result.success(MigrationPreview(2, 2, 0, emptyList(), 3, 3))
         override suspend fun import(): Result<MigrationResult> {
@@ -62,7 +63,9 @@ class BackendViewModelTest {
         override suspend fun createSafetyBackup() = Result.success(Unit)
         override suspend fun export() = Result.success("{}")
         override suspend fun inspect(content: String) = Result.success(BackupSummary(0))
-        override suspend fun restore(content: String) = Result.success(BackupSummary(0))
+        override suspend fun restore(content: String) = if (failRestore) {
+            Result.failure(IllegalStateException("synthetic restore failure (SQLITE_CONSTRAINT_TRIGGER)"))
+        } else Result.success(BackupSummary(0))
     }
     private val expiry = object : ExpirySettingsRepository {
         override val soonDays = MutableStateFlow(7)
@@ -214,6 +217,20 @@ class BackendViewModelTest {
         assertEquals(StorageMode.Remote, modes.mode.value)
         assertEquals(1, imports)
         assertNull(vm.uiState.value.migrationPreview)
+    }
+
+    @Test fun restoreFailureShowsStableMessageAndKeepsPreviewAvailable() {
+        vm.inspectBackup("valid backup")
+        dispatcher.scheduler.advanceUntilIdle()
+        failRestore = true
+
+        vm.confirmRestore()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("恢复失败，原数据未改变", vm.uiState.value.backupError)
+        assertEquals(0, vm.uiState.value.backupSummary?.assetCount)
+        assertEquals("valid backup", vm.uiState.value.backupContent)
+        assertFalse(vm.uiState.value.backupBusy)
     }
 
     @Test fun cancelingFirstSyncReleasesBusyState() {

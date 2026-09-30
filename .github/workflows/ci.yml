@@ -1,0 +1,111 @@
+name: Release APK
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  android-release-apk:
+    name: Package Android release APK
+    runs-on: ubuntu-24.04
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK components
+        run: sdkmanager "platforms;android-37" "build-tools;36.0.0"
+      - name: Assemble release APK
+        run: ./gradlew :apps:android:app:assembleRelease --no-daemon
+      - name: Check release signing configuration
+        id: signing
+        shell: bash
+        env:
+          SUIRENX_ANDROID_KEYSTORE_BASE64: ${{ secrets.SUIRENX_ANDROID_KEYSTORE_BASE64 }}
+          SUIRENX_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.SUIRENX_ANDROID_KEYSTORE_PASSWORD }}
+          SUIRENX_ANDROID_KEY_ALIAS: ${{ secrets.SUIRENX_ANDROID_KEY_ALIAS }}
+          SUIRENX_ANDROID_KEY_PASSWORD: ${{ secrets.SUIRENX_ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          values=(
+            "$SUIRENX_ANDROID_KEYSTORE_BASE64"
+            "$SUIRENX_ANDROID_KEYSTORE_PASSWORD"
+            "$SUIRENX_ANDROID_KEY_ALIAS"
+            "$SUIRENX_ANDROID_KEY_PASSWORD"
+          )
+          configured=0
+          missing=0
+          for value in "${values[@]}"; do
+            if [[ -n "$value" ]]; then
+              configured=$((configured + 1))
+            else
+              missing=$((missing + 1))
+            fi
+          done
+          if [[ "$configured" -eq 0 ]]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "Signing secrets are not configured; only the unsigned APK will be uploaded."
+            exit 0
+          fi
+          if [[ "$missing" -ne 0 ]]; then
+            echo "Signing configuration is incomplete; refusing to produce a partially configured release." >&2
+            exit 1
+          fi
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+      - name: Sign and verify release APK
+        if: steps.signing.outputs.configured == 'true'
+        shell: bash
+        env:
+          SUIRENX_ANDROID_KEYSTORE_BASE64: ${{ secrets.SUIRENX_ANDROID_KEYSTORE_BASE64 }}
+          SUIRENX_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.SUIRENX_ANDROID_KEYSTORE_PASSWORD }}
+          SUIRENX_ANDROID_KEY_ALIAS: ${{ secrets.SUIRENX_ANDROID_KEY_ALIAS }}
+          SUIRENX_ANDROID_KEY_PASSWORD: ${{ secrets.SUIRENX_ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          release_dir="apps/android/app/build/outputs/apk/release"
+          unsigned_apk="$(find "$release_dir" -maxdepth 1 -name '*-unsigned.apk' -print -quit)"
+          test -n "$unsigned_apk"
+          signed_apk="${unsigned_apk%-unsigned.apk}-signed.apk"
+          keystore="$RUNNER_TEMP/suirenx-release-keystore.jks"
+          umask 077
+          trap 'rm -f "$keystore"' EXIT
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -v 4 "$unsigned_apk"
+          printf '%s' "$SUIRENX_ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          test -s "$keystore"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" sign \
+            --ks "$keystore" \
+            --ks-key-alias "$SUIRENX_ANDROID_KEY_ALIAS" \
+            --ks-pass env:SUIRENX_ANDROID_KEYSTORE_PASSWORD \
+            --key-pass env:SUIRENX_ANDROID_KEY_PASSWORD \
+            --out "$signed_apk" \
+            "$unsigned_apk"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$signed_apk" \
+            > "$release_dir/app-release-signature.txt"
+          sha256sum "$signed_apk" > "$signed_apk.sha256"
+      - name: Upload signed release APK and verification metadata
+        if: steps.signing.outputs.configured == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: suirenx-${{ github.event.release.tag_name }}-signed-apk
+          path: |
+            apps/android/app/build/outputs/apk/release/*-signed.apk
+            apps/android/app/build/outputs/apk/release/*-signed.apk.sha256
+            apps/android/app/build/outputs/apk/release/app-release-signature.txt
+          if-no-files-found: error
+          retention-days: 90
+      - name: Upload unsigned release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: suirenx-${{ github.event.release.tag_name }}-unsigned-apk
+          path: apps/android/app/build/outputs/apk/release/*-unsigned.apk
+          if-no-files-found: error
+          retention-days: 90

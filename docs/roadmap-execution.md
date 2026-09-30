@@ -170,3 +170,192 @@
 - 后台长期调度、进程被系统回收后的调度恢复和省电策略未作持续运行验收；本轮的冷启动证据是显式重试冻结批次，不是后台调度验收。
 - 未连接实体设备；未使用已安装历史数据库验证升级；未在远程或目标实例部署服务；未覆盖损坏文件或恢复事务失败时的原生 UI 链路。
 - 因本轮没有发现可复现的实现缺陷，没有修改业务代码，也没有新增回归测试。Go 全包、Proto 描述符和 `git diff --check` 通过；验收前构建的 Debug APK 已安装到两端并完成上述真实链路。Android Gradle 单测重跑在测试进程启动阶段被环境错误阻塞：找不到 `worker.org.gradle.process.internal.worker.GradleWorkerMain`，不是断言失败，待修复测试执行器/缓存后补跑。阶段 A 总项保持部分完成。
+
+## 2026-09-23：阶段 B 第一批搜索入口校正与表单回归
+
+- 既有 OpenDesign 主原稿 `suirenx-asset-redesign.html` 已在 Local Codex 中继续修改：资产列表默认只显示右上角搜索按钮；资产排序改为标题行内轻量下拉，不再占独立整行或使用厚边框；用品列表同样默认隐藏搜索输入，点击后才展开紧凑搜索行。Studio 预览实际点验了资产/用品默认态、搜索展开/收起和资产排序菜单。
+- Android 原生同步该交互：资产列表复用现有 `LazyListState`，搜索/排序/刷新仍在本地状态和 Room 读取边界内；用品列表改为按需展开搜索并保留原刷新入口。未改变 Room 数据模型、同步边界或远端 API。
+- 资产原有日期选择、手输日期关系校验、未保存离开保护、保存失败保留输入与刷新旧内容保持不变；用品补齐严格日期手输校验的纯函数和最小回归测试，覆盖无效格式、开封日关系与成对字段规则。
+- 验证：`:apps:android:feature:assets:testDebugUnitTest` 与 `:apps:android:feature:expiry:testDebugUnitTest` 通过；`:apps:android:app:assembleDebug` 通过；`git diff --check` 通过。Debug APK 已安装到 `medium_phone` 并启动，Activity 前台运行且无崩溃日志，但本次模拟器无障碍树仍返回启动器节点，因此不把原生搜索/排序点按写成设备级完成。
+
+## 2026-09-23：工具页与设置页切换闪烁修复
+
+- 根因定位为内外层 `NavHost` 虽已禁用进出场动画，但仍使用 Navigation 2.10 的默认 `sizeTransform`；工具页“把日常工具放在一起”和设置页标题在 Tab 切换时会经历一次尺寸变换，表现为文字闪烁。
+- 在 `MainActivity` 的外层与 Tab 内层 `NavHost` 统一设置 `sizeTransform = { null }`，不改变 Room、同步边界、Tab 状态保存或页面数据逻辑。
+- 验证：修复后 `:apps:android:app:assembleDebug` 通过；Debug APK 已重新安装并启动到 `medium_phone`。模拟器无障碍树当前仍无法读取 Compose 页面节点，因此连续切换后的视觉验收保留在 TODO，未过度宣称设备级完成。
+
+- 2026-09-24 追加检查：API 36 `medium_phone` AVD 实际切换并查看工具页、设置页截图，两页均有完整可见内容；屏幕录制无法在本机工具链可靠抽帧，不能据此确认切换瞬间无闪烁。实体设备验收仍开放。
+
+## 2026-09-23：资产排序控件对齐 OpenDesign
+
+- 依据现有主稿实际预览，将 Android 资产列表排序区从裸文字/分离箭头调整为浅灰圆角胶囊：当前排序字段、下拉箭头与升降序切换合并为一个操作组；列表行移除重复刷新按钮，页面顶部刷新入口保持不变。
+- 未改变 `AssetSort`、升降序逻辑、筛选组合、Room 数据来源或同步边界。
+- 验证：资产 feature 单测通过，`:apps:android:app:assembleDebug` 通过，`git diff --check` 通过。
+
+## 2026-09-24：工程待办与构建迁移
+
+- README 补充注册与增量同步示例，并澄清 JWT 注销为本地会话结束确认，不会即时撤销无状态令牌。新增发布准备清单，记录版本、签名、隐私信息和分发流程的维护者确认边界。
+- 新增 GitHub Actions：Go 全包测试与 `go vet`、资产和 M5 Proto 描述符校验、Android data/assets/expiry 单测、app lint 与 Debug APK 构建。远端 runner 尚未实际执行，需观察首次 CI 运行。
+- Android 完成 AGP 9 内置 Kotlin 与 KSP 迁移：移除 `org.jetbrains.kotlin.android`、kapt 及 Gradle 兼容开关；Hilt/Room 处理器使用 KSP 2.3.12。同步更新 AGENTS.md 构建约束。
+- Go API 增加校验过的 `X-Request-ID`、错误响应 `error/code/request_id` 字段、JSON 结构化请求日志及读/写/空闲超时。Android 网络请求附带新请求 ID，常规请求与健康探测超时集中定义；业务路由、认证规则与持久化语义未变。
+- 新增用品编辑器和同步 DTO 映射测试、HTTP 错误响应/请求 ID 测试。
+- 验证：Go 全包测试、`go vet` 通过；`core:data`、资产和用品单测、app `lintDebug`、`assembleDebug` 通过；`git diff --check` 通过。真实远端 CI 尚未执行。
+
+## 2026-09-24：备份/恢复设置页 Compose 仪器验收
+
+- 设置 feature 增加 Compose UI 仪器测试配置与 `BackupRestoreScreenTest`：损坏备份提示在备份页可见且导入入口可重试；恢复失败提示在预览页保持可见，数据替换需再次显式确认；取消预览不会调用确认回调。
+- 新增 `DefaultRepositoryScheduleTest`，通过 Room 验证资产及用品写入成功时请求调度、失败写入和只读查询均不触发调度。
+- 资产 feature 增加 `AssetsScreenTest`，覆盖搜索默认收起及输入过滤、排序菜单回调、本机读取失败重试。
+- 用品 feature 增加 `ExpiryScreenTest`，覆盖搜索默认收起及位置过滤、期限筛选回调、本机读取失败重试。
+- 用品 feature 新增 `ExpiryViewModelTest` 3 项 JVM 测试，覆盖加载时保留现有列表、读取失败后重试清除错误、位置搜索仅过滤内存状态且不重新读取仓储。Gradle XML 报告记录 3 tests、0 skipped、0 failures、0 errors。
+- 执行 `:apps:android:core:model:test :apps:android:core:data:testDebugUnitTest :apps:android:feature:assets:testDebugUnitTest :apps:android:feature:expiry:testDebugUnitTest :apps:android:feature:settings:testDebugUnitTest`，全部通过；CI Android JVM 测试步骤已同步加入 `core:model` 与 `feature:settings`。
+- 在 API 36 `medium_phone` AVD 执行 `:apps:android:feature:settings:connectedDebugAndroidTest`，3 项全部通过（`Finished 3 tests on medium_phone(AVD) - 16`）。
+- GitHub Actions Android job 增加 Android 36 Google APIs x86_64 模拟器启动，并执行数据层、资产、用品与设置 feature 的 connected 仪器测试。
+- 在 API 36 `medium_phone` AVD 执行 `:apps:android:core:data:connectedDebugAndroidTest :apps:android:feature:assets:connectedDebugAndroidTest :apps:android:feature:expiry:connectedDebugAndroidTest :apps:android:feature:settings:connectedDebugAndroidTest`：数据层 29 项及三个 feature 各 3 项全部通过，共 38 项。
+- 设置测试对真实 Compose 页面组件直接提供状态与回调，不经过设置路由的系统文件选择器，也未注入 Room 恢复事务错误；损坏文件至原生提示和恢复失败整条 UI 链路仍保留在阶段 A 待办。
+- 资产和用品列表测试都是组件级状态验证；实体设备操作、真实刷新后的滚动保持仍保留在阶段 B 待办。
+
+## 2026-09-24：损坏备份与 Room 恢复失败原生链路验收
+
+- 使用最新 Debug APK 在 API 36 `medium_phone` AVD 通过 Android DocumentsUI 选择共享存储中的损坏 JSON 文件，确认应用接收文件后仍留在备份页并显示错误；原先页面暴露 kotlinx.serialization 解析细节，现已统一为“备份文件格式无效或内容损坏”。
+- 在该 AVD 的 Room 数据库副本注入临时 SQLite 触发器拒绝恢复插入，通过 DocumentsUI 选择一份包含 1 项合成资产的有效备份，完成校验预览、显式替换确认，再观察到恢复失败时预览保留、页面显示“恢复失败，原数据未改变”。
+- 从停止运行的调试应用中读取数据库，确认失败后 `assets`、`expiry_items` 和 `local_sync_records` 均保持 0 行；随后移除临时触发器并还原验收前数据库副本。既有 Room 集成测试也覆盖事务回滚和恢复前安全备份。
+- `LocalBackupRepositoryImpl` 为序列化损坏输入映射稳定错误文案；`BackendViewModel` 对 Room/基础设施恢复失败统一显示“恢复失败，原数据未改变”，新增格式错误 Android 集成测试与 ViewModel 错误状态单测。
+- 验证：data AndroidJUnitRunner 30 项、settings Compose 仪器测试 3 项、settings ViewModel JVM 测试和 Debug APK 构建全部通过。当前 CI 仪器测试总数由 38 项增至 39 项。此记录基于 AVD，不代表实体设备验收。
+
+## 2026-09-24：WorkManager 调度注册回归
+
+- 为 `SyncScheduler` 增加仅供测试使用的唯一任务名后缀和计量网络约束；测试在隔离 WorkManager 名称空间中检查任务注册，不会取消或替换正式周期恢复任务，也不会在非计量 AVD 网络上启动 Hilt Worker。
+- 新增 2 项 API 36 AndroidJUnitRunner 测试：重新创建 `SyncScheduler` 后从 SharedPreferences 恢复周期并保持唯一周期任务；应用初始化后连续本机写入合并为唯一按修改任务，切换到每日周期后原任务 ID 保持不变，确保没有替换出新任务。
+- 执行 `:apps:android:core:data:connectedDebugAndroidTest`，32 项通过。CI 仪器测试配置总数增至 41 项。
+- 复核逐项 logcat 后发现周期任务可在注册后立即执行；测试 APK 使用普通 `Application`，会导致 Hilt Worker 初始化异常。增加仅测试计量网络约束后重跑 32 项通过，逐项日志不再出现 Worker 启动或该异常；生产网络约束与 Worker 注入行为未改变。
+- 这是调度持久化注册与策略回归证据，不模拟系统杀进程、不等待后台触发，也不覆盖 Doze/厂商省电策略；阶段 A 对真实进程回收和长期调度的验收仍开放。
+
+## 2026-09-24：平台与存储候选项技术评估
+
+- 对照产品规划、`api/proto`、服务端 SQLite 初始化、Room 本地优先约束，以及 Android/Go 资产计算实现，完成原生 iOS、Web 管理界面、SQLite→PostgreSQL 与 C++ 计算模块评估。
+- 当前均暂缓：尚无多平台/桌面管理需求证据、数据库瓶颈数据或计算热点 profile。Web 还缺少业务 CRUD 合同；数据库演练应等待部署/并发需求触发；C++ 会引入跨平台绑定成本。
+- 在 `docs/platform-and-storage-evaluation.md` 记录每项触发条件和首轮验证边界。没有实施平台扩张、生产数据迁移或性能模块抽取。
+
+## 2026-09-24：OpenDesign 本地 MCP 恢复
+
+- `get_active_context` / `list_projects` 返回 `Transport closed`；只读检查发现已安装 0.22.2 应用包签名校验失败。按既有维修授权先备份旧应用、OpenDesign 数据和 Codex MCP 配置。
+- 从官方 GitHub 发布资产取得 0.24.0 Apple Silicon DMG，核对长度并通过 `hdiutil verify`；以沙箱外 `codesign --verify --deep --strict` 和 Gatekeeper 验证官方包及安装后的应用均有效，状态为已公证 Developer ID。
+- 保留 `/Applications/Open Design.app` 与 MCP 路径，重注册本地 stdio 服务，配置外置 0.24.0 web standalone 根目录与依赖校验保护，避免运行产物写回已签名应用包。既有 OpenDesign 数据目录未更换。
+- 直接 stdio JSON-RPC 握手成功，发现 22 个工具；`get_project`、`list_files` 成功读取 `suirenx-asset-ui-redesign` 及既有三个设计文件，服务启动后应用签名仍有效。
+- 当前 Codex 任务加载的旧 MCP 快照仍返回 `Transport closed`；设计工作须在新任务加载修复后的连接后继续。阶段 C 原 brief 的平台/流程/完成度仍待维护者选择，未生成或实现提醒 UI。
+
+## 2026-09-24：Release CI 范围与设备/OpenDesign 复核
+
+- 按维护者确认，将 GitHub Actions 改为仅在 GitHub Release 发布时构建 Android release APK，并保存为 unsigned APK artifact；不部署服务端。运行 `:apps:android:app:assembleRelease` 本地构建成功，产物为 `app-release-unsigned.apk`。远端流程需下一次发布 Release 才触发，签名仍待维护者配置。
+- 按维护者要求从 TODO 移除用品空位置修复的目标实例部署事项。
+- 重新启动 OpenDesign 0.24.0 桌面应用；重注册时恢复外置 web standalone 根目录和依赖校验保护。签名/Gatekeeper 仍通过；本机 stdio MCP 握手成功并发现 22 个工具。当前 Codex 任务宿主连接仍返回 `Transport closed`，Reminder 原 brief 选择尚未提供，未生成设计或提醒 UI。
+- Android 16/API 36 实体设备原安装版本为 0.1.0；新 APK 的 `versionCode`/`versionName` 仍为 1/0.1.0，因此本次是同版本原地重装，不是版本升级。先将本地 Room 主库、WAL 与远端缓存数据库归档到权限为 700 的临时目录，再以同签名 `adb install -r` 安装，未清除应用数据；冷启动后原有页面数据仍显示，数据库主文件与 WAL 保持存在。安装前后 signer certificate 一致。
+- 实体设备上实际操作资产/用品搜索展开与筛选、资产排序菜单并恢复原排序；刷新前后可见节点数和文字/边界哈希相同，支持刷新期间列表内容与位置保持。用品搜索已测试可选位置搜索入口；未保存的资产编辑离开会弹出放弃确认；资产与用品日期选择器均已打开；用品表单明确显示位置选填。未保存表单均已退出，没有新增或修改记录。
+- 工具页与设置页连续交替切换并在每次切换后采集截图；采样画面均显示完整标题和内容，未见闪烁。此证据是抽样截图观察，不是逐帧录屏分析。
+- 在原设备数据副本上只读取 SQLite schema 元数据：本地库 `user_version=3`、远端缓存 `user_version=5`，与当前版本相同。此次同签名原地重装验证了原数据保留，没有实际执行版本升级或 Room schema migration；从历史 schema 升级仍待旧库副本验收。
+- 保存失败后保留表单输入没有在实体设备上注入故障验收；应在测试仓储或隔离数据库中验证，不对个人本机数据制造失败。后台长期调度、系统回收恢复和 Doze/厂商省电策略也仍待验收。
+- 本机 `gh auth status` 当前显示 `moyin1004` 的 GitHub token 无效；重新认证命令为 `gh auth login -h github.com`。该 CLI 登录仅供本机 `gh` 操作，GitHub Actions 的 Release workflow 不依赖开发机登录态。
+
+## 2026-09-24：Room 历史 schema 与保存失败保留验收
+
+- 复跑资产表单 `AssetFormViewModelTest.failedSaveKeepsInputAndCanRetry`：失败仓储返回错误后，姓名、金额、图标仍在 UI state，未发送成功关闭事件；关闭故障后重试成功。Gradle 结果 `BUILD SUCCESSFUL`。
+- 在 `LocalDatabaseUpgradeTest` 之外新增 `RemoteDatabaseUpgradeTest`，分别由 v1、v2、v3、v4 经正式 `RemoteDatabaseModule` migration chain 升到 v5；检查资产与 outbox 内容、sync cursor、既有冲突/用品行和 v5 新增的 `lastSyncedAt` 字段。fixture 在唯一命名的测试数据库内创建并清理。
+- 定向执行本地库 v1/v2 升级测试：API 36 `medium_phone` AVD 2/2、Android 16 实体设备 2/2 通过。执行远端缓存 v1-v4 升级测试：AVD 4/4、实体设备 4/4 通过。测试使用 Room 生产迁移类，不触碰实体设备个人应用数据库。
+- 这覆盖代码支持的历史 schema 迁移路径；该检查点记录时，实体设备原装数据库已是 Local v3 / Remote v5，来源可确认的旧版整包验收仍未完成。后续进展见本文件“历史安装包 Room 整包升级”。
+- 初次连接检查时默认 sandbox 无法启动 ADB/Gradle 本地 socket；改用受控 elevated runner 后测试执行成功。测试 runner 输出提示未能回收部分 logcat，但 instrumentation 结果均明确为 0 failed、0 skipped。
+- 同一受控 AndroidJUnitRunner 执行 `SyncSchedulerTest` 两项：API 36 AVD 与 Android 16 实体设备各 2/2 通过。只证明测试 WorkManager 名称空间内的调度注册、偏好恢复与去重，不证明生产进程实际被系统杀死后 worker 已执行，也不覆盖长期运行或 Doze。
+
+## 2026-09-24：WorkManager 进程停止后任务持久性
+
+- 新增 [SyncSchedulerProcessRecoveryTest.kt](/Users/bytedance/Desktop/moyin/suirenx/apps/android/core/data/src/androidTest/kotlin/io/suirenx/core/data/sync/SyncSchedulerProcessRecoveryTest.kt)，分两阶段运行：排入随机唯一名的 1 小时周期任务并等偏好落盘、记录当前 PID；第一阶段测试进程退出且 PID 不再存在；第二阶段启动新 PID，先检查 WorkManager 已恢复任务和周期偏好，再初始化 Scheduler 并确认没有重复任务。
+- 通过直接 ADB 运行 instrumentation 两阶段，避开 Gradle 每次 connected-test 调用结束后卸载测试包并清理其状态的问题。API 36 AVD 与 Android 16 实体设备各两阶段 1/1 通过；完成后卸载隔离测试包，Scheduler 也已删除唯一测试任务与偏好。
+- 该试验证明 WorkManager 持久化记录经测试进程退出后仍可恢复；周期约为一小时，网络约束为仅测试用 METERED，因此没有触发 Hilt `LocalSyncWorker`。测试进程正常退出不等同于系统回收；不证明生产 App 自动恢复执行、长时间周期触发或 Doze/厂商省电行为。
+
+## 2026-09-24：延迟 Worker 退出后执行探针
+
+- 新增 `WorkManagerBackgroundExecutionTest` 两阶段隔离探针：第一阶段安排 15 秒延迟的测试 Worker 并退出 instrumentation 进程；第二阶段只在 PID 改变后检查完成标记及 WorkInfo。常规 connected instrumentation 构建成功，3 项中 1 项跳过跨进程阶段，符合该测试的保护条件。
+- 直接在 AVD 和 Android 16 实体设备运行第一阶段后，AVD 在进程退出后写出测试完成标记；实体设备约 30 秒观察期内未写出，JobScheduler 已显示任务登记，设备未处于 Doze。之后卸载测试包清理了测试任务与标记。
+- 这是测试 Worker 的受控探针；实体设备未能在观察窗口内执行，且没有触发生产 `LocalSyncWorker`。不得据此关闭后台调度 TODO，也不能推断 Doze/OEM 限制的根因。
+
+## 2026-09-24：历史安装包 Room 整包升级
+
+- 从历史提交 `15d0f31` 导出独立源码并构建旧版 Debug APK；该 APK 包 ID 为 `io.suirenx.app`、Local Room v2。与当前工作树 APK 的签名相同，二者均为 versionCode 1 / versionName 0.1.0；此为源码版本替换和数据库升级验收，不证明正式递增版本号发布。
+- 仅在 API 36 `emulator-5554` AVD 安装旧 APK，选择本地模式并通过旧版 UI 创建合成资产 `upgrade_probe_v2`（123.45 元，包含备注）；未对 Android 16 实体设备执行卸载、安装、清数据或改库。
+- 覆盖安装当前工作树 APK，保留应用数据并冷启动。总览与资产页显示原资产及金额；停止应用后只读 SQLite 元数据显示 Local `user_version=3`，合成资产 ID、名称、金额和备注均保留，且 `local_sync_records` 与 `local_sync_session` 已由迁移创建。再次冷启动成功。
+- 该历史 APK 来自可追溯源码提交且 Room 数据库由实际安装应用创建，满足历史安装数据库整包升级验收；同一 versionCode 的事实作为限制保留，正式发布时仍须使用唯一递增 versionCode。
+
+## 2026-09-24：生产 LocalSyncWorker 进程终止后恢复
+
+- 在 API 36 AVD 保持本地模式，断开 AVD 网络后经当前应用 UI 提交合成资产，WorkManager 中 `suirenx-sync-change` 的 `LocalSyncWorker` 处于 `ENQUEUED`，网络约束为 CONNECTED。
+- 记录原进程 PID 后将应用送到后台，并以应用 UID 发送 SIGKILL；PID 消失。应用仍停止且网络隔离时，WorkManager 数据库中的同一项任务保持 `ENQUEUED`。
+- 恢复 AVD 原有网络开关后，Android 启动新的应用 PID；logcat 明确记录生产 `io.suirenx.core.data.sync.LocalSyncWorker` 开始运行并返回 `SUCCESS`。本地存储模式下该 Worker 不调用远端同步，不读取或发送个人数据。
+- 该项证实 AVD 上生产 Worker 的单次本地模式任务可在进程被强制结束后恢复；SIGKILL 不是系统内存回收，且未覆盖远端服务、周期触发、Doze 或实体设备厂商限制，因此阶段 A 保持开放。
+
+## 2026-09-28：数据层 Android instrumentation 复核
+
+- 在 API 36 `medium_phone` AVD 重跑 `:apps:android:core:data:connectedDebugAndroidTest`，Gradle `BUILD SUCCESSFUL`；XML 汇总为 40 tests、0 failures、0 errors、2 skipped。
+- 两个 skipped 项分别是 `SyncSchedulerProcessRecoveryTest` 和 `WorkManagerBackgroundExecutionTest` 的第二阶段，需第一阶段退出后由新进程启动；一次 connected-test invocation 按测试保护条件跳过它们。调度/迁移等单进程仪器覆盖通过，但本次不新增进程重启证据，也不覆盖系统回收、周期实际触发、Doze 或实体设备厂商策略。
+
+## 2026-09-28：AVD 强制 Doze 下的 WorkManager 延迟探针
+
+- 在 API 36 `medium_phone` AVD 分两阶段直接运行现有 `WorkManagerBackgroundExecutionTest`。第一阶段安排 15 秒测试 Worker 并退出；随后进入 deep Doze，20 秒后确认系统仍处于 `IDLE` 且测试 SharedPreferences 没有完成标记。
+- 调用 `dumpsys deviceidle unforce` 解除强制 Doze后，等待 20 秒并运行第二阶段；测试通过，断言完成标记与 WorkInfo `SUCCEEDED`。此结果只验证 AVD 上的隔离测试 Worker 在强制 Doze 下延后、退出后恢复，不验证生产 `LocalSyncWorker`、周期任务触发、LMK 回收或实体设备/OEM 省电策略。
+
+## 2026-09-28：生产周期 Worker 经 ActivityManager 终止后恢复
+
+- 在 API 36 `medium_phone` AVD 启动当前 Debug app，确认 `StorageMode=Local` 和 `SyncSchedule=OnChange`，其生产周期恢复任务由 Android JobScheduler 登记，最小周期为 15 分钟。
+- 将 app 退到后台后，Android ActivityManager 于 11:48:18 记录 `Killing 4096:io.suirenx.app ... kill background`；PID 消失，周期 Job 仍保留。11:59:48 系统以新 PID 4556 启动 `SystemJobService`，记录到 `LocalSyncWorker` 开始和 `Worker result SUCCESS`，随后 JobScheduler 注册下一周期。
+- 这是 AVD 一次系统 ActivityManager 后台终止后的生产周期恢复证据。因为没有制造系统低内存压力，它不证明 LMK 自动回收；单次周期也不能证明长期稳定性，实体 Doze/OEM 策略仍未覆盖。Local 模式 worker 在调用远端同步前直接返回成功。
+- 在同一 AVD 后续保留 `StorageMode=Local` / `SyncSchedule=OnChange`，启动 app 后按 Home 退到后台：生产 `LocalSyncWorker` 于 12:14:48 与 12:30:11 两次返回 `SUCCESS`；第二次约在后台 15 分钟后运行，之后 JobScheduler 再登记下一周期。两次使用 PID 3067。此观察补充生产 worker 在后台周期中的一次重复执行，不覆盖进程被回收、长期稳定性、LMK 或实体设备/OEM 行为。
+- 再以 `am kill io.suirenx.app` 结束后台 PID 3067，`ApplicationExitInfo` 记录 `USER REQUESTED / KILL BACKGROUND`；PID 消失而 JobScheduler 作业保留。11 分钟后 ActivityManager 以新 PID 4211 为 `SystemJobService` 启动 app，日志显示生产 `LocalSyncWorker` 于 12:46:07.886 开始并在 12:46:07.904 返回 `SUCCESS`，随后 JobScheduler 保留下一周期。该结果证明一次受控 ActivityManager 后台终止后的真实生产 worker 恢复；手动 `am kill` 仍不是 LMK，亦不证明长期稳定性或实体设备/OEM 策略。
+
+## 2026-09-28：低 RAM AVD 下 lmkd 回收与生产 Worker 恢复
+
+- 在不改动 `~/.android/avd/medium_phone.avd/config.ini`（保存配置 `hw.ramSize=2048`）的情况下，以 `-memory 1536 -lowram -no-snapshot` 启动 Android 16/API 36 AVD。现有 SuirenX 安装、Room 数据、`StorageMode=Local` 与 `SyncSchedule=OnChange` 均保留。
+- 临时内存探针用不可压缩页施加 guest 内存压力。`dumpsys activity lmk` 显示共 74 次 LMK；lmkd 日志明确记录 swap 余量仅 224 KiB、thrashing 108% 时回收 `io.suirenx.app` PID 3167（oom_adj 900）。`ApplicationExitInfo` 对应记录为 `reason=LOW_MEMORY`。随后停止全部临时探针，guest 可用内存恢复；临时源码、JAR 和设备内探针文件已清理。
+- 进程退出时 WorkManager 周期作业仍在 JobScheduler。13:01:41 ActivityManager 以新 PID 4786 为 `SystemJobService` 启动 app，生产 `LocalSyncWorker` 开始并于 13:01:41.378 返回 `SUCCESS`，之后登记下一周期。偏好仍为 Local/OnChange；按 `LocalSyncWorker` 的本地模式分支，本次未调用远端同步。
+- 当前源码 `:apps:android:app:assembleDebug` 构建成功，Gradle 判定输出 `UP-TO-DATE`。该结果覆盖 API 36 AVD guest 的真实 lmkd 回收及生产任务恢复；不替代实体设备、OEM 策略或长期稳定性验收。
+- 继续观察至 13:32:27，距该成功约 31 分钟。JobScheduler 的下一周期已超过最早运行时间约 16 分钟，报告 `Ready=true`、网络约束满足、设备为 `ACTIVE`，但日志没有第二次 Worker 启动。单次结果可能反映系统批处理延迟，也可能需要继续排查，不能宣称周期稳定性通过。
+- 查阅 [WorkManager `ExistingPeriodicWorkPolicy`](https://developer.android.com/reference/androidx/work/ExistingPeriodicWorkPolicy) 与 [周期任务定义](https://developer.android.com/develop/background-work/background-tasks/persistent/getting-started/define-work)：周期时长是最小重复间隔，执行时点还会受约束和系统优化影响；同周期的 `UPDATE` 保留原入队时间。由此不能仅凭 JobScheduler `Ready=true` 或一次超过最早时点的等待认定 app 有调度缺陷，当前证据不支持直接改策略。
+- 本轮没有连接的 AVD/实体设备。通过 Android SDK Emulator 37.1.11 启动 `medium_phone` 时进程退出，报告 Qt 构建需要 NEON；周期后续实测待兼容的 Emulator runtime 或实体设备可用。
+
+## 2026-09-28：Release 签名 workflow 接线
+
+- Release workflow 增加四项 GitHub Actions secrets 的条件签名路径。四项均缺省时继续产出 unsigned APK；只配置部分值时失败；全部配置时写入临时 keystore、生成签名 APK、运行 `apksigner verify` 并上传 SHA-256 和证书摘要。
+- 未读取、生成或提交任何签名密钥。真实维护者 secrets、签名 APK 的安装升级验收、运营主体/隐私政策和分发账号仍待维护者配置与确认。
+- Release job 使用 GitHub `release` Environment；维护者需在其中配置保护规则与 secrets。复核 `:apps:android:app:assembleRelease` 成功生成 unsigned release APK，`zipalign -c -v 4` 校验成功；YAML 解析和从 workflow 提取的两段 shell `bash -n` 检查通过。GitHub Release 尚未触发，真实签名材料未配置。
+- 随后以仅用于本地验证的一次性测试 keystore 执行 workflow 的配置检查和签名脚本：`configured=true`，unsigned APK zipalign 检查通过，签名 APK 成功生成，`apksigner verify` 确认 v2/v3 签名有效，SHA-256 文件生成成功。测试 keystore、签名产物及提取脚本均在 `/private/tmp`，验证后清理；不代表真实维护者密钥、GitHub Actions runner 或签名升级验收。
+- 另实际执行签名配置检查脚本的无密钥与部分密钥分支：四项空值写出 `configured=false`，只设置一项会以错误退出并拒绝继续。该检查使用空值和虚构占位字符串，没有读取真实 secrets。
+
+## 2026-09-28：OpenDesign brief 连接复核
+
+- 通过 Codex MCP 注册检查确认 `open-design` 仍启用并指向本机 0.24.0 stdio runtime；Brief 收集调用返回 `Transport closed`，没有创建可确认的 draft/workflow。
+- `/Applications/Open Design.app` 的 `codesign --verify --deep --strict` 返回 `invalid signature (code or signature have been modified)`，签名 Authority 显示 unavailable。未执行该签名无效的应用包，也未绕过 OpenDesign 直接改提醒 UI；按 AGENTS.md 保留设计依赖任务待处理。
+- 本轮再调用当前设计上下文与项目列表的只读接口，均返回 `Transport closed`；尚未读取或改写提醒原型。
+
+## 2026-09-28：周期 Worker 恢复竞态修复
+
+- 冷启动日志显示，JobScheduler 通过 `RescheduleReceiver` 恢复生产周期 Worker 时，应用 `onCreate()` 又调用 `SyncScheduler.initialize()`。原有 `UPDATE` 替换了相同周期 WorkSpec 的 generation，恢复中的 worker 随即被取消并重启。
+- 将 `initialize()` 的唯一周期任务策略改为 `KEEP`；用户明确切换周期时继续使用 `UPDATE`。新增仪器测试 `initializeKeepsExistingPeriodicWorkGeneration`，断言初始化不改变任务 ID 或 generation。
+- 在 API 36 `medium_phone` AVD 运行 `:apps:android:core:data:connectedDebugAndroidTest`：Gradle 成功，XML 为 41 tests、0 failures、0 errors、2 skipped；跳过项要求两个独立 instrumentation 阶段。`:apps:android:app:assembleDebug` 成功。
+- 重装 APK 保留已有应用数据后冷启动，WorkManager generation 维持 23；生产 `LocalSyncWorker` 于 13:55:02 与 14:10:02 两次自然返回 `SUCCESS`。StorageMode 为 Local，本次不会调用远端同步。
+- 随后把 app 退到后台并 `am kill`，`ApplicationExitInfo` 记录 `USER REQUESTED / KILL BACKGROUND`，PID 4668 消失，JobScheduler 周期项仍存在。最早运行时间过后约 4 分钟，作业 `Ready=true` 且约束满足，但系统没有自然启动 worker。用 `cmd jobscheduler run -n androidx.work.systemjobscheduler -s io.suirenx.app 73` 保留当前约束受控触发；ActivityManager 以新 PID 6029 启动生产 `LocalSyncWorker`，于 14:28:52 返回 `SUCCESS`，JobScheduler 随后登记下一周期（job id 74）。
+- 对 PID 6029 再次执行后台 `am kill` 后，第二个周期 Job 74 到达最早运行窗口后约 5 分钟仍为 `Ready=true`，未自然启动；通过同样方式受控触发后，系统以新 PID 6737 启动 worker，14:48:56 返回 `SUCCESS`，随后登记 job 75。两次受控运行均证明进程死亡后的 JobScheduler/Worker 初始化链路可以成功，但 AVD 自然周期在到期后数分钟未执行，不能据此通过自然恢复或长期稳定性验收。实体设备/OEM Doze 仍未覆盖。
+
+## 2026-09-28：OpenDesign 本机签名恢复
+
+- 从 [OpenDesign 0.24.1 官方发布页](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.24.1) 获取 Apple Silicon DMG，验证 DMG 完整性；候选应用和安装后应用均通过 `codesign --verify --deep --strict`，`spctl --assess --type execute` 接受为 Developer ID notarized app。
+- 更换前备份了原应用、约 1.9 GB 的用户数据目录、Codex MCP 配置和环境启动脚本；旧应用仍保留在备份目录。注册 0.24.1 随附 web standalone runtime，恢复应用可以正常启动。
+- Codex 当前任务里的 `get_active_context` 和 `list_projects` 仍返回 `Transport closed`；手工启动 stdio 探针在等待握手时超时。不能据此宣称 MCP 握手、工具发现或 SuirenX 既有项目读取成功，故未重提 brief，也未修改提醒原型或实现 UI。待当前任务连接加载修复后的 MCP 后再按既有设计流程继续。
+
+## 2026-09-28：排除 Android 平台备份中的认证凭据
+
+- Android manifest 原先开启 Auto Backup，但未提供排除规则；`AuthTokenStore` 将 bearer token 写入 `sharedpref/auth.xml`，而 Android 默认会备份 SharedPreferences。
+- 新增 Android 11 及以下 `fullBackupContent` 规则，以及 Android 12 及以上 `dataExtractionRules`；云备份和设备转移均排除 `auth.xml`，保留 Room 和其他应用数据备份规则。
+- `:apps:android:app:assembleDebug` 与 `:apps:android:app:assembleRelease` 均成功。合并 Manifest 指向两套规则；`aapt dump xmltree` 确认 Debug 与 unsigned Release APK 的云备份、设备转移及旧版完整备份均包含 `auth.xml` 排除项（Release 构建会缩短 XML 资源路径）。AVD 的 Backup Manager 为 disabled；为避免触碰已有应用数据，本轮未启用或触发平台备份。真实云备份/换机恢复尚未在实体设备上验证。
+
+## 2026-09-28：GitHub Release Environment 状态核查
+
+- `gh repo view` 显示当前身份为仓库 Admin；只读请求 `GET /repos/moyin1004/SuirenX/environments/release` 返回 404，因此 `release` Environment 尚不存在。
+- 没有创建无保护的空环境，也没有读取或写入任何签名 secrets。维护者需提供保护审阅人/部署分支策略，并在正式配置中保存签名材料。

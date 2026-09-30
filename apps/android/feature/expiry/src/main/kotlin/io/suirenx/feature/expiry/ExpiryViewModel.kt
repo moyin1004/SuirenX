@@ -49,6 +49,36 @@ private fun ExpiryEditorState.draft() = ExpiryEditorDraft(
     id, name, category, packageExpiryDate, openedDate, openedValidityDays, location, notes,
 )
 
+internal fun ExpiryEditorState.toNewExpiryItem(): NewExpiryItem {
+    require(name.isNotBlank()) { "请输入用品名称" }
+
+    fun parseDate(value: String, label: String): LocalDate {
+        require(value.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
+            "${label}请输入有效日期，格式为 YYYY-MM-DD"
+        }
+        return runCatching { LocalDate.parse(value) }.getOrElse {
+            throw IllegalArgumentException("${label}请输入有效日期，格式为 YYYY-MM-DD")
+        }
+    }
+
+    val packageDate = parseDate(packageExpiryDate, "包装到期日")
+    val openedDate = openedDate.trim().takeIf(String::isNotEmpty)?.let {
+        parseDate(it, "开封日")
+    }
+    val openedDays = openedValidityDays.trim().takeIf(String::isNotEmpty)?.let {
+        runCatching { it.toInt() }.getOrElse {
+            throw IllegalArgumentException("开封后有效天数请输入正整数")
+        }.also { days -> require(days > 0) { "开封后有效天数请输入正整数" } }
+    }
+
+    require((openedDate == null) == (openedDays == null)) { "开封日与开封后有效天数需要成对填写" }
+    require(openedDate == null || !openedDate.isAfter(LocalDate.now())) { "开封日不能在未来" }
+    require(openedDate == null || !openedDate.isAfter(packageDate)) { "开封日不能晚于包装到期日" }
+    require(notes.length <= 2000) { "备注不能超过 2000 个字符" }
+
+    return NewExpiryItem(name.trim(), category.trim(), packageDate, openedDate, openedDays, location.trim(), notes.trim())
+}
+
 data class ExpiryUiState(
     val deleteConfirmation: Boolean = false,
     val deleteError: String? = null,
@@ -146,25 +176,14 @@ class ExpiryViewModel @Inject constructor(
     fun editNotes(value: String) = edit { it.copy(notes = value, error = null) }
     fun saveEditor() {
         val editor = uiState.value.editor ?: return
-        val packageDate: LocalDate
-        val openedDate: LocalDate?
-        val openedDays: Int?
-        try {
-            require(editor.name.isNotBlank()) { "请输入用品名称" }
-            packageDate = LocalDate.parse(editor.packageExpiryDate)
-            openedDate = editor.openedDate.trim().takeIf(String::isNotEmpty)?.let(LocalDate::parse)
-            openedDays = editor.openedValidityDays.trim().takeIf(String::isNotEmpty)?.toInt()?.also { require(it > 0) }
-            require((openedDate == null) == (openedDays == null)) { "开封日与开封后有效天数需要成对填写" }
-            require(openedDate == null || !openedDate.isAfter(LocalDate.now())) { "开封日不能在未来" }
-            require(openedDate == null || !openedDate.isAfter(packageDate)) { "开封日不能晚于包装到期日" }
-            require(editor.notes.length <= 2000) { "备注不能超过 2000 个字符" }
-        } catch (_: Exception) {
-            uiState.update { it.copy(editor = editor.copy(error = "请检查名称、日期和开封期限")) }
+        val draft = try {
+            editor.toNewExpiryItem()
+        } catch (error: IllegalArgumentException) {
+            uiState.update { it.copy(editor = editor.copy(error = error.message ?: "请检查名称、日期和开封期限")) }
             return
         }
         uiState.update { it.copy(busy = true) }
         viewModelScope.launch {
-            val draft = NewExpiryItem(editor.name, editor.category, packageDate, openedDate, openedDays, editor.location, editor.notes)
             val result = editor.id?.let { repository.update(it, draft) } ?: repository.create(draft)
             result.fold(
                 onSuccess = { uiState.update { it.copy(editor = null, busy = false) }; changes.notifyChanged(); refresh() },

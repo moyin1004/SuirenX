@@ -103,6 +103,10 @@ repository boundaries.
 - Local JSON backups are versioned, target the local Room database only,
   include archived records and expiry items, exclude credentials, and restore
   through validation plus an automatic pre-restore backup.
+- Android platform backups must exclude authentication credentials from cloud
+  backup and device transfer. Keep both the legacy `fullBackupContent` and the
+  Android 12+ `dataExtractionRules` exclusion for the `auth.xml` preferences
+  file; retain the other app data backup behavior.
 
 ## Android rules
 
@@ -117,9 +121,10 @@ repository boundaries.
 - Room schema changes require explicit migrations; never reset an installed
   database as an upgrade strategy. See docs/data-sync.md for synchronization rules.
 
-AGP 9 built-in Kotlin is temporarily disabled because the initial project uses
-Hilt with kapt. The compatibility flags are intentionally visible in
-`gradle.properties`; migrate to built-in Kotlin plus KSP before AGP 10.
+AGP 9 built-in Kotlin is enabled. Android annotation processors use KSP; keep
+Hilt and Room processors on KSP when adding or updating generated Android code.
+Pure Kotlin/JVM modules continue to use the Kotlin JVM plugin. Check processor
+support before adding another annotation-processing dependency.
 
 ## Go rules
 

@@ -6,6 +6,7 @@ import (
 	"github.com/moyin1004/suirenx/services/api/internal/database"
 	"github.com/moyin1004/suirenx/services/api/internal/repository"
 	"github.com/moyin1004/suirenx/services/api/internal/service"
+	"gorm.io/gorm"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -24,6 +25,65 @@ func requestBearer(s *Server, method, path, body, token string) *ut.ResponseReco
 		&ut.Body{Body: strings.NewReader(body), Len: len(body)},
 		ut.Header{Key: "Content-Type", Value: "application/json"},
 		ut.Header{Key: "Authorization", Value: "Bearer " + token})
+}
+
+func TestRequestIDsAndErrorEnvelope(t *testing.T) {
+	s := NewServer(":0", service.NewAssetService(nil), WithM5(openAuthTestDB(t), testJWTSecret))
+	response := ut.PerformRequest(s.h.Engine, "POST", "/api/v1/sync/assets",
+		&ut.Body{Body: strings.NewReader(`{}`), Len: 2},
+		ut.Header{Key: "Content-Type", Value: "application/json"},
+		ut.Header{Key: requestIDHeader, Value: "client-request_123"},
+	)
+	if response.Code != 401 {
+		t.Fatalf("unauthenticated request should return 401, got %d", response.Code)
+	}
+	if got := response.Header().Get(requestIDHeader); got != "client-request_123" {
+		t.Fatalf("request id header = %q", got)
+	}
+	var body errorResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Code != "invalid_token" || body.Error == "" || body.RequestID != "client-request_123" {
+		t.Fatalf("unexpected error envelope: %+v", body)
+	}
+
+	invalidJSON := ut.PerformRequest(s.h.Engine, "POST", "/api/v1/auth/register",
+		&ut.Body{Body: strings.NewReader(`{`), Len: 1},
+		ut.Header{Key: "Content-Type", Value: "application/json"},
+		ut.Header{Key: requestIDHeader, Value: "generated-error-456"},
+	)
+	if invalidJSON.Code != 400 {
+		t.Fatalf("invalid JSON should return 400, got %d", invalidJSON.Code)
+	}
+	if err := json.Unmarshal(invalidJSON.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Code != "invalid_request" || body.RequestID != "generated-error-456" {
+		t.Fatalf("unexpected generated transport error envelope: %+v", body)
+	}
+
+	unsafe := ut.PerformRequest(s.h.Engine, "GET", "/healthz", &ut.Body{Body: strings.NewReader(""), Len: 0},
+		ut.Header{Key: requestIDHeader, Value: "bad value!"},
+	)
+	if got := unsafe.Header().Get(requestIDHeader); !safeRequestID.MatchString(got) || got == "bad value!" {
+		t.Fatalf("unsafe request id was not replaced: %q", got)
+	}
+}
+
+func openAuthTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	db, err := database.Open(filepath.Join(t.TempDir(), "request-id.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		sqlDB, err := db.DB()
+		if err == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	return db
 }
 
 func TestM5AccountIsolationVersionedSyncAndIdempotency(t *testing.T) {

@@ -3,6 +3,7 @@ package io.suirenx.core.data.settings
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.suirenx.core.data.BuildConfig
+import io.suirenx.core.data.network.HttpTimeouts
 import io.suirenx.core.domain.BackendRepository
 import io.suirenx.core.model.BackendServer
 import io.suirenx.core.model.BackendSettings
@@ -79,8 +80,11 @@ class LocalBackendRepository @Inject constructor(
             val url = normalizeBackendAddress(address, BuildConfig.DEBUG)
             successfullyTested.remove(url)
             // A probe never sends credentials or follows a redirect to another service.
-            val client = okhttp3.OkHttpClient.Builder().connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
-                .callTimeout(8, java.util.concurrent.TimeUnit.SECONDS).followRedirects(false).build()
+            val client = okhttp3.OkHttpClient.Builder()
+                .connectTimeout(HttpTimeouts.PROBE_CONNECT_MILLIS, java.util.concurrent.TimeUnit.MILLISECONDS)
+                .callTimeout(HttpTimeouts.PROBE_CALL_MILLIS, java.util.concurrent.TimeUnit.MILLISECONDS)
+                .followRedirects(false)
+                .build()
             client.newCall(okhttp3.Request.Builder().url(url + "healthz").get().build()).execute().use { response ->
                 check(response.isSuccessful) { "连接测试失败：HTTP ${response.code}" }
                 val body = response.body?.string().orEmpty()

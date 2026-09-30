@@ -336,6 +336,16 @@ class LocalFirstSyncTest {
         assertEquals("Unchanged", assets.getAssets().getOrThrow().single().name)
     }
 
+    @Test fun malformedBackupReturnsReadableErrorWithoutChangingLocalData() = runBlocking {
+        assets.createAsset(NewAsset("Unchanged", 100, date)).getOrThrow()
+
+        val result = backup.inspect("{invalid json")
+
+        assertTrue(result.isFailure)
+        assertEquals("备份文件格式无效或内容损坏", result.exceptionOrNull()?.message)
+        assertEquals("Unchanged", assets.getAssets().getOrThrow().single().name)
+    }
+
     @Test fun transactionFailureRollsBackBusinessAndJournal() = runBlocking {
         try {
             db.withTransaction {
