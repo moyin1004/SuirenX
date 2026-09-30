@@ -418,3 +418,5 @@
 - 已创建 GitHub `release` Environment，仅允许 `v*` tag，四项签名 secrets 已配置。维护者仍需另行安全备份密钥与密码；设备安装、同签名升级和隐私验收仍待完成。
 
 - PR #1 已 squash 合并到 main（`adcb022`），`v0.1.0-preview` tag 与 GitHub Pre-release 已发布。首次云端构建在 setup-android 默认请求已不可用的 `tools` 包时失败，未进入编译/签名。修复为只安装 `platform-tools`，增加 workflow_dispatch 对既有发布 tag 重建；不移动已发布 tag。为从 main 发起重建，release 环境额外允许 main 分支。
+
+- 第二次云端构建确认 SDK 包名应为 `platforms;android-37.0`（与本地 package.xml 一致），并固定新版 Android command-line tools 15859902；仅修复工具安装，编译 API 37 和既有发布 tag 不变。
