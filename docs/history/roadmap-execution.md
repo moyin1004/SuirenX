@@ -431,6 +431,14 @@
 - Certificate SHA-256: `AF:B8:A5:7C:C8:6D:FC:D5:65:90:E2:E7:14:4F:B5:55:24:1D:85:0F:F6:B8:EB:29:17:58:15:32:41:85:4F:55`, matching the delivered JKS.
 - Signed-device installation, upgrade, cloud backup and privacy acceptance remain pending. Private signing files remain outside this repository.
 
+### v0.1.1 release verified (2026-10-04)
+
+- PR #5 was squash-merged to `main`; tag `v0.1.1` points to `1205bc70cb585d695205175f3f9815ad28e33062`.
+- Published release: https://github.com/moyin1004/SuirenX/releases/tag/v0.1.1
+- Release workflow `37176518919` succeeded and built the signed Android APK from the tagged commit. The APK, SHA-256 file, and public signing certificate report are attached to the Release.
+- Independent verification passed: package `io.suirenx.app`, versionName `0.1.1`, versionCode `2`, APK Signature Scheme v2/v3, and zip alignment. APK SHA-256 `14a1c11c2852a60214f50557f898bcc92bf925ca23ea9c376930c60a712ac3d8`; certificate SHA-256 `AF:B8:A5:7C:C8:6D:FC:D5:65:90:E2:E7:14:4F:B5:55:24:1D:85:0F:F6:B8:EB:29:17:58:15:32:41:85:4F:55`.
+- Go tests, Proto descriptor compilation, Android Debug build/data-layer unit tests, JavaScript syntax check, and `git diff --check` passed before merge. Real-browser acceptance of the new embedded-Web load/submit states remains deferred as directed by the maintainer.
+
 ## 2026-10-03：v0.1.1 需求规划与设计连接复核
 
 - 按维护者本轮决定，将用品/保修提醒、首页待处理入口，以及 Web 资产/用品、超管账号管理、数据库配置文件和受限 API token 纳入 [v0.1.1 PRD](../prd/v0.1.1.md)。Web 与 Android 共用同步账号数据，超管凭据由服务端 secret/environment 配置。
