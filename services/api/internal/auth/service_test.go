@@ -4,10 +4,13 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 type memoryRepository struct {
-	accounts map[string]*Account
+	accounts                map[string]*Account
+	registrationEnabled     bool
+	registrationSettingSeen bool
 }
 
 func (r *memoryRepository) CreateAccount(account *Account) error {
@@ -18,8 +21,33 @@ func (r *memoryRepository) CreateAccount(account *Account) error {
 	return nil
 }
 
+func (r *memoryRepository) CreateRegisteredAccount(account *Account) error {
+	if r.registrationSettingSeen && !r.registrationEnabled {
+		return ErrRegistrationDisabled
+	}
+	return r.CreateAccount(account)
+}
+
 func (r *memoryRepository) FindAccount(username string) (*Account, error) {
 	return r.accounts[username], nil
+}
+
+func (r *memoryRepository) FindAccountByID(id string) (*Account, error) {
+	for _, account := range r.accounts {
+		if account.ID == id {
+			return account, nil
+		}
+	}
+	return nil, nil
+}
+
+func (r *memoryRepository) UpdateSuperadminPassword(username string, passwordHash []byte, _ time.Time) error {
+	account := r.accounts[username]
+	if account == nil || account.Role != RoleSuperadmin {
+		return ErrSuperadminNotFound
+	}
+	account.PasswordHash = append([]byte(nil), passwordHash...)
+	return nil
 }
 
 func TestInvalidRegistrationRejectedBeforeRepositoryAccess(t *testing.T) {
@@ -38,6 +66,58 @@ func TestInvalidRegistrationRejectedBeforeRepositoryAccess(t *testing.T) {
 		if !errors.Is(err, ErrInvalidAccount) {
 			t.Fatalf("expected invalid account, got %v", err)
 		}
+	}
+}
+
+func TestRegistrationDisabledIsReturnedByRepository(t *testing.T) {
+	repository := &memoryRepository{accounts: map[string]*Account{}, registrationSettingSeen: true}
+	service, err := NewService(repository, []byte(strings.Repeat("s", MinimumKeyBytes)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := service.Register("tester", "correct horse battery staple"); !errors.Is(err, ErrRegistrationDisabled) {
+		t.Fatalf("expected registration disabled, got %v", err)
+	}
+	if _, ok := repository.accounts["tester"]; ok {
+		t.Fatal("disabled registration created an account")
+	}
+}
+
+func TestSuperadminBootstrapDoesNotResetPasswordAndRejectsCollision(t *testing.T) {
+	repository := &memoryRepository{accounts: map[string]*Account{}}
+	service, err := NewService(repository, []byte(strings.Repeat("s", MinimumKeyBytes)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.BootstrapSuperadmin("operator", "correct first secret"); err != nil {
+		t.Fatal(err)
+	}
+	account, _ := repository.FindAccount("operator")
+	originalHash := append([]byte(nil), account.PasswordHash...)
+	if err := service.BootstrapSuperadmin("operator", "different second secret"); err != nil {
+		t.Fatal(err)
+	}
+	if string(account.PasswordHash) != string(originalHash) {
+		t.Fatal("ordinary bootstrap changed the administrator password")
+	}
+	if _, _, err := service.Login("operator", "correct first secret"); err != nil {
+		t.Fatalf("original configured password no longer works: %v", err)
+	}
+	if _, _, err := service.Login("operator", "different second secret"); !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("bootstrap unexpectedly adopted a rotated password: %v", err)
+	}
+	if account.Role != RoleSuperadmin {
+		t.Fatalf("role = %q", account.Role)
+	}
+	if err := service.BootstrapSuperadmin("operator", "short"); !errors.Is(err, ErrAdminBootstrap) {
+		t.Fatalf("invalid configured password should fail: %v", err)
+	}
+
+	if _, _, err := service.Register("member", "correct member password"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.BootstrapSuperadmin("member", "new admin secret long"); !errors.Is(err, ErrAdminNameCollision) {
+		t.Fatalf("existing user collision should fail: %v", err)
 	}
 }
 

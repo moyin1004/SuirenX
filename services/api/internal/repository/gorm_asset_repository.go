@@ -39,7 +39,7 @@ func NewGormAssetRepository(db *gorm.DB) *GormAssetRepository {
 }
 
 func (r *GormAssetRepository) List(status *domain.AssetStatus, archived *bool) ([]domain.Asset, error) {
-	query := r.db.Order("created_at DESC")
+	query := r.db.Where("deleted_at IS NULL").Order("created_at DESC")
 	if status != nil {
 		query = query.Where("status = ?", string(*status))
 	}
@@ -64,7 +64,7 @@ func (r *GormAssetRepository) List(status *domain.AssetStatus, archived *bool) (
 }
 
 func (r *GormAssetRepository) ListForOwner(ownerID string, status *domain.AssetStatus, archived *bool) ([]domain.Asset, error) {
-	query := r.db.Where("owner_id = ?", ownerID).Order("created_at DESC")
+	query := r.db.Where("owner_id = ? AND deleted_at IS NULL", ownerID).Order("created_at DESC")
 	if status != nil {
 		query = query.Where("status = ?", string(*status))
 	}
@@ -88,7 +88,7 @@ func (r *GormAssetRepository) ListForOwner(ownerID string, status *domain.AssetS
 
 func (r *GormAssetRepository) Get(id string) (*domain.Asset, error) {
 	var record AssetRecord
-	err := r.db.Where("id = ?", id).First(&record).Error
+	err := r.db.Where("id = ? AND deleted_at IS NULL", id).First(&record).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrNotFound
 	}
@@ -101,7 +101,7 @@ func (r *GormAssetRepository) Get(id string) (*domain.Asset, error) {
 
 func (r *GormAssetRepository) GetForOwner(ownerID, id string) (*domain.Asset, error) {
 	var record AssetRecord
-	err := r.db.Where("id = ? AND owner_id = ?", id, ownerID).First(&record).Error
+	err := r.db.Where("id = ? AND owner_id = ? AND deleted_at IS NULL", id, ownerID).First(&record).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrNotFound
 	}
@@ -168,7 +168,7 @@ func (r *GormAssetRepository) Update(asset *domain.Asset) error {
 func (r *GormAssetRepository) UpdateForOwner(ownerID string, asset *domain.Asset) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		var record AssetRecord
-		if err := tx.Where("id = ? AND owner_id = ?", asset.ID, ownerID).First(&record).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+		if err := tx.Where("id = ? AND owner_id = ? AND deleted_at IS NULL", asset.ID, ownerID).First(&record).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 			return ErrNotFound
 		} else if err != nil {
 			return err
@@ -211,7 +211,7 @@ func (r *GormAssetRepository) UpdateStatus(asset *domain.Asset) error {
 func (r *GormAssetRepository) UpdateStatusForOwner(ownerID string, asset *domain.Asset) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		var record AssetRecord
-		if err := tx.Where("id = ? AND owner_id = ?", asset.ID, ownerID).First(&record).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+		if err := tx.Where("id = ? AND owner_id = ? AND deleted_at IS NULL", asset.ID, ownerID).First(&record).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 			return ErrNotFound
 		} else if err != nil {
 			return err
@@ -240,6 +240,7 @@ func (r AssetRecord) toDomain() domain.Asset {
 	return domain.Asset{
 		ID:              r.ID,
 		OwnerID:         r.OwnerID,
+		Version:         r.Version,
 		Name:            r.Name,
 		PriceCents:      r.PriceCents,
 		PurchaseDate:    r.PurchaseDate,
@@ -319,7 +320,7 @@ func (r *GormAssetRepository) UpdateArchive(asset *domain.Asset) error {
 func (r *GormAssetRepository) UpdateArchiveForOwner(ownerID string, asset *domain.Asset) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		var record AssetRecord
-		if err := tx.Where("id = ? AND owner_id = ?", asset.ID, ownerID).First(&record).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+		if err := tx.Where("id = ? AND owner_id = ? AND deleted_at IS NULL", asset.ID, ownerID).First(&record).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 			return ErrNotFound
 		} else if err != nil {
 			return err
@@ -338,6 +339,24 @@ func (r *GormAssetRepository) UpdateArchiveForOwner(ownerID string, asset *domai
 		}
 		*asset = record.toDomain()
 		return nil
+	})
+}
+
+func (r *GormAssetRepository) DeleteForOwner(ownerID, id string, now time.Time) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		var record AssetRecord
+		if err := tx.Where("id = ? AND owner_id = ? AND deleted_at IS NULL", id, ownerID).First(&record).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrNotFound
+		} else if err != nil {
+			return err
+		}
+		record.Version++
+		record.DeletedAt = &now
+		record.UpdatedAt = now
+		if err := tx.Save(&record).Error; err != nil {
+			return err
+		}
+		return appendAssetSyncEvent(tx, ownerID, record, now)
 	})
 }
 

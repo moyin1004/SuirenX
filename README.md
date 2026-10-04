@@ -1,8 +1,8 @@
 # SuirenX
 
-SuirenX（燧人）是一个个人工具箱项目。第一版从“有数”式个人资产管理开始：记录设备和物品、查看服役状态、计算持有天数与日均成本。
+SuirenX（燧人）是一个个人工具箱项目。第一版个人资产管理开始：记录设备和物品、查看服役状态、计算持有天数与日均成本。
 
-已发布 [v0.1.0-preview 预发布版](https://github.com/moyin1004/SuirenX/releases/tag/v0.1.0-preview)：Android 使用本地 Room 保存资产与用品，支持离线使用和 JSON 备份恢复；Go/Hertz 服务提供账号与可选增量同步。提醒功能和剩余后台可靠性验收安排在下一版本。
+已发布 [v0.1.0-preview 预发布版](https://github.com/moyin1004/SuirenX/releases/tag/v0.1.0-preview)，维护者于 2026-10-03 确认 v0.1.0 正式发布验收完成。Android 使用本地 Room 保存资产与用品，支持离线使用和 JSON 备份恢复；Go/Hertz 服务提供账号与可选增量同步。v0.1.1 包含 Web 客户端与配置管理、Android 注册关闭提示及新版本 APK；Android 提醒和剩余后台可靠性验收顺延。
 
 ## 技术栈
 

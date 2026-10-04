@@ -33,6 +33,9 @@ services/api/data/
 .env
 .DS_Store
 
+# Personal server deployment details (keep out of Git)
+/DEPLOYMENT.local.md
+
 # Keystore files
 *.jks
 *.keystore

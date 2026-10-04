@@ -56,14 +56,16 @@ repository boundaries.
   day and today. Reactivation clears the date and resumes counting from purchase.
 - Keep SQLite-specific behavior in the database/migration infrastructure and
   GORM repository, outside business services.
-- During pre-release development, keep the entire server SQL schema in the sole
-  `services/api/internal/database/migrations/001_init.sql`; consolidate changes
-  into 001 and do not add 002 or later files. Never call GORM `AutoMigrate`.
-  Keep checksum validation and transactional rollback. Never automatically delete
-  or rewrite an existing development database to bypass a baseline mismatch;
-  back up/export data before explicitly rebuilding it. After the first production
-  release, update this AGENTS.md rule to require immutable, append-only numbered
-  migrations with upgrade and rollback tests before adding further migrations.
+- `001_init.sql` is the immutable server baseline. After the first production
+  release, use immutable, append-only numbered migrations and include upgrade
+  and rollback tests before adding further migrations. Never call GORM
+  `AutoMigrate`. Keep checksum validation and transactional rollback. Never
+  automatically delete or rewrite an existing database to bypass a baseline
+  mismatch; back up/export data before explicitly rebuilding it. Before a
+  product version's first deployment, consolidate its schema changes into one
+  numbered SQL migration file; after deployment, never edit that file. Use an
+  existing key/value settings table for runtime switches when no schema change
+  is needed.
 - Archive is reversible and independent of lifecycle status. Archived assets
   are excluded from default lists and totals, remain readable, and must be
   restored before editing. Never auto-delete archived records.
@@ -166,6 +168,10 @@ in the verification command instead of vendoring files from a module cache.
 - Preserve user changes and avoid broad formatting-only rewrites.
 - Do not commit secrets, signing keys, `local.properties`, generated build
   output, APKs, or local SQLite files.
+- Do not create documentation files casually. Prefer updating an existing
+  document in the appropriate location. Keep machine-specific or other
+  uncommitted operational notes in an ignored local document (for example,
+  `DEPLOYMENT.local.md`) instead of adding them to the repository.
 - Update `docs/TODO.md` when completing or introducing meaningful work. Keep it
   focused on unfinished work by release. Product requirements belong in
   `docs/prd`; completed execution evidence and decisions worth revisiting belong

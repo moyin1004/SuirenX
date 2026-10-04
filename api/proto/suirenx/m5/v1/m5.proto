@@ -20,6 +20,180 @@ message TokenResponse {
 message LogoutRequest {}
 message LogoutResponse { string status = 1; }
 
+message AdminAccountStatusRequest {
+  string account_id = 1 [(api.path) = "account_id"];
+  optional bool disabled = 2 [(api.body) = "disabled"];
+}
+message AdminAccountsRequest {}
+message AdminAccount {
+  string id = 1;
+  string username = 2;
+  string role = 3;
+  string created_at = 4;
+  string disabled_at = 5;
+}
+message AdminAccountsResponse { repeated AdminAccount accounts = 1; }
+message ConfigFile {
+  string config_key = 1;
+  string display_name = 2;
+  string content = 3;
+  string created_at = 4;
+  string updated_at = 5;
+  string deleted_at = 6;
+}
+message ListConfigsRequest {}
+message ListConfigsResponse { repeated ConfigFile configs = 1; }
+message CreateConfigRequest {
+  string display_name = 1 [(api.body) = "display_name"];
+  string content = 2 [(api.body) = "content"];
+}
+message ConfigKeyRequest { string config_key = 1 [(api.path) = "config_key"]; }
+message UpdateConfigRequest {
+  string config_key = 1 [(api.path) = "config_key"];
+  string display_name = 2 [(api.body) = "display_name"];
+  string content = 3 [(api.body) = "content"];
+}
+message CreateApiTokenRequest {
+  string label = 1 [(api.body) = "label"];
+  string transport_mode = 2 [(api.body) = "transport_mode"];
+  repeated string config_keys = 3 [(api.body) = "config_keys"];
+  string expires_at = 4 [(api.body) = "expires_at"];
+}
+message ApiToken {
+  string id = 1;
+  string label = 2;
+  string transport_mode = 3;
+  repeated string config_keys = 4;
+  string created_at = 5;
+  string expires_at = 6;
+  string revoked_at = 7;
+  string last_used_at = 8;
+  string token = 9;
+}
+message ListApiTokensRequest {}
+message ListApiTokensResponse { repeated ApiToken tokens = 1; }
+message RevokeApiTokenRequest { string token_id = 1 [(api.path) = "token_id"]; }
+message UpdateApiTokenRequest {
+  string token_id = 1 [(api.path) = "token_id"];
+  string label = 2 [(api.body) = "label"];
+  repeated string config_keys = 3 [(api.body) = "config_keys"];
+}
+message ConfigSizeLimitRequest { int64 max_bytes = 1 [(api.body) = "max_bytes"]; }
+message ConfigSizeLimitResponse { int64 max_bytes = 1; }
+message AccountRegistrationSettingRequest { optional bool enabled = 1 [(api.body) = "enabled"]; }
+message AccountRegistrationSettingResponse { bool enabled = 1; }
+message WebAsset {
+  string id = 1;
+  int64 version = 2;
+  string name = 3;
+  int64 price_cents = 4;
+  string purchase_date = 5;
+  string status = 6;
+  string image_url = 7;
+  int32 held_days = 8;
+  int64 daily_cost_cents = 9;
+  string retired_date = 10;
+  string archived_at = 11;
+  string icon_key = 12;
+  string purchase_channel = 13;
+  string warranty_end_date = 14;
+  string notes = 15;
+  repeated string tags = 16;
+}
+message WebAssetListRequest {
+  string owner_id = 1 [(api.query) = "owner_id"];
+  string status = 2 [(api.query) = "status"];
+  string scope = 3 [(api.query) = "scope"];
+}
+message WebAssetListResponse { repeated WebAsset assets = 1; }
+message WebAssetCreateRequest {
+  string owner_id = 13 [(api.query) = "owner_id"];
+  string name = 1 [(api.body) = "name"];
+  int64 price_cents = 2 [(api.body) = "price_cents"];
+  string purchase_date = 3 [(api.body) = "purchase_date"];
+  string status = 4 [(api.body) = "status"];
+  string image_url = 5 [(api.body) = "image_url"];
+  string retired_date = 6 [(api.body) = "retired_date"];
+  string archived_at = 7 [(api.body) = "archived_at"];
+  string icon_key = 8 [(api.body) = "icon_key"];
+  string purchase_channel = 9 [(api.body) = "purchase_channel"];
+  string warranty_end_date = 10 [(api.body) = "warranty_end_date"];
+  string notes = 11 [(api.body) = "notes"];
+  repeated string tags = 12 [(api.body) = "tags"];
+}
+message WebAssetUpdateRequest {
+  string id = 1 [(api.path) = "id"];
+  int64 base_version = 2 [(api.body) = "base_version"];
+  string name = 3 [(api.body) = "name"];
+  int64 price_cents = 4 [(api.body) = "price_cents"];
+  string purchase_date = 5 [(api.body) = "purchase_date"];
+  string status = 6 [(api.body) = "status"];
+  string image_url = 7 [(api.body) = "image_url"];
+  string retired_date = 8 [(api.body) = "retired_date"];
+  string archived_at = 9 [(api.body) = "archived_at"];
+  string icon_key = 10 [(api.body) = "icon_key"];
+  string purchase_channel = 11 [(api.body) = "purchase_channel"];
+  string warranty_end_date = 12 [(api.body) = "warranty_end_date"];
+  string notes = 13 [(api.body) = "notes"];
+  repeated string tags = 14 [(api.body) = "tags"];
+  string owner_id = 15 [(api.query) = "owner_id"];
+}
+message WebAssetDeleteRequest {
+  string id = 1 [(api.path) = "id"];
+  int64 base_version = 2 [(api.body) = "base_version"];
+  string owner_id = 3 [(api.query) = "owner_id"];
+}
+message WebAssetGetRequest {
+  string id = 1 [(api.path) = "id"];
+  string owner_id = 2 [(api.query) = "owner_id"];
+}
+message WebExpiryItem {
+  string id = 1;
+  int64 version = 2;
+  string name = 3;
+  string category = 4;
+  string package_expiry_date = 5;
+  string opened_date = 6;
+  int32 opened_validity_days = 7;
+  string location = 8;
+  string notes = 9;
+  string status = 10;
+  string archived_at = 11;
+}
+message WebExpiryListRequest { string owner_id = 1 [(api.query) = "owner_id"]; }
+message WebExpiryListResponse { repeated WebExpiryItem items = 1; }
+message WebExpiryCreateRequest {
+  string name = 1 [(api.body) = "name"];
+  string category = 2 [(api.body) = "category"];
+  string package_expiry_date = 3 [(api.body) = "package_expiry_date"];
+  string opened_date = 4 [(api.body) = "opened_date"];
+  int32 opened_validity_days = 5 [(api.body) = "opened_validity_days"];
+  string location = 6 [(api.body) = "location"];
+  string notes = 7 [(api.body) = "notes"];
+  string status = 8 [(api.body) = "status"];
+  string archived_at = 9 [(api.body) = "archived_at"];
+  string owner_id = 10 [(api.query) = "owner_id"];
+}
+message WebExpiryUpdateRequest {
+  string id = 1 [(api.path) = "id"];
+  int64 base_version = 2 [(api.body) = "base_version"];
+  string name = 3 [(api.body) = "name"];
+  string category = 4 [(api.body) = "category"];
+  string package_expiry_date = 5 [(api.body) = "package_expiry_date"];
+  string opened_date = 6 [(api.body) = "opened_date"];
+  int32 opened_validity_days = 7 [(api.body) = "opened_validity_days"];
+  string location = 8 [(api.body) = "location"];
+  string notes = 9 [(api.body) = "notes"];
+  string status = 10 [(api.body) = "status"];
+  string archived_at = 11 [(api.body) = "archived_at"];
+  string owner_id = 12 [(api.query) = "owner_id"];
+}
+message WebExpiryDeleteRequest {
+  string id = 1 [(api.path) = "id"];
+  int64 base_version = 2 [(api.body) = "base_version"];
+  string owner_id = 3 [(api.query) = "owner_id"];
+}
+
 service AuthService {
   rpc Register(AccountRequest) returns (TokenResponse) {
     option (api.post) = "/api/v1/auth/register";
@@ -29,6 +203,92 @@ service AuthService {
   }
   rpc Logout(LogoutRequest) returns (LogoutResponse) {
     option (api.post) = "/api/v1/auth/logout";
+  }
+  rpc AdminLogin(AccountRequest) returns (TokenResponse) {
+    option (api.post) = "/api/v1/admin/auth/login";
+  }
+  rpc AdminListAccounts(AdminAccountsRequest) returns (AdminAccountsResponse) {
+    option (api.get) = "/api/v1/admin/accounts";
+  }
+  rpc AdminSetAccountStatus(AdminAccountStatusRequest) returns (AdminAccount) {
+    option (api.patch) = "/api/v1/admin/accounts/:account_id/status";
+  }
+  rpc AdminListConfigs(ListConfigsRequest) returns (ListConfigsResponse) {
+    option (api.get) = "/api/v1/admin/configs";
+  }
+  rpc AdminCreateConfig(CreateConfigRequest) returns (ConfigFile) {
+    option (api.post) = "/api/v1/admin/configs";
+  }
+  rpc AdminUpdateConfig(UpdateConfigRequest) returns (ConfigFile) {
+    option (api.put) = "/api/v1/admin/configs/:config_key";
+  }
+  rpc AdminGetConfig(ConfigKeyRequest) returns (ConfigFile) {
+    option (api.get) = "/api/v1/admin/configs/:config_key";
+  }
+  rpc AdminDeleteConfig(ConfigKeyRequest) returns (LogoutResponse) {
+    option (api.delete) = "/api/v1/admin/configs/:config_key";
+  }
+  rpc AdminListApiTokens(ListApiTokensRequest) returns (ListApiTokensResponse) {
+    option (api.get) = "/api/v1/admin/config-tokens";
+  }
+  rpc AdminCreateApiToken(CreateApiTokenRequest) returns (ApiToken) {
+    option (api.post) = "/api/v1/admin/config-tokens";
+  }
+  rpc AdminRevokeApiToken(RevokeApiTokenRequest) returns (LogoutResponse) {
+    option (api.delete) = "/api/v1/admin/config-tokens/:token_id";
+  }
+  rpc AdminUpdateApiToken(UpdateApiTokenRequest) returns (LogoutResponse) {
+    option (api.put) = "/api/v1/admin/config-tokens/:token_id";
+  }
+  rpc AdminGetConfigSizeLimit(AdminAccountsRequest) returns (ConfigSizeLimitResponse) {
+    option (api.get) = "/api/v1/admin/settings/config-max-bytes";
+  }
+  rpc AdminSetConfigSizeLimit(ConfigSizeLimitRequest) returns (ConfigSizeLimitResponse) {
+    option (api.put) = "/api/v1/admin/settings/config-max-bytes";
+  }
+  rpc AdminGetAccountRegistrationSetting(AdminAccountsRequest) returns (AccountRegistrationSettingResponse) {
+    option (api.get) = "/api/v1/admin/settings/account-registration";
+  }
+  rpc AdminSetAccountRegistrationSetting(AccountRegistrationSettingRequest) returns (AccountRegistrationSettingResponse) {
+    option (api.put) = "/api/v1/admin/settings/account-registration";
+  }
+}
+
+service ConfigContentService {
+  // HTTP response body is exactly ConfigFile.content, served as
+  // text/plain; charset=utf-8 with Cache-Control: no-store.
+  rpc ReadConfigContent(ConfigKeyRequest) returns (ConfigFile) {
+    option (api.get) = "/api/v1/configs/:config_key/content";
+  }
+}
+
+service WebDataService {
+  rpc ListWebAssets(WebAssetListRequest) returns (WebAssetListResponse) {
+    option (api.get) = "/api/v1/web/assets";
+  }
+  rpc CreateWebAsset(WebAssetCreateRequest) returns (WebAsset) {
+    option (api.post) = "/api/v1/web/assets";
+  }
+  rpc GetWebAsset(WebAssetGetRequest) returns (WebAsset) {
+    option (api.get) = "/api/v1/web/assets/:id";
+  }
+  rpc UpdateWebAsset(WebAssetUpdateRequest) returns (WebAsset) {
+    option (api.put) = "/api/v1/web/assets/:id";
+  }
+  rpc DeleteWebAsset(WebAssetDeleteRequest) returns (LogoutResponse) {
+    option (api.delete) = "/api/v1/web/assets/:id";
+  }
+  rpc ListWebExpiry(WebExpiryListRequest) returns (WebExpiryListResponse) {
+    option (api.get) = "/api/v1/web/expiry";
+  }
+  rpc CreateWebExpiry(WebExpiryCreateRequest) returns (WebExpiryItem) {
+    option (api.post) = "/api/v1/web/expiry";
+  }
+  rpc UpdateWebExpiry(WebExpiryUpdateRequest) returns (WebExpiryItem) {
+    option (api.put) = "/api/v1/web/expiry/:id";
+  }
+  rpc DeleteWebExpiry(WebExpiryDeleteRequest) returns (LogoutResponse) {
+    option (api.delete) = "/api/v1/web/expiry/:id";
   }
 }
 

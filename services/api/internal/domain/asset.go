@@ -2,6 +2,34 @@ package domain
 
 import "time"
 
+type AdminAccount struct {
+	ID         string     `json:"id"`
+	Username   string     `json:"username"`
+	Role       string     `json:"role"`
+	CreatedAt  time.Time  `json:"created_at"`
+	DisabledAt *time.Time `json:"disabled_at"`
+}
+
+type ConfigFile struct {
+	Key         string     `json:"config_key"`
+	DisplayName string     `json:"display_name"`
+	Content     string     `json:"content"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	DeletedAt   *time.Time `json:"deleted_at"`
+}
+
+type ApiToken struct {
+	ID            string     `json:"id"`
+	Label         string     `json:"label"`
+	TransportMode string     `json:"transport_mode"`
+	ConfigKeys    []string   `json:"config_keys"`
+	CreatedAt     time.Time  `json:"created_at"`
+	ExpiresAt     *time.Time `json:"expires_at"`
+	RevokedAt     *time.Time `json:"revoked_at"`
+	LastUsedAt    *time.Time `json:"last_used_at"`
+}
+
 type AssetStatus string
 
 const (
@@ -16,6 +44,7 @@ func (s AssetStatus) Valid() bool {
 type Asset struct {
 	ID              string
 	OwnerID         string
+	Version         int64
 	Name            string
 	PriceCents      int64
 	PurchaseDate    time.Time
@@ -84,6 +113,11 @@ type SyncExpiryItem struct {
 	Notes              string `json:"notes"`
 	Status             string `json:"status"`
 	ArchivedAt         string `json:"archived_at"`
+}
+
+type VersionedExpiryItem struct {
+	Version int64          `json:"version"`
+	Item    SyncExpiryItem `json:"item"`
 }
 
 type SyncExpiryChange struct {
