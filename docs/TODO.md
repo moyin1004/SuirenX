@@ -1,8 +1,8 @@
 # 当前待办
 
-当前目标：发布 **v0.1.1**（Web 管理功能与 Android 客户端更新）。维护者于 2026-10-03 确认 **v0.1.0 正式发布验收已完成**；阶段 A 剩余可靠性验收顺延，不阻塞 v0.1.1。范围见 [v0.1.1 PRD](prd/v0.1.1.md)，发布记录见 [执行记录](history/roadmap-execution.md)。本文件只保留未完成事项。
+**v0.1.1 已于 2026-10-04 发布**（Web 管理功能与 Android 客户端更新）。维护者于 2026-10-03 确认 **v0.1.0 正式发布验收已完成**；阶段 A 剩余可靠性验收顺延。范围见 [v0.1.1 PRD](prd/v0.1.1.md)，发布记录见 [执行记录](history/roadmap-execution.md)。本文件只保留未完成事项。
 
-## v0.1.1
+## v0.1.1（已发布）
 
 服务端 API、管理基础与响应式 Web 客户端已实现。除既有资产/用品和冲突验收外，现已在原 OpenDesign 稿及实际 Web 客户端补齐配置读取 path、服务器新账号注册开关、API token 名称与授权配置编辑。独立临时 SQLite/本机浏览器实测 path 展示与复制、注册开关启停、token 名称/范围更新后的列表状态、过期提示和撤销 UI；390 px 下全部七个路由无页面横向溢出，资产、用品、配置和 Token 新建表单均无对话框横向溢出。普通账号 UI 不显示受限管理入口，直接导航管理页被拒绝。随后部署新版服务并验证 Supervisor、HTTPS 健康接口及线上嵌入资源。未对正式数据库写入验收数据。剩余表单变体、加载状态和发布安全/回滚验收见下方。
 
@@ -22,6 +22,7 @@
 - [x] 已完成生产部署，由 Supervisor 管理 Go 服务并通过 Nginx HTTPS 反向代理；健康接口、嵌入式 Web/CSS/JS 和访问日志 Query 参数脱敏已验收。另修复并部署管理员选中账号刷新后丢失的问题，隔离合成账号/资产验证总览和资产列表刷新后仍指向所选账号；2026-10-03 又部署配置读取 path、注册开关及 Token 编辑更新，并确认服务状态、HTTPS 健康检查和线上资源标记。具体主机信息与验收记录保存在维护者本机忽略文件中；通用部署说明见 [Web 部署指南](web-deployment.md)。
 - [x] 完成生产部署安全与回滚验收：v0.1.1 已部署到生产。隔离 Nginx 故障注入已证实默认 error log 会记录 Query token；将其映射为 Bearer 并 rewrite 仍记录原始请求行中的 token。维护者决定生产 Nginx 保持不变，因此在部署指南保留该日志风险提醒，Query token 应优先改用 Bearer；维护者确认没有外部 WAF/APM。正式部署库在线备份与隔离恢复已通过并保留受限备份。隔离与正式生产 Supervisor 的旧版→新版→旧版切换均已通过；正式演练验证了 loopback/HTTPS 健康、旧版与当前版 JS/CSS 哈希、数据库完整性和迁移记录，演练前后数据库逻辑内容摘要一致。初始凭据文件已删除，超管密码轮换按维护者要求暂缓。维护者现已授权发布 v0.1.1；Android 包版本设为 `versionCode=2`、`versionName=0.1.1`，Release workflow 将正常构建并签名 Android APK。
 - [x] 运行仓库规定的 Go 全量测试、Proto descriptor 编译、Android Debug 兼容构建和 `git diff --check`；Web JavaScript 语法检查通过。Web 页面由 Go `embed` 提供，没有单独打包构建步骤。
+- [x] PR #5 squash 合并，tag `v0.1.1` 与 GitHub Release 已发布。Android signed APK 已通过 v2/v3 验签、zipalign、包名/版本检查和 SHA-256 独立核验，APK、SHA-256 与证书摘要已上传；证据见 [执行记录](history/roadmap-execution.md)。
 
 ## 已延期：阶段 A Android 可靠性验收
 
