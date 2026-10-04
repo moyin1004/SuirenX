@@ -16,3 +16,57 @@ func Login(_ context.Context, c *app.RequestContext) {
 }
 
 func Logout(_ context.Context, c *app.RequestContext) { actions(c).Logout(c) }
+
+func AdminLogin(_ context.Context, c *app.RequestContext) {
+	dispatch[v1.AccountRequest](c, actions(c).AdminLogin)
+}
+
+func AdminListAccounts(_ context.Context, c *app.RequestContext) {
+	dispatch[v1.AdminAccountsRequest](c, actions(c).AdminListAccounts)
+}
+
+func AdminSetAccountStatus(_ context.Context, c *app.RequestContext) {
+	dispatch[v1.AdminAccountStatusRequest](c, actions(c).AdminSetAccountStatus)
+}
+
+func AdminListConfigs(_ context.Context, c *app.RequestContext) {
+	dispatch[v1.ListConfigsRequest](c, actions(c).AdminListConfigs)
+}
+func AdminCreateConfig(_ context.Context, c *app.RequestContext) {
+	dispatch[v1.CreateConfigRequest](c, actions(c).AdminCreateConfig)
+}
+func AdminUpdateConfig(_ context.Context, c *app.RequestContext) {
+	dispatch[v1.UpdateConfigRequest](c, actions(c).AdminUpdateConfig)
+}
+func AdminGetConfig(_ context.Context, c *app.RequestContext) {
+	dispatch[v1.ConfigKeyRequest](c, actions(c).AdminGetConfig)
+}
+func AdminDeleteConfig(_ context.Context, c *app.RequestContext) {
+	dispatch[v1.ConfigKeyRequest](c, actions(c).AdminDeleteConfig)
+}
+func AdminListApiTokens(_ context.Context, c *app.RequestContext) {
+	dispatch[v1.ListApiTokensRequest](c, actions(c).AdminListApiTokens)
+}
+func AdminCreateApiToken(_ context.Context, c *app.RequestContext) {
+	dispatch[v1.CreateApiTokenRequest](c, actions(c).AdminCreateApiToken)
+}
+func AdminRevokeApiToken(_ context.Context, c *app.RequestContext) {
+	dispatch[v1.RevokeApiTokenRequest](c, actions(c).AdminRevokeApiToken)
+}
+func AdminUpdateApiToken(_ context.Context, c *app.RequestContext) {
+	dispatch[v1.UpdateApiTokenRequest](c, actions(c).AdminUpdateApiToken)
+}
+func AdminGetConfigSizeLimit(_ context.Context, c *app.RequestContext) {
+	dispatch[v1.AdminAccountsRequest](c, actions(c).AdminGetConfigSizeLimit)
+}
+func AdminSetConfigSizeLimit(_ context.Context, c *app.RequestContext) {
+	dispatch[v1.ConfigSizeLimitRequest](c, actions(c).AdminSetConfigSizeLimit)
+}
+
+func AdminGetAccountRegistrationSetting(_ context.Context, c *app.RequestContext) {
+	dispatch[v1.AdminAccountsRequest](c, actions(c).AdminGetAccountRegistrationSetting)
+}
+
+func AdminSetAccountRegistrationSetting(_ context.Context, c *app.RequestContext) {
+	dispatch[v1.AccountRegistrationSettingRequest](c, actions(c).AdminSetAccountRegistrationSetting)
+}

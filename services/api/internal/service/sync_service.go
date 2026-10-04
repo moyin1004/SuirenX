@@ -13,6 +13,7 @@ import (
 var (
 	ErrInvalidSyncRequest = errors.New("invalid sync request")
 	ErrSyncConflict       = errors.New("sync conflict")
+	ErrArchivedRecord     = errors.New("archived record must be restored before editing")
 )
 
 type SyncAssetInput struct {
@@ -31,6 +32,7 @@ type SyncAssetInput struct {
 	WarrantyEndDate string   `json:"warranty_end_date"`
 	Notes           string   `json:"notes"`
 	Tags            []string `json:"tags"`
+	RequireRestore  bool     `json:"-"`
 }
 
 type SyncExpiryInput struct {
@@ -46,6 +48,7 @@ type SyncExpiryInput struct {
 	Notes              string `json:"notes"`
 	Status             string `json:"status"`
 	ArchivedAt         string `json:"archived_at"`
+	RequireRestore     bool   `json:"-"`
 }
 
 type SyncBatchInput struct {
@@ -96,10 +99,16 @@ func (s *SyncService) Apply(ownerID string, input SyncBatchInput) (domain.SyncBa
 	now := s.now().UTC()
 	result, err := s.repository.ApplyBatch(ownerID, input.Cursor, input.IdempotencyKey, changes, now)
 	if err != nil {
+		if errors.Is(err, repository.ErrRecordArchived) {
+			return domain.SyncBatchResult{}, ErrArchivedRecord
+		}
 		return domain.SyncBatchResult{}, fmt.Errorf("apply sync batch: %w", err)
 	}
 	expiryResult, err := s.repository.ApplyExpiryBatch(ownerID, input.ExpiryCursor, input.IdempotencyKey, expiryChanges, now)
 	if err != nil {
+		if errors.Is(err, repository.ErrRecordArchived) {
+			return domain.SyncBatchResult{}, ErrArchivedRecord
+		}
 		return domain.SyncBatchResult{}, fmt.Errorf("apply expiry sync batch: %w", err)
 	}
 	result.NextExpiryCursor = expiryResult.NextExpiryCursor

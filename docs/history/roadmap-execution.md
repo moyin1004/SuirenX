@@ -430,3 +430,30 @@
 - APK SHA-256: `1fde84e2c4bb359cbc6727389b22f7b4c15867da43c19b291e7dec5fab23bdd3`, matching the GitHub Release asset digest.
 - Certificate SHA-256: `AF:B8:A5:7C:C8:6D:FC:D5:65:90:E2:E7:14:4F:B5:55:24:1D:85:0F:F6:B8:EB:29:17:58:15:32:41:85:4F:55`, matching the delivered JKS.
 - Signed-device installation, upgrade, cloud backup and privacy acceptance remain pending. Private signing files remain outside this repository.
+
+## 2026-10-03：v0.1.1 需求规划与设计连接复核
+
+- 按维护者本轮决定，将用品/保修提醒、首页待处理入口，以及 Web 资产/用品、超管账号管理、数据库配置文件和受限 API token 纳入 [v0.1.1 PRD](../prd/v0.1.1.md)。Web 与 Android 共用同步账号数据，超管凭据由服务端 secret/environment 配置。
+- 审阅当前 TODO：v0.1.0 正式签名/设备/隐私/分发验收与阶段 A 实体设备策略验收仍需要维护者材料或实体设备，无法在本仓库内完成，继续作为外部验收门。
+- 本任务初始配置没有 `open-design` MCP 条目。受限沙箱中的签名检查报告失败，但在完整 macOS 签名服务下验证 `/Applications/Open Design.app` 为 `valid on disk`，Gatekeeper 接受为 Notarized Developer ID；因此没有替换应用。只读验证本机留存的 0.24.1 DMG，其内部校验通过，挂载后的应用签名也通过。
+- 修复前备份 Codex 配置和完整 OpenDesign 用户数据至 `/Users/bytedance/Library/Application Support/OpenDesign-repair-20261003-before-registration`；配置副本与原件一致，OpenDesign `app.sqlite` 副本 `PRAGMA quick_check` 返回 `ok`。未更改或删除原数据。
+- 使用签名应用恢复 Codex MCP 注册，并仅为该服务设置 `pnpm_config_verify_deps_before_run=false` 与外置 Web runtime 环境。直接启动 stdio MCP 执行 `initialize` / `tools/list` 成功，发现 22 个工具；冷启动后应用签名与 Gatekeeper 仍通过。当前 Codex 任务未热加载新增 MCP，需在新任务中读取既有项目/原稿；尚未启动归因 brief、生成设计或更改原稿。
+- OpenDesign MCP 恢复与工具层验证已完成；提醒与 Web 实现仍待新任务加载连接后更新设计稿。此轮没有实现提醒、Web/API 或数据库代码；`git diff --check` 通过。
+
+### v0.1.0 发布验收状态更正
+
+- 2026-10-03：维护者确认 v0.1.0 正式发布验收已完成。同步更新 PRD、路线图和 TODO；阶段 A 剩余后台与实体设备可靠性验收继续延期，不阻塞 v0.1.1。
+
+## 2026-10-03：v0.1.1 服务端基础实现
+
+- 保留 `001_init.sql` 原样，新增 `002_web_admin.sql` 管理账号角色/停用状态、文本配置、受限 API token、全局配置大小设置和审计表。升级失败时 002 与后续迁移保持事务回滚；升级测试验证旧账号数据保留及默认值。
+- 新增超管环境引导、账号停用/恢复、禁止停用最后一个超管、显式标准输入密码轮换命令。密码轮换不会由普通重启触发；现存 JWT 按 PRD 继续有效直到过期。
+- 新增 Web 资产和用品读写 API，写操作经同步服务提交版本事件、幂等记录和 tombstone；版本不一致返回服务器快照供前端手动处理。普通账号按账号隔离，超管可指定目标账号，管理写入记录审计。
+- Web 更新归档中的资产/用品只允许提交无其他字段变化的恢复；恢复后才能编辑。显式删除仍允许创建 tombstone，原 Android 同步协议未改变；API 用例覆盖资产归档默认隐藏但可读、归档用品恢复前拒绝修改。
+- 新增 UTF-8 配置文件完整覆盖 CRUD 与大小设置；配置 key 不复用。受限 token 只保存散列，创建时明文仅返回一次，按配置 key 授权、限定 Bearer/Query 传输方式，并提供有效期、撤销、最近使用时间、速率限制和 `no-store` 原文读取。
+- `GOCACHE=/private/tmp/suirenx-go-cache go test ./...`、资产 Proto descriptor 编译、`git diff --check` 和 `:apps:android:app:assembleDebug` 通过；Android 构建使用本机已缓存的 Gradle 9.6、Android Studio JBR 和在线获取缺失依赖。集成用例覆盖账号边界、停用登录、审计 100 条上限、配置与 token 权限及稳定错误码、Web 幂等/版本冲突、归档恢复前保护、Android 同步读取事件和删除 tombstone。
+- OpenDesign 当前上下文调用返回 `Transport closed`；设计原稿更新及依赖它的 Web UI 尚未开始，不能宣称 v0.1.1 完成或发布验收通过。
+- 维护者随后通过 OpenDesign 用户端确认 brief：发布产品、小型多页网站、精致科技感。当前任务重试活动上下文与项目列表仍返回 `Transport closed`，无法据此读取或更新既有原稿；已将 brief 和连接状态同步到 PRD/TODO，依赖原稿的 UI 实现继续等待连接恢复。
+- 2026-10-03 继续验收：服务端全量 Go 测试、两份 Proto descriptor、Web JavaScript 语法检查、`git diff --check` 和 Android Debug 构建通过。发现 Android 未识别服务端稳定错误 `registration_closed`，补充明确提示“服务器已关闭新账号注册，请联系管理员”及单测；Android 数据层单测与 Debug 构建通过。Web 管理 UI 依赖 OpenDesign 原稿的三项交互仍待设计更新及端到端验收。
+- 2026-10-03 OpenDesign 连接复核：桌面 app、daemon health 与预览页均可读取且显示运行，MCP 配置为 enabled，但活动上下文调用仍返回 `Transport closed`。只读比较登记的本地 discovery socket 与进程实际持有的 Unix socket，daemon/desktop 发现端点均只有 1/2 匹配，MCP client endpoint 仍存在且由 daemon 持有。这说明网页可用与 MCP 桥接分离，并有部分登记端点过期的迹象；尚未证明具体关闭原因，也未重注册或重启用户进程。依赖原稿的管理 UI 继续待桥接恢复。
+- 随后使用已安装的签名 OpenDesign app 刷新 Codex MCP 注册，注册查询可读，但当前任务里的活动上下文调用仍为 `Transport closed`，发现端点匹配数未变；按 OpenDesign 工作流，当前任务不能热加载新 MCP 状态，需新任务验证连接后继续 UI 设计与验收。没有重启 OpenDesign 桌面进程。

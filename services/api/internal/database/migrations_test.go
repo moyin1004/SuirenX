@@ -139,6 +139,45 @@ func TestUpgradeAppliesPendingMigrations(t *testing.T) {
 	assertScalar(t, raw, "SELECT count(*) FROM sqlite_master WHERE name='extra_notes'", 1)
 }
 
+func TestWebAdminUpgradeAndFailureRollback(t *testing.T) {
+	raw := openRaw(t, filepath.Join(t.TempDir(), "assets.db"))
+	migrations := bundled(t)
+	if len(migrations) != 2 || migrations[1].name != "002_web_admin.sql" {
+		t.Fatalf("expected immutable baseline and one web admin migration, got %+v", migrations)
+	}
+	if err := migrate(context.Background(), raw, migrations[:1]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.Exec(`INSERT INTO accounts(id,username,password_hash,created_at) VALUES ('user-1','reader',X'01','2026-10-01')`); err != nil {
+		t.Fatal(err)
+	}
+	failed := append(append([]migration{}, migrations...), testMigration(3, `CREATE TABLE partial_web_upgrade(id INTEGER); INSERT INTO missing_table VALUES(1);`))
+	if err := migrate(context.Background(), raw, failed); err == nil {
+		t.Fatal("expected following failed migration to roll back pending web schema")
+	}
+	assertScalar(t, raw, "SELECT count(*) FROM sqlite_master WHERE name='config_files'", 0)
+	assertScalar(t, raw, "SELECT count(*) FROM sqlite_master WHERE name='server_settings'", 0)
+	assertScalar(t, raw, "SELECT count(*) FROM pragma_table_info('accounts') WHERE name='role'", 0)
+	assertScalar(t, raw, "SELECT count(*) FROM schema_migrations", 1)
+	var username string
+	if err := raw.QueryRow(`SELECT username FROM accounts WHERE id='user-1'`).Scan(&username); err != nil || username != "reader" {
+		t.Fatalf("failed upgrade changed existing account: username=%q err=%v", username, err)
+	}
+	if err := migrate(context.Background(), raw, migrations); err != nil {
+		t.Fatal(err)
+	}
+	assertScalar(t, raw, "SELECT count(*) FROM schema_migrations", 2)
+	assertScalar(t, raw, "SELECT count(*) FROM config_files", 0)
+	var role, maxBytes string
+	if err := raw.QueryRow(`SELECT role FROM accounts WHERE id='user-1'`).Scan(&role); err != nil || role != "USER" {
+		t.Fatalf("existing account was not preserved with default role: role=%q err=%v", role, err)
+	}
+	if err := raw.QueryRow(`SELECT setting_value FROM server_settings WHERE setting_key='config_max_bytes'`).Scan(&maxBytes); err != nil || maxBytes != "10000000" {
+		t.Fatalf("config size default: value=%q err=%v", maxBytes, err)
+	}
+	assertScalar(t, raw, "SELECT count(*) FROM server_settings WHERE setting_key='allow_account_registration'", 0)
+}
+
 func testMigration(version int, body string) migration {
 	return migration{version: version, name: fmt.Sprintf("%03d_test.sql", version), body: body, checksum: fmt.Sprintf("%x", sha256.Sum256([]byte(body)))}
 }
@@ -272,9 +311,9 @@ func TestLoadMigrationsAcceptsMultiDigitVersions(t *testing.T) {
 	}
 }
 
-func TestDevelopmentSchemaUsesOnly001(t *testing.T) {
+func TestBaselineMigrationRemainsFirstAndImmutable(t *testing.T) {
 	migrations := bundled(t)
-	if len(migrations) != 1 || migrations[0].name != "001_init.sql" {
-		t.Fatalf("pre-release schema must stay in 001_init.sql; update AGENTS.md after release before adding versions: %+v", migrations)
+	if len(migrations) < 1 || migrations[0].name != "001_init.sql" {
+		t.Fatalf("first migration must remain the immutable baseline: %+v", migrations)
 	}
 }

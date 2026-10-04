@@ -50,3 +50,208 @@ func _syncassetsMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _adminMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _adminloginMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _auth0Mw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _accountsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _adminlistaccountsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func __7baccount_id_7dMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _adminsetaccountstatusMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _account_idMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _config_tokensMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _adminlistapitokensMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _adminrevokeapitokenMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _admincreateapitokenMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _configsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _adminlistconfigsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _admindeleteconfigMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _admingetconfigMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _adminupdateconfigMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _admincreateconfigMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _settingsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _admingetconfigsizelimitMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _adminsetconfigsizelimitMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _configs0Mw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _config_keyMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _readconfigcontentMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _webMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _assetsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _listwebassetsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _deletewebassetMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _getwebassetMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _updatewebassetMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _createwebassetMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _expiryMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _listwebexpiryMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _deletewebexpiryMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _updatewebexpiryMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _createwebexpiryMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _admingetaccountregistrationsettingMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _adminsetaccountregistrationsettingMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _token_idMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _adminupdateapitokenscopesMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _adminupdateapitokenMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

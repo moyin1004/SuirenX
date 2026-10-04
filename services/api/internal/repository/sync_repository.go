@@ -25,6 +25,7 @@ type SyncAssetInput struct {
 	WarrantyEndDate string
 	Notes           string
 	Tags            []string
+	RequireRestore  bool
 }
 
 type SyncRepository interface {
@@ -62,6 +63,7 @@ type SyncExpiryInput struct {
 	Notes              string
 	Status             string
 	ArchivedAt         string
+	RequireRestore     bool
 }
 
 type ExpiryRecord struct {
@@ -132,9 +134,16 @@ func (r *GormAssetRepository) ApplyBatch(ownerID string, cursor int64, idempoten
 			} else if err != nil {
 				return err
 			} else {
+				if record.DeletedAt != nil && !input.Deleted {
+					result.Conflicts = append(result.Conflicts, domain.SyncConflict{ID: input.ID, BaseVersion: input.BaseVersion, RemoteVersion: record.Version, Remote: snapshot(record)})
+					continue
+				}
 				if input.BaseVersion != record.Version {
 					result.Conflicts = append(result.Conflicts, domain.SyncConflict{ID: input.ID, BaseVersion: input.BaseVersion, RemoteVersion: record.Version, Remote: snapshot(record)})
 					continue
+				}
+				if input.RequireRestore && !input.Deleted && !assetArchiveTransitionOnly(record, input) {
+					return ErrRecordArchived
 				}
 				record.Version++
 				record.UpdatedAt = now
@@ -199,6 +208,38 @@ func applyInput(record *AssetRecord, input SyncAssetInput, now time.Time) {
 		record.CreatedAt = now
 	}
 	record.UpdatedAt = now
+}
+
+func assetArchiveTransitionOnly(record AssetRecord, input SyncAssetInput) bool {
+	if record.ArchivedAt == nil {
+		return true
+	}
+	if input.ArchivedAt != "" {
+		return false
+	}
+	return record.Name == input.Name &&
+		record.PriceCents == input.PriceCents &&
+		formatDate(record.PurchaseDate) == input.PurchaseDate &&
+		record.Status == input.Status &&
+		record.ImageURL == input.ImageURL &&
+		formatDatePtr(record.RetiredAt) == input.RetiredDate &&
+		record.IconKey == input.IconKey &&
+		record.PurchaseChannel == input.PurchaseChannel &&
+		formatDatePtr(record.WarrantyEndDate) == input.WarrantyEndDate &&
+		record.Notes == input.Notes &&
+		equalTags(decodeTags(record.TagsJSON), input.Tags)
+}
+
+func equalTags(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func snapshot(record AssetRecord) domain.SyncAsset {
@@ -285,9 +326,16 @@ func (r *GormAssetRepository) ApplyExpiryBatch(ownerID string, cursor int64, ide
 			} else if err != nil {
 				return err
 			} else {
+				if record.DeletedAt != nil && !input.Deleted {
+					result.ExpiryConflicts = append(result.ExpiryConflicts, domain.SyncExpiryConflict{ID: input.ID, BaseVersion: input.BaseVersion, RemoteVersion: record.Version, Remote: expirySnapshot(record)})
+					continue
+				}
 				if input.BaseVersion != record.Version {
 					result.ExpiryConflicts = append(result.ExpiryConflicts, domain.SyncExpiryConflict{ID: input.ID, BaseVersion: input.BaseVersion, RemoteVersion: record.Version, Remote: expirySnapshot(record)})
 					continue
+				}
+				if input.RequireRestore && !input.Deleted && !expiryArchiveTransitionOnly(record, input) {
+					return ErrRecordArchived
 				}
 				record.Version++
 				record.UpdatedAt = now
@@ -324,6 +372,18 @@ func (r *GormAssetRepository) ApplyExpiryBatch(ownerID string, cursor int64, ide
 	return result, err
 }
 
+func (r *GormAssetRepository) ListExpiryForOwner(ownerID string) ([]domain.VersionedExpiryItem, error) {
+	var records []ExpiryRecord
+	if err := r.db.Where("owner_id = ? AND deleted_at IS NULL", ownerID).Order("package_expiry_date ASC, created_at DESC").Find(&records).Error; err != nil {
+		return nil, err
+	}
+	items := make([]domain.VersionedExpiryItem, 0, len(records))
+	for _, record := range records {
+		items = append(items, domain.VersionedExpiryItem{Version: record.Version, Item: expirySnapshot(record)})
+	}
+	return items, nil
+}
+
 func applyExpiryInput(record *ExpiryRecord, input SyncExpiryInput, now time.Time) {
 	record.Name, record.Category, record.PackageExpiryDate = input.Name, input.Category, input.PackageExpiryDate
 	record.OpenedDate, record.OpenedValidityDays = input.OpenedDate, input.OpenedValidityDays
@@ -338,6 +398,23 @@ func applyExpiryInput(record *ExpiryRecord, input SyncExpiryInput, now time.Time
 		record.CreatedAt = now
 	}
 	record.UpdatedAt = now
+}
+
+func expiryArchiveTransitionOnly(record ExpiryRecord, input SyncExpiryInput) bool {
+	if record.ArchivedAt == nil {
+		return true
+	}
+	if input.ArchivedAt != "" {
+		return false
+	}
+	return record.Name == input.Name &&
+		record.Category == input.Category &&
+		record.PackageExpiryDate == input.PackageExpiryDate &&
+		record.OpenedDate == input.OpenedDate &&
+		record.OpenedValidityDays == input.OpenedValidityDays &&
+		record.Location == input.Location &&
+		record.Notes == input.Notes &&
+		record.Status == input.Status
 }
 
 func expirySnapshot(record ExpiryRecord) domain.SyncExpiryItem {

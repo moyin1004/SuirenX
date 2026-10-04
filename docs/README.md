@@ -1,16 +1,18 @@
 # 文档导航
 
-当前目标为 **v0.1.0-preview 预发布**，阶段 A、C 的剩余事项已移到下一版本。
+当前版本为 **v0.1.1**，包含 Web 管理功能与 Android 客户端更新；v0.1.0 正式发布验收已于 2026-10-03 确认完成。Android 提醒及阶段 A 实体设备可靠性验收继续延期。
 
 ## 当前工作与技术规则
 
 - [TODO](TODO.md)：只记录未完成事项，按版本安排。
 - [发布准备](release-readiness.md)：签名、验证、隐私与分发操作。
 - [架构](architecture.md)、[数据与同步](data-sync.md)、[数据库迁移](database-migrations.md)：持续有效的工程规则。
+- [Web 部署](web-deployment.md)：超管环境变量、token、日志脱敏、SQLite 备份和发布验收边界。
 
 ## 产品需求：prd
 
 - [v0.1.0 范围](prd/v0.1.0.md)
+- [v0.1.1 范围](prd/v0.1.1.md)
 - [版本规划](prd/roadmap.md)
 - [下一版本的到期提醒规格](prd/reminders-spec.md)
 

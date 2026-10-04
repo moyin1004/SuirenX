@@ -31,6 +31,7 @@ type AssetView struct {
 	ArchivedAt      string   `json:"archived_at"`
 	RetiredDate     string   `json:"retired_date"`
 	ID              string   `json:"id"`
+	Version         int64    `json:"version"`
 	Name            string   `json:"name"`
 	PriceCents      int64    `json:"price_cents"`
 	PurchaseDate    string   `json:"purchase_date"`
@@ -300,6 +301,24 @@ func (s *AssetService) UpdateArchive(id, action string) (AssetView, error) {
 	return s.toView(*asset), nil
 }
 
+// Delete creates an explicit, durable tombstone for a synchronized owner.
+func (s *AssetService) Delete(id string) error {
+	if s.ownerID == "" {
+		return fmt.Errorf("delete asset: owner is required")
+	}
+	deleter, ok := s.repository.(repository.OwnerAssetDeleteRepository)
+	if !ok {
+		return fmt.Errorf("delete asset: owner-scoped delete repository unavailable")
+	}
+	if err := deleter.DeleteForOwner(s.ownerID, strings.TrimSpace(id), s.now().UTC()); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return ErrAssetNotFound
+		}
+		return fmt.Errorf("delete asset: %w", err)
+	}
+	return nil
+}
+
 func (s *AssetService) get(id string) (*domain.Asset, error) {
 	if s.ownerID == "" {
 		return s.repository.Get(id)
@@ -417,6 +436,7 @@ func (s *AssetService) toView(asset domain.Asset) AssetView {
 	}
 	return AssetView{
 		IconKey:         iconKey,
+		Version:         asset.Version,
 		RetiredDate:     retiredDate,
 		ArchivedAt:      archivedAt,
 		ID:              asset.ID,

@@ -10,6 +10,7 @@ import (
 )
 
 const authOwnerIDContextKey = "suirenx.auth.owner_id"
+const authRoleContextKey = "suirenx.auth.role"
 
 // withM5Auth only installs verification on endpoints that require an account.
 // Health, login and register are intentionally allowed through without this
@@ -35,6 +36,7 @@ func withM5Auth(authService *auth.Service) app.HandlerFunc {
 			return
 		}
 		c.Set(authOwnerIDContextKey, claims.Subject)
+		c.Set(authRoleContextKey, claims.Role)
 		c.Next(ctx)
 	}
 }
@@ -44,6 +46,12 @@ func requiresM5Auth(c *app.RequestContext) bool {
 	case "/api/v1/auth/logout", "/api/v1/sync/assets":
 		return true
 	default:
-		return false
+		if string(c.Path()) == "/api/v1/admin/auth/login" {
+			return false
+		}
+		if strings.HasPrefix(string(c.Path()), "/api/v1/configs/") {
+			return false // Config reads use the separately-scoped API token guard.
+		}
+		return strings.HasPrefix(string(c.Path()), "/api/v1/web/") || strings.HasPrefix(string(c.Path()), "/api/v1/admin/") || strings.HasPrefix(string(c.Path()), "/api/v1/configs/")
 	}
 }

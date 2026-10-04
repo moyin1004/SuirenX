@@ -22,14 +22,66 @@ func Register(r *server.Hertz) {
 		{
 			_v1 := _api.Group("/v1", _v1Mw()...)
 			{
-				_auth := _v1.Group("/auth", _authMw()...)
-				_auth.POST("/login", append(_loginMw(), v1.Login)...)
-				_auth.POST("/logout", append(_logoutMw(), v1.Logout)...)
-				_auth.POST("/register", append(_registerMw(), v1.Register)...)
+				_admin := _v1.Group("/admin", _adminMw()...)
+				_admin.GET("/accounts", append(_adminlistaccountsMw(), v1.AdminListAccounts)...)
+				_accounts := _admin.Group("/accounts", _accountsMw()...)
+				{
+					_account_id := _accounts.Group("/:account_id", _account_idMw()...)
+					_account_id.PATCH("/status", append(_adminsetaccountstatusMw(), v1.AdminSetAccountStatus)...)
+				}
+				_admin.GET("/config-tokens", append(_adminlistapitokensMw(), v1.AdminListApiTokens)...)
+				_config_tokens := _admin.Group("/config-tokens", _config_tokensMw()...)
+				_config_tokens.DELETE("/:token_id", append(_adminrevokeapitokenMw(), v1.AdminRevokeApiToken)...)
+				_config_tokens.PUT("/:token_id", append(_adminupdateapitokenMw(), v1.AdminUpdateApiToken)...)
+				_admin.POST("/config-tokens", append(_admincreateapitokenMw(), v1.AdminCreateApiToken)...)
+				_admin.GET("/configs", append(_adminlistconfigsMw(), v1.AdminListConfigs)...)
+				_configs := _admin.Group("/configs", _configsMw()...)
+				_configs.DELETE("/:config_key", append(_admindeleteconfigMw(), v1.AdminDeleteConfig)...)
+				_configs.GET("/:config_key", append(_admingetconfigMw(), v1.AdminGetConfig)...)
+				_configs.PUT("/:config_key", append(_adminupdateconfigMw(), v1.AdminUpdateConfig)...)
+				_admin.POST("/configs", append(_admincreateconfigMw(), v1.AdminCreateConfig)...)
+				{
+					_auth := _admin.Group("/auth", _authMw()...)
+					_auth.POST("/login", append(_adminloginMw(), v1.AdminLogin)...)
+				}
+				{
+					_settings := _admin.Group("/settings", _settingsMw()...)
+					_settings.GET("/account-registration", append(_admingetaccountregistrationsettingMw(), v1.AdminGetAccountRegistrationSetting)...)
+					_settings.PUT("/account-registration", append(_adminsetaccountregistrationsettingMw(), v1.AdminSetAccountRegistrationSetting)...)
+					_settings.GET("/config-max-bytes", append(_admingetconfigsizelimitMw(), v1.AdminGetConfigSizeLimit)...)
+					_settings.PUT("/config-max-bytes", append(_adminsetconfigsizelimitMw(), v1.AdminSetConfigSizeLimit)...)
+				}
+			}
+			{
+				_auth0 := _v1.Group("/auth", _auth0Mw()...)
+				_auth0.POST("/login", append(_loginMw(), v1.Login)...)
+				_auth0.POST("/logout", append(_logoutMw(), v1.Logout)...)
+				_auth0.POST("/register", append(_registerMw(), v1.Register)...)
+			}
+			{
+				_configs0 := _v1.Group("/configs", _configs0Mw()...)
+				{
+					_config_key := _configs0.Group("/:config_key", _config_keyMw()...)
+					_config_key.GET("/content", append(_readconfigcontentMw(), v1.ReadConfigContent)...)
+				}
 			}
 			{
 				_sync := _v1.Group("/sync", _syncMw()...)
 				_sync.POST("/assets", append(_syncassetsMw(), v1.SyncAssets)...)
+			}
+			{
+				_web := _v1.Group("/web", _webMw()...)
+				_web.GET("/assets", append(_listwebassetsMw(), v1.ListWebAssets)...)
+				_assets := _web.Group("/assets", _assetsMw()...)
+				_assets.DELETE("/:id", append(_deletewebassetMw(), v1.DeleteWebAsset)...)
+				_assets.GET("/:id", append(_getwebassetMw(), v1.GetWebAsset)...)
+				_assets.PUT("/:id", append(_updatewebassetMw(), v1.UpdateWebAsset)...)
+				_web.POST("/assets", append(_createwebassetMw(), v1.CreateWebAsset)...)
+				_web.GET("/expiry", append(_listwebexpiryMw(), v1.ListWebExpiry)...)
+				_expiry := _web.Group("/expiry", _expiryMw()...)
+				_expiry.DELETE("/:id", append(_deletewebexpiryMw(), v1.DeleteWebExpiry)...)
+				_expiry.PUT("/:id", append(_updatewebexpiryMw(), v1.UpdateWebExpiry)...)
+				_web.POST("/expiry", append(_createwebexpiryMw(), v1.CreateWebExpiry)...)
 			}
 		}
 	}

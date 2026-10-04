@@ -24,6 +24,22 @@ import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 
+internal fun authFailureMessage(error: HttpException, json: Json): String {
+    val response = runCatching {
+        json.parseToJsonElement(error.response()?.errorBody()?.string().orEmpty()).jsonObject
+    }.getOrNull()
+    val code = response?.get("code")?.jsonPrimitive?.contentOrNull
+    val body = response?.get("error")?.jsonPrimitive?.contentOrNull
+    return when {
+        code == "registration_closed" -> "服务器已关闭新账号注册，请联系管理员"
+        body == "username is already registered" -> "该账号已注册，请切换到登录"
+        error.code() == 401 -> "账号或密码不正确，请重试"
+        error.code() == 429 -> "操作过于频繁，请稍后重试"
+        error.code() >= 500 -> "服务器暂时不可用，请稍后重试"
+        else -> "账号请求失败，请检查输入和服务器地址"
+    }
+}
+
 @Singleton
 class LocalAuthRepository @Inject constructor(
     private val backends: BackendRepository,
@@ -104,16 +120,7 @@ class LocalAuthRepository @Inject constructor(
         throw error
     } catch (error: Exception) {
         val message = when (error) {
-            is HttpException -> {
-                val body = runCatching { json.parseToJsonElement(error.response()?.errorBody()?.string().orEmpty()).jsonObject["error"]?.jsonPrimitive?.content }.getOrNull()
-                when {
-                    body == "username is already registered" -> "该账号已注册，请切换到登录"
-                    error.code() == 401 -> "账号或密码不正确，请重试"
-                    error.code() == 429 -> "操作过于频繁，请稍后重试"
-                    error.code() >= 500 -> "服务器暂时不可用，请稍后重试"
-                    else -> "账号请求失败，请检查输入和服务器地址"
-                }
-            }
+            is HttpException -> authFailureMessage(error, json)
             is IOException -> "无法连接服务器，请检查地址和网络后重试"
             else -> error.message ?: "账号操作失败，请重试"
         }

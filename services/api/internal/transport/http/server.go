@@ -10,7 +10,9 @@ import (
 	"github.com/moyin1004/suirenx/services/api/internal/auth"
 	"github.com/moyin1004/suirenx/services/api/internal/repository"
 	"github.com/moyin1004/suirenx/services/api/internal/service"
+	"github.com/moyin1004/suirenx/services/api/internal/transport/http/webui"
 	"gorm.io/gorm"
+	"os"
 	"time"
 )
 
@@ -30,8 +32,17 @@ func WithM5(db *gorm.DB, jwtSecret string) ServerOption {
 		if err != nil {
 			panic(err)
 		}
-		syncService := service.NewSyncService(repository.NewGormAssetRepository(db))
-		h.Use(handlers.WithSyncActions(&m5Handlers{auth: authService, sync: syncService}))
+		adminUsername, adminPassword := os.Getenv("SUIRENX_ADMIN_USERNAME"), os.Getenv("SUIRENX_ADMIN_PASSWORD")
+		var adminBootstrapErr error
+		if adminUsername == "" || adminPassword == "" {
+			adminBootstrapErr = auth.ErrAdminBootstrap
+		} else if err := authService.BootstrapSuperadmin(adminUsername, adminPassword); err != nil {
+			adminBootstrapErr = err
+		}
+		assetRepository := repository.NewGormAssetRepository(db)
+		syncService := service.NewSyncService(assetRepository)
+		configRepository := repository.NewGormAuthRepository(db)
+		h.Use(handlers.WithSyncActions(&m5Handlers{auth: authService, sync: syncService, assets: service.NewAssetService(assetRepository), expiry: service.NewExpiryService(assetRepository), admin: service.NewAdminService(configRepository), config: service.NewConfigService(configRepository), adminBootstrapErr: adminBootstrapErr}))
 		h.Use(withM5Auth(authService))
 		_ = s
 	}
@@ -54,6 +65,7 @@ func NewServer(address string, assets *service.AssetService, options ...ServerOp
 		c.JSON(consts.StatusOK, map[string]string{"status": "ok"})
 	})
 	router.GeneratedRegister(h)
+	webui.Register(h)
 	return s
 }
 

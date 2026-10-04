@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 func Open(path string) (*gorm.DB, error) {
@@ -27,7 +29,14 @@ func Open(path string) (*gorm.DB, error) {
 	dsn := url.URL{Scheme: "file", Path: absolutePath}
 	options := url.Values{"_txlock": {"immediate"}, "_busy_timeout": {"5000"}}
 	dsn.RawQuery = options.Encode()
-	db, err := gorm.Open(sqlite.Open(dsn.String()), &gorm.Config{})
+	queryLogger := logger.New(log.New(os.Stderr, "\r\n", log.LstdFlags), logger.Config{
+		SlowThreshold:             200 * time.Millisecond,
+		LogLevel:                  logger.Warn,
+		IgnoreRecordNotFoundError: true,
+		ParameterizedQueries:      true,
+		Colorful:                  false,
+	})
+	db, err := gorm.Open(sqlite.Open(dsn.String()), &gorm.Config{Logger: queryLogger})
 	if err != nil {
 		return nil, fmt.Errorf("connect sqlite: %w", err)
 	}
