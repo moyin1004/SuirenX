@@ -128,6 +128,16 @@ find "$BUILD_ROOT/internal/database/migrations" -maxdepth 1 -type f -print
 
 不要为了跳过无效迁移文件而放宽迁移校验。新二进制首次启动应使用隔离的临时 SQLite 数据库；确认启动与健康检查成功后再升级正式服务。
 
+Web 客户端由 Go `embed` 打包，`app.js`/`app.css` 的改动只有进入归档并重新编译才会生效。打包后、编译前核对归档内容与工作树的 SHA-256，可以发现陈旧归档或打包与本地写入的竞态：
+
+```sh
+tar -xzOf /tmp/suirenx-api-source.tar.gz \
+  services/api/internal/transport/http/webui/app.js | sha256sum
+sha256sum /path/to/repository/services/api/internal/transport/http/webui/app.js
+```
+
+两者不一致时必须重新打包，不要继续构建。编译完成后再用新二进制在隔离端口请求一次 `/web/app.js`，比对该哈希，确认二进制提供的确实是本次工作树的资源。
+
 ## 升级、备份与恢复
 
 1. 升级前通过 SQLite 在线备份能力创建一致性备份，并确认备份文件的访问权限和保留策略。
