@@ -627,3 +627,13 @@ HTTP 请求体上限由 `6 × domain.MaxConfigContentBytes + 2 MiB` 推导，当
 维护者随后明确要求发布。Android 版本更新为 `versionCode=3` / `versionName=0.1.2`，Web 版本标记同步为 0.1.2。发布范围为本分支的 Android 体验、离线图标、密码规则、Web 表单修复、只读审计日志、共享限流及配置大小边界；不自动部署正式服务器。原稿一致性、浏览器和实体设备剩余验收继续在 TODO 中追踪，不因发布而勾选完成。
 
 最终源码验证重新通过：Go 全量非缓存回归（含实际 TCP HTTP 配置正文边界）、Android Debug 构建、33 项资产与 15 项设置单测、asset/m5 Proto descriptor、Web JS 语法、Markdown 本地链接和差异空白检查。GitHub `release` Environment 与四项签名 secrets 均存在；沿用现有受保护签名任务，不读取或修改签名秘密。提交排除 IDE 的 `bin` 副本、运行数据库、APK 和本地部署信息。签名产物完成与正式发布证据待后续补记。
+
+### 同日补充：v0.1.2 正式发布与签名产物核验完成
+
+- [PR #7](https://github.com/moyin1004/SuirenX/pull/7) squash 合并到 main，发布提交 `0b424f2ef2be88e48e593ad162a58aad8bcd0f69`；其源码树与已验证功能分支一致。不可变 tag `v0.1.2` 指向该提交，[GitHub Release](https://github.com/moyin1004/SuirenX/releases/tag/v0.1.2) 为正式版本（非 draft、非 prerelease）。
+- [Release APK 构建 38690347291](https://github.com/moyin1004/SuirenX/actions/runs/38690347291) 成功，构建源码为上述发布提交。独立下载正式产物后，v2/v3 签名、zipalign、包名 `io.suirenx.app`、`versionCode=3` / `versionName=0.1.2` 均通过；APK 内包含 Fluent Emoji MIT 许可。
+- APK 为 **11,465,314 字节**，SHA-256 为 `8304a22ef82a1967a7139af21a3176b9fd293b785f5ee73b4d30b1ea39f4f38f`。签名证书 SHA-256 为 `afb8a57cc86dfcd56590e2e7144fb555241d850ff6b8eb291758153241854f55`，与从 v0.1.1 公开发布资产读取的证书摘要一致，未更换正式签名。
+- 已上传 `app-release-signed.apk`、可直接配合文件名使用的 SHA-256 文件与证书摘要；重新从正式 Release 下载三个文件，逐一比对与本地已核验资产相同。发布说明包含能力变化、剩余验收、正文/传输上限和未部署正式服务的边界。
+- 发布期间用户询问未提交文件：检查确认只有 32 个 IDE `bin` 源码副本，逐个与已提交源码相同，没有遗漏业务代码。提交 `b441d48` 为这三个目录补充 `.gitignore` 规则，保留本机文件、不改实际源码；不移动发布 tag。发布记录与 README/TODO/版本规划作为后续文档提交保留在 main。
+
+本次完成 GitHub 源码与 Android 正式包发布，没有部署正式服务器、执行手机安装或追加设备/浏览器验收。剩余事项仍在 TODO 中保持未完成状态。

@@ -1,16 +1,16 @@
 # 当前待办
 
-**v0.1.1 已于 2026-10-04 发布**（Web 管理功能与 Android 客户端更新）。维护者于 2026-10-03 确认 **v0.1.0 正式发布验收已完成**；阶段 A 剩余可靠性验收顺延。范围见 [v0.1.1 PRD](prd/v0.1.1.md)，发布记录见 [执行记录](history/roadmap-execution.md)。本文件只保留未完成事项。
+**v0.1.2 已于 2026-10-15 发布**（源码与 Android 正式签名 APK，版本 0.1.2 / versionCode 3），下载见 [GitHub Release](https://github.com/moyin1004/SuirenX/releases/tag/v0.1.2)。本次未自动部署正式服务器；原稿、浏览器、设备及阶段 A 剩余可靠性验收继续追踪。范围见 [版本规划](prd/roadmap.md)，发布证据见 [执行记录](history/roadmap-execution.md)。本文件聚焦剩余事项，保留必要的发布与验收边界。
 
-## v0.1.2：bug 与体验修复（进行中）
+## v0.1.2：已发布，剩余补验
 
-2026-10-15：维护者在两项 review 问题修复后明确要求发布 v0.1.2。Android 版本更新为 `versionCode=3` / `versionName=0.1.2`；以下原稿一致性与剩余交互验收如实保留，不标记为完成，也不再阻塞此次授权发布。发布源码与签名 APK 不自动部署正式服务，服务端部署仍见下方待办。
+2026-10-15：维护者在两项 review 问题修复后明确要求发布。PR #7 已 squash 合并到 main，tag `v0.1.2` 与正式 Release 已发布；Android 签名 APK、SHA-256 与证书摘要已上传并重新下载比对。以下原稿一致性与剩余交互验收如实保留，不因授权发布而标记为完成。服务端部署仍见下方待办。
 
-2026-10-15 发布前 review 发现的两项问题已修复：认证限流缓存改为固定长度键，配置传输上限支持 JSON 最坏转义；新增回归先复现失败、修复后通过，Go 全量测试通过。复现与修复证据见 [执行记录](history/roadmap-execution.md#2026-10-15v012-发布前-review暂缓发布)。尚未发布或部署，原稿一致性与下列交互验收继续保留。
+2026-10-15 发布前 review 发现的两项问题已修复：认证限流缓存改为固定长度键，配置传输上限支持 JSON 最坏转义；新增回归先复现失败、修复后通过，Go 全量测试通过。复现与修复证据见 [执行记录](history/roadmap-execution.md#2026-10-15v012-发布前-review暂缓发布)。源码已发布，正式部署与下列交互验收继续保留。
 
-2026-10-12：维护者确定本版本主要修复实际使用中遇到的 bug 和体验问题，范围见 [版本规划](prd/roadmap.md)。当前分支为 `feat/v0.1.2`；已有 Web 表单提交修复记录见 [实施记录](history/v0.1.1-web-implementation.md)。下方未发布的认证限流、配置上限和审计日志改动继续保留各自验收与部署状态。
+2026-10-12：维护者确定本版本主要修复实际使用中遇到的 bug 和体验问题，范围见 [版本规划](prd/roadmap.md)。功能分支 `feat/v0.1.2` 现已合并到 main；已有 Web 表单提交修复记录见 [实施记录](history/v0.1.1-web-implementation.md)。认证限流、配置上限和审计日志分别保留验收与实际部署状态。
 
-首批四项 Android 修复及总览卡片视觉优化已完成代码、原 OpenDesign 预览及模拟器验收；完整证据见 [执行记录](history/roadmap-execution.md#2026-10-12v012-首批-android-体验修复)。已有未发布 Web 改动保持原有状态。
+首批四项 Android 修复及总览卡片视觉优化已完成代码、原 OpenDesign 预览及模拟器验收；完整证据见 [执行记录](history/roadmap-execution.md#2026-10-12v012-首批-android-体验修复)。Web 改动已随源码发布，实际部署与剩余验收独立记录。
 
 2026-10-13：精简资产计数文案，「全部」包含归档，标题总数统一包含全部资产。已覆盖安装到维护者授权的真实手机并复验约 359 dp 下的总览比例/金额、归档搜索与只读详情、金额单行。后续修正名称继承额外字距造成的临界溢出，真机截图确认可完整容纳的中英文混合名称静止，回归覆盖短名称适配与长名称溢出；未修改手机上的业务数据。
 
@@ -43,9 +43,9 @@
 - [x] 运行仓库规定的 Go 全量测试、Proto descriptor 编译、Android Debug 兼容构建和 `git diff --check`；Web JavaScript 语法检查通过。Web 页面由 Go `embed` 提供，没有单独打包构建步骤。
 - [x] PR #5 squash 合并，tag `v0.1.1` 与 GitHub Release 已发布。Android signed APK 已通过 v2/v3 验签、zipalign、包名/版本检查和 SHA-256 独立核验，APK、SHA-256 与证书摘要已上传；证据见 [执行记录](history/roadmap-execution.md)。
 
-## 未发布：认证限流与配置上限调整
+## 待部署：认证限流与配置上限调整
 
-服务端与内嵌 Web 客户端已实现、尚未部署（生产仍为 v0.1.1 行为）：登录/注册在服务层按被请求账号名与连接对端地址限流，超限返回 `429 too_many_attempts`；未知账号登录与错误密码一样执行一次 bcrypt 比较；配置正文上限收敛为 10 MiB（`domain.MaxConfigContentBytes`），HTTP 请求体上限由六倍正文上限加 2 MiB 推导，当前为 62 MiB，以支持最坏 JSON 转义；Web 管理页与部署文档明确"停用账号不撤销已签发 JWT"。
+服务端与内嵌 Web 客户端已随 v0.1.2 源码发布、尚未部署（生产仍为 v0.1.1 行为）：登录/注册在服务层按被请求账号名与连接对端地址限流，超限返回 `429 too_many_attempts`；未知账号登录与错误密码一样执行一次 bcrypt 比较；配置正文上限收敛为 10 MiB（`domain.MaxConfigContentBytes`），HTTP 请求体上限由六倍正文上限加 2 MiB 推导，当前为 62 MiB，以支持最坏 JSON 转义；Web 管理页与部署文档明确"停用账号不撤销已签发 JWT"。
 
 限流已统一为 `internal/ratelimit` 的键控令牌桶（`golang.org/x/time/rate`，键 map 自管）：认证的账号/对端预算与配置内容读取的 token/对端预算共用同一实现，原来的固定窗口与 `ConfigService` 内的滑动窗口实现均已删除。所有额度在比对或查库之前扣减，失败尝试与成功请求等价计费；配置读取因此必须保留"对端地址"维度，否则调用方只要更换猜测的 token 值就能拿到新额度。新增直接依赖 `golang.org/x/time v0.15.0`（`v0.16.0` 要求 Go 1.26，不可用），`go.mod` 的 `go` 指令因此由 `1.25` 规范为 `1.25.0`。
 
@@ -53,13 +53,13 @@
 - [ ] 同步 OpenDesign 原型 `suirenx-asset-redesign.html`：补上账号停用"不撤销已签发 JWT、需轮换 `SUIRENX_JWT_SECRET`"的说明、登录限流提示与配置正文上限 `10485760`。Web 客户端已先实现这些文案，属"先实现后补原型"的偏差，需核对两者一致。
 - [ ] 本次扫描发现但未处理的安全加固：`services/api/data` 的目录/文件权限（实测 0755/0644，含口令散列与配置正文）、同步输入缺少字段长度上限与主键格式校验。
 
-## 未发布：Web 审计日志查看
+## 待部署与补验：Web 审计日志查看
 
 数据表 `admin_audit_log` 早已由管理操作写入（账号启停、超管密码轮换、配置文件增删改、API token 签发/更新/撤销、注册开关与配置上限调整，以及超管修改其它账号的资产/用品），此前没有任何查看入口。现已新增只读端点 `GET /api/v1/admin/audit-log`（仅超管，未认证 `401`、普通账号 `403 superadmin_required`）与 Web「审计日志」页：按时间倒序展示时间、操作者（用户名，缺失时回退 ID）、动作中文标签、对象类型/ID 与原始动作，支持前端关键词过滤。响应返回 `retention_limit`，页面据此说明服务端仅保留最近 [domain.AdminAuditRetentionLimit](../services/api/internal/domain/asset.go) 条。保留上限由该常量统一供三处裁剪 SQL、服务读取与页面文案使用，不再是散落的 `100` 字面量。记录仅覆盖超管操作（含超管改动其它账号数据），普通账号自身的 Web 写入不记录；日志不含密码散列、token 密钥或配置正文。证据：`internal/transport/http/m5_acceptance_test.go` 的 `TestAdminAuditLogEndpointIsSuperadminReadOnly`（未认证/普通账号拒绝、恰好两条超管操作、倒序、保留上限、无凭据泄露）、`internal/service/admin_service_test.go`、一次性临时 SQLite 上真实 HTTP 实测（空列表返回 `[]` 而非 `null`，管理员操作后出现条目且用户名为 `operator`）；`go test ./...` 全量通过。
 
 - [ ] 真实浏览器内验收审计日志页：本机环境无法启动无头 Chrome（DSH 文件沙箱拒绝 crashpad 写入 `~/Library`，GPU 进程 `exit_code=6`），因此 390 px 无横向溢出、导航显示、首载/刷新失败与空态文案均未做浏览器内证据，与上一节既有浏览器验收欠账同类。表格沿用其它页的 `.table-wrap` 横向滚动容器，风险低但仍需实测。
 - [ ] 同步 OpenDesign 原型 `suirenx-asset-redesign.html`：本次会话无 OpenDesign 连接入口，未先更新原型即实现 Web 页，属"先实现后补原型"的偏差（同上一节第 2 条），需补审计日志页并核对文案一致。
-- [ ] 与上一节合并发布：该端点与 Web 资源需随限流/配置上限改动一起重新打包部署；部署后按 [Web 部署指南](web-deployment.md) 验收超管可见、普通账号直接访问被拒。
+- [ ] 与上一节一起部署：该端点与 Web 资源已随 v0.1.2 源码发布，仍需随限流/配置上限改动一起重新打包部署；部署后按 [Web 部署指南](web-deployment.md) 验收超管可见、普通账号直接访问被拒。
 
 ## 已延期：阶段 A Android 可靠性验收
 
