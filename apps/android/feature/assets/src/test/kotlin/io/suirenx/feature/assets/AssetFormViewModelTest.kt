@@ -205,13 +205,28 @@ class AssetFormViewModelTest {
     }
 
     @Test fun createPersistsSelectedIcon() = runTest(dispatcher) {
-        val repo = FakeRepository()
-        val vm = viewModel(repo)
-        vm.onNameChanged("Camera")
-        vm.onPriceChanged("100")
-        vm.onIconSelected("camera")
-        vm.save()
-        advanceUntilIdle()
-        assertEquals("camera", repo.getAsset("created").getOrThrow().iconKey)
+        for (key in listOf(
+            "item", "camera", "phone", "tablet", "printer", "motorcycle",
+            "monitor", "power_supply", "hard_drive", "air_purifier", "robot_vacuum",
+            "router", "charger", "power_bank", "power_strip", "projector", "nas",
+            "mini_pc", "usb_hub", "fan", "humidifier", "hair_dryer",
+        )) {
+            val repo = FakeRepository()
+            val vm = viewModel(repo)
+            assertEquals("item", vm.uiState.value.iconKey)
+            vm.onNameChanged("Asset")
+            vm.onPriceChanged("100")
+            if (key != "item") vm.onIconSelected(key)
+            vm.save()
+            advanceUntilIdle()
+            assertEquals(key, repo.getAsset("created").getOrThrow().iconKey)
+            val reopened = viewModel(repo, savedState = SavedStateHandle(mapOf("id" to "created")))
+            advanceUntilIdle()
+            assertEquals(key, reopened.uiState.value.iconKey)
+            reopened.onNameChanged("Edited")
+            reopened.save()
+            advanceUntilIdle()
+            assertEquals(key, repo.getAsset("created").getOrThrow().iconKey)
+        }
     }
 }

@@ -1,0 +1,29 @@
+<vector xmlns:aapt="http://schemas.android.com/aapt" xmlns:android="http://schemas.android.com/apk/res/android" android:width="256dp" android:height="256dp" android:viewportWidth="256" android:viewportHeight="256">
+    <path android:pathData="M56 217A72 17 0 1 0 200 217A72 17 0 1 0 56 217Z" android:fillAlpha="1" android:fillColor="#9AAAC7" />
+    <path android:pathData="M57 189Q57 124 91 89H165Q199 124 199 189Q199 222 128 226Q57 222 57 189Z" android:fillAlpha="1">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="40" android:startY="35" android:endX="210" android:endY="220">
+                <item android:offset="0" android:color="#F5F5FF" />
+                <item android:offset="1" android:color="#A7B3CE" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:pathData="M91 91A37 14 0 1 0 165 91A37 14 0 1 0 91 91Z" android:fillAlpha="1">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="40" android:startY="35" android:endX="210" android:endY="220">
+                <item android:offset="0" android:color="#B5EFFF" />
+                <item android:offset="1" android:color="#5882DC" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:pathData="M106 88A22 6 0 1 0 150 88A22 6 0 1 0 106 88Z" android:fillAlpha="1" android:fillColor="#6E86B0" />
+    <path android:pathData="M115 181A13 13 0 1 0 141 181A13 13 0 1 0 115 181Z" android:fillAlpha="1">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="40" android:startY="35" android:endX="210" android:endY="220">
+                <item android:offset="0" android:color="#C2F7DF" />
+                <item android:offset="1" android:color="#50BEA8" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:pathData="M106 65Q82 44 107 22M130 63Q106 39 131 13M154 65Q130 44 155 22" android:fillAlpha="1" android:fillColor="#00000000" android:strokeColor="#A4D9F1" android:strokeWidth="8" android:strokeLineCap="round" android:strokeLineJoin="round" android:strokeAlpha="1" />
+</vector>

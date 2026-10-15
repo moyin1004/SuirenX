@@ -414,6 +414,7 @@ private fun ExpiryDateInputField(
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
+        modifier = Modifier.fillMaxWidth(),
         label = { Text(label) },
         supportingText = { Text(if (allowEmpty) "YYYY-MM-DD，可留空" else "YYYY-MM-DD") },
         singleLine = true,

@@ -2,7 +2,6 @@ package io.suirenx.feature.assets
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -57,7 +56,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import io.suirenx.core.ui.icon.MaterialSymbol
 import io.suirenx.core.ui.theme.SuirenXTheme
 import java.time.Instant
 import java.time.LocalDate
@@ -154,7 +152,7 @@ fun AssetFormScreen(
                         Button(onClick = onClose) { Text("关闭") }
                     }
                 }
-                else -> FormBody(state, onNameChanged, onPriceChanged, onPurchaseDateChanged, onPurchaseChannelChanged, onWarrantyEndDateChanged, onNotesChanged, onTagsChanged, onOpenIconPicker, onIconSelected, onSave)
+                else -> FormBody(state, onNameChanged, onPriceChanged, onPurchaseDateChanged, onPurchaseChannelChanged, onWarrantyEndDateChanged, onNotesChanged, onTagsChanged, onOpenIconPicker, onSave)
             }
         }
     }
@@ -235,7 +233,6 @@ private fun FormBody(
     onNotesChanged: (String) -> Unit,
     onTagsChanged: (String) -> Unit,
     onOpenIconPicker: () -> Unit,
-    onIconSelected: (String) -> Unit,
     onSave: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -248,23 +245,28 @@ private fun FormBody(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Spacer(Modifier.height(8.dp))
-        FormSection(title = "选择图标") {
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                val choices = (listOf(assetIconOption(state.iconKey)) + assetIconOptions.take(5)).distinctBy { it.key }
-                choices.forEach { option ->
-                    val selected = option.key == state.iconKey
-                    Surface(onClick = { onIconSelected(option.key) }, enabled = !state.isSaving,
-                        shape = RoundedCornerShape(14.dp),
-                        color = if (selected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.surfaceVariant,
-                        contentColor = if (selected) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(48.dp)) {
-                        Box(contentAlignment = Alignment.Center) {
-                            MaterialSymbol(glyph = option.glyph, contentDescription = option.label, size = 26.dp)
-                        }
+        FormSection(title = "资产图标") {
+            val option = assetIconOption(state.iconKey)
+            Surface(
+                onClick = onOpenIconPicker,
+                enabled = !state.isSaving,
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    AssetCategoryIcon(option, modifier = Modifier.size(48.dp), glyphSize = 44.dp)
+                    Column(Modifier.weight(1f)) {
+                        Text(option.label, fontSize = 14.sp)
+                        Text("当前仅支持内置图标", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                    Text("更换", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            androidx.compose.material3.TextButton(onClick = onOpenIconPicker, enabled = !state.isSaving) { Text("查看全部图标") }
         }
         FormSection(title = "基本信息") {
             OutlinedTextField(

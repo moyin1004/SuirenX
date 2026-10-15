@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.suirenx.core.domain.*
 import io.suirenx.core.model.*
+import io.suirenx.core.ui.icon.SuirenIcons
 import io.suirenx.core.ui.component.SuirenHeader
 import io.suirenx.core.ui.theme.SuirenXTheme
 import java.time.ZoneId
@@ -148,7 +149,14 @@ fun BackendSettingsScreen(
     }
 
     val scroll = rememberScrollState()
-    LaunchedEffect(page) { scroll.scrollTo(0); if (page == "server") onEditServer(null) }
+    var scrollPage by rememberSaveable { mutableStateOf(page) }
+    LaunchedEffect(page) {
+        if (scrollPage != page) {
+            scroll.scrollTo(0)
+            scrollPage = page
+            if (page == "server") onEditServer(null)
+        }
+    }
     Column(modifier.fillMaxSize().statusBarsPadding().imePadding().padding(horizontal = 16.dp)) {
         Column(Modifier.weight(1f).verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             if (page != "home") Spacer(Modifier.height(0.dp))
@@ -159,33 +167,25 @@ fun BackendSettingsScreen(
                 "home" -> {
                     PageTitle("设置", "本机数据、同步方式和显示偏好，都在这里管理。")
                     GroupTitle("账号")
-                    SettingsCard {
-                        SettingsLink("账号", accountSummary) { page = "account" }
+                    SettingsCard(compact = true) {
+                        SettingsLink("账号", accountSummary, compact = true) { page = "account" }
                     }
-                    SettingsCard {
-                        Caption(statusTitle)
-                        Text(if (enabled) "本机与多端保持同步" else "本机可用，随时可以开启", fontSize = 21.sp, fontWeight = FontWeight.SemiBold)
-                        Caption("资产和用品始终保存在本机；开启后仅用于多端同步。")
-                        state.localSummary?.let { Caption("本机记录 · ${it.assetCount} 项资产 · ${it.expiryItemCount} 项用品（含归档）") }
-                        PrimaryAction(if (enabled) "管理同步" else "开启同步") { page = "sync" }
-                    }
-                    Caption("同步失败不会影响本地保存；无网络时仍可继续编辑。")
                     GroupTitle("同步")
-                    SettingsCard {
-                        SettingsLink("同步设置", if (enabled) "${state.syncSchedule.label} · $count 项冲突" else "了解同步范围并开启多端同步") { page = "sync" }
+                    SettingsCard(compact = true) {
+                        SettingsLink("同步设置", statusTitle, compact = true) { page = "sync" }
                     }
                     GroupTitle("数据")
-                    SettingsCard { SettingsLink("备份与恢复", "本机完整 JSON · 含归档和用品，不含凭证") { page = "backup" } }
+                    SettingsCard(compact = true) { SettingsLink("备份与恢复", "本机完整 JSON · 含归档和用品，不含凭证", compact = true) { page = "backup" } }
                     GroupTitle("个性化")
-                    SettingsCard {
-                        SettingsLink("外观", themeLabel(themeMode)) { page = "appearance" }
+                    SettingsCard(compact = true) {
+                        SettingsLink("外观", themeLabel(themeMode), compact = true) { page = "appearance" }
                         HorizontalDivider()
-                        SettingsLink("用品临期提醒", "提前 ${state.soonDays} 天标记临期") { page = "reminders" }
+                        SettingsLink("用品临期提醒", "提前 ${state.soonDays} 天标记临期", compact = true) { page = "reminders" }
                     }
                     GroupTitle("关于")
-                    SettingsCard { SettingsLink("燧人", "个人工具箱 · 资产与用品管理") { page = "about" } }
+                    SettingsCard(compact = true) { SettingsLink("燧人", "个人工具箱 · 资产与用品管理", compact = true) { page = "about" } }
                     GroupTitle("连接设置")
-                    SettingsCard { SettingsLink("服务器地址", activeServer?.url ?: "可选 · 添加前先测试连接") { onEditServer(null); page = "server" } }
+                    SettingsCard(compact = true) { SettingsLink("服务器地址", activeServer?.url ?: "可选 · 添加前先测试连接", compact = true) { onEditServer(null); page = "server" } }
                 }
                 "account" -> {
                     PageTitle("账号", "像普通应用一样管理当前登录账号。")
@@ -261,10 +261,10 @@ fun BackendSettingsScreen(
                         GroupTitle("处理与状态")
                         SettingsCard {
                             when {
-                                state.syncStatus.syncing -> SettingsLink("停止此次请求", "保留待发送批次，可以稍后重试", onCancelSync)
+                                state.syncStatus.syncing -> SettingsLink("停止此次请求", "保留待发送批次，可以稍后重试", onClick = onCancelSync)
                                 state.syncStatus.needsLogin -> Caption("当前服务器无法验证已登录账号。请到设置首页的“账号”中先注销，再重新登录；账号信息不会因切换地址自动清除。")
                                 !state.auth.authenticated -> SettingsLink("账号设置", "登录后可预览并开启同步") { page = "account" }
-                                else -> SettingsLink(if (state.syncStatus.error == null) "立即同步" else "重试同步", "始终保留的手动同步入口", onSyncNow)
+                                else -> SettingsLink(if (state.syncStatus.error == null) "立即同步" else "重试同步", "始终保留的手动同步入口", onClick = onSyncNow)
                             }
                             HorizontalDivider()
                             SettingsLink("冲突处理", "$count 项待处理 · 只暂停冲突记录") { page = "conflicts" }
@@ -344,10 +344,11 @@ fun BackendSettingsScreen(
                             FilterChip(registering, { registering = true; confirmPassword = ""; onResetAuthForm() }, { Text("注册") }, enabled = !connectionBusy)
                         }
                         OutlinedTextField(state.authUsername, onAuthUsernameChanged, Modifier.fillMaxWidth(), label = { Text("账号") }, singleLine = true, enabled = !connectionBusy)
-                        OutlinedTextField(state.authPassword, onAuthPasswordChanged, Modifier.fillMaxWidth(), label = { Text("密码") }, singleLine = true, enabled = !connectionBusy, visualTransformation = if (passwordVisible) androidx.compose.ui.text.input.VisualTransformation.None else PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
-                        if (registering) OutlinedTextField(confirmPassword, { confirmPassword = it }, Modifier.fillMaxWidth(), label = { Text("确认密码") }, singleLine = true, enabled = !connectionBusy, visualTransformation = if (passwordVisible) androidx.compose.ui.text.input.VisualTransformation.None else PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
-                        TextButton(onClick = { passwordVisible = !passwordVisible }, enabled = !connectionBusy) { Text(if (passwordVisible) "隐藏密码" else "显示密码") }
-                        if (registering) Caption("账号为 1–100 个 UTF-8 字节；密码为 8–72 个 UTF-8 字节，中文通常占 3 字节。")
+                        AccountPasswordField(state.authPassword, onAuthPasswordChanged, "密码", passwordVisible, !connectionBusy,
+                            onToggleVisibility = { passwordVisible = !passwordVisible })
+                        Caption(if (registering) RegistrationPasswordHint else "请输入已有账号的密码。")
+                        if (registering) AccountPasswordField(confirmPassword, { confirmPassword = it }, "确认密码", passwordVisible, !connectionBusy,
+                            onToggleVisibility = { passwordVisible = !passwordVisible })
                         validation?.let { Caption(it) }
                         PrimaryAction(if (state.authBusy) "处理中…" else if (registering) "注册" else "登录",
                             enabled = !connectionBusy && validation == null && inspectedServer != null && !state.auth.authenticated,
@@ -455,3 +456,30 @@ internal fun SoonDaysSetting(value: Int, onValueChanged: (Int) -> Unit) {
 @Preview(showBackground = true, uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
 @Composable
 private fun SettingsPreview() { SuirenXTheme { BackendSettingsScreen(BackendUiState(mode = StorageMode.Local), {}, {}, {}, {}, {}, {}, {}) } }
+
+@Composable
+private fun AccountPasswordField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    visible: Boolean,
+    enabled: Boolean,
+    onToggleVisibility: () -> Unit,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text(label) },
+        singleLine = true,
+        enabled = enabled,
+        visualTransformation = if (visible) androidx.compose.ui.text.input.VisualTransformation.None else PasswordVisualTransformation(),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+        trailingIcon = {
+            IconButton(onClick = onToggleVisibility, enabled = enabled) {
+                Icon(if (visible) SuirenIcons.VisibilityOff else SuirenIcons.Visibility,
+                    contentDescription = if (visible) "隐藏密码" else "显示密码")
+            }
+        },
+    )
+}

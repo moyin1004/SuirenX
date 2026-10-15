@@ -11,7 +11,7 @@ data class AssetFormState(
     val purchaseDate: String = LocalDate.now().toString(),
     val isSaving: Boolean = false,
     val errorMessage: String? = null,
-    val iconKey: String = "devices",
+    val iconKey: String = "item",
     val purchaseChannel: String = "",
     val warrantyEndDate: String = "",
     val notes: String = "",

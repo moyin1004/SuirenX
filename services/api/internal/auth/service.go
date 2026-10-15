@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/moyin1004/suirenx/services/api/internal/ratelimit"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -30,6 +32,25 @@ var (
 	ErrSuperadminRequired   = errors.New("superadmin account required")
 	ErrSuperadminNotFound   = errors.New("configured superadmin account not found")
 	ErrRegistrationDisabled = errors.New("account registration is disabled")
+	ErrTooManyAttempts      = errors.New("too many authentication attempts; retry later")
+)
+
+// Authentication attempt budgets. Every attempt counts, successful or not, so a
+// caller cannot stay inside the budget by mixing valid and invalid credentials.
+// Account budgets bound guessing against one name; peer budgets bound spraying
+// across many names from one address. Callers behind a loopback reverse proxy
+// share a single peer budget, which makes it a global budget there: that is
+// fail-closed and documented in docs/web-deployment.md.
+const (
+	loginAccountLimit  = 20
+	loginAccountWindow = 5 * time.Minute
+	loginPeerLimit     = 120
+	loginPeerWindow    = 5 * time.Minute
+
+	registerAccountLimit  = 5
+	registerAccountWindow = time.Hour
+	registerPeerLimit     = 10
+	registerPeerWindow    = time.Hour
 )
 
 const (
@@ -67,23 +88,33 @@ type Service struct {
 	secret     []byte
 	now        func() time.Time
 	tokenTTL   time.Duration
+	limiter    *ratelimit.Limiter
 }
 
 func NewService(repository Repository, secret []byte) (*Service, error) {
 	if len(secret) < MinimumKeyBytes {
 		return nil, ErrInvalidJWTConfig
 	}
-	return &Service{
+	service := &Service{
 		repository: repository,
 		secret:     append([]byte(nil), secret...),
 		now:        time.Now,
 		tokenTTL:   TokenTTL,
-	}, nil
+	}
+	// The limiter reads service.now on every call so it always shares the clock
+	// used by the rest of the service, including test overrides.
+	service.limiter = ratelimit.New(func() time.Time { return service.now() })
+	return service, nil
 }
 
-func (s *Service) Register(username, password string) (string, time.Time, error) {
+// Register creates a user account. peerKey is an opaque, transport-supplied
+// rate-limit scope (for HTTP, the real peer address); see Login.
+func (s *Service) Register(username, password, peerKey string) (string, time.Time, error) {
 	username = strings.TrimSpace(username)
-	if username == "" || len(password) < 8 || len(password) > 72 || len(username) > 100 {
+	if err := s.registrationBudget(username, peerKey); err != nil {
+		return "", time.Time{}, err
+	}
+	if username == "" || !validRegistrationPassword(password) || len(username) > 100 {
 		return "", time.Time{}, ErrInvalidAccount
 	}
 	existing, err := s.repository.FindAccount(username)
@@ -105,15 +136,79 @@ func (s *Service) Register(username, password string) (string, time.Time, error)
 	return s.issue(account)
 }
 
-func (s *Service) Login(username, password string) (string, time.Time, error) {
-	account, err := s.repository.FindAccount(strings.TrimSpace(username))
-	if err != nil || account == nil || bcrypt.CompareHashAndPassword(account.PasswordHash, []byte(password)) != nil {
+// New passwords use printable ASCII, making the 8-72 character range also
+// satisfy bcrypt's byte limit. Do not trim passwords or apply this policy to
+// Login: existing credentials must remain verifiable without changing them.
+func validRegistrationPassword(password string) bool {
+	if len(password) < 8 || len(password) > 72 {
+		return false
+	}
+	for i := 0; i < len(password); i++ {
+		if password[i] < 0x20 || password[i] > 0x7e {
+			return false
+		}
+	}
+	return true
+}
+
+// Login verifies a credential pair. peerKey is an opaque, transport-supplied
+// rate-limit scope that must not be derived from client-controlled headers, so
+// that a caller cannot reset its own budget by rotating that header.
+func (s *Service) Login(username, password, peerKey string) (string, time.Time, error) {
+	username = strings.TrimSpace(username)
+	if err := s.loginBudget(username, peerKey); err != nil {
+		return "", time.Time{}, err
+	}
+	account, err := s.repository.FindAccount(username)
+	// Always compare exactly one bcrypt hash, even for an unknown account, so a
+	// missing account cannot be told apart from a wrong password by timing. The
+	// comparison must stay outside the condition below: short-circuit evaluation
+	// would skip it exactly when the account is unknown.
+	hash := credentialPlaceholder()
+	if account != nil {
+		hash = account.PasswordHash
+	}
+	compareErr := bcrypt.CompareHashAndPassword(hash, []byte(password))
+	if err != nil || account == nil || compareErr != nil {
 		return "", time.Time{}, ErrInvalidCredentials
 	}
 	if account.DisabledAt != nil {
 		return "", time.Time{}, ErrAccountDisabled
 	}
 	return s.issue(account)
+}
+
+// credentialPlaceholder is a bcrypt hash that never matches a real credential.
+// It is generated once so that an unknown-account login still costs one
+// comparison, which keeps its timing close to a wrong-password login.
+var credentialPlaceholder = sync.OnceValue(func() []byte {
+	hash, err := bcrypt.GenerateFromPassword([]byte("suirenx-unknown-account-placeholder"), bcrypt.DefaultCost)
+	if err != nil {
+		return nil
+	}
+	return hash
+})
+
+// loginBudget consumes one login attempt from both the account and the peer
+// budget and reports whether either budget is exhausted.
+func (s *Service) loginBudget(username, peerKey string) error {
+	accountOK := s.limiter.Allow("login:account:"+strings.ToLower(username), loginAccountLimit, loginAccountWindow)
+	peerOK := s.limiter.Allow("login:peer:"+peerKey, loginPeerLimit, loginPeerWindow)
+	if accountOK && peerOK {
+		return nil
+	}
+	return ErrTooManyAttempts
+}
+
+// registrationBudget consumes one registration attempt from both the claimed
+// username and the peer budget.
+func (s *Service) registrationBudget(username, peerKey string) error {
+	accountOK := s.limiter.Allow("register:account:"+strings.ToLower(username), registerAccountLimit, registerAccountWindow)
+	peerOK := s.limiter.Allow("register:peer:"+peerKey, registerPeerLimit, registerPeerWindow)
+	if accountOK && peerOK {
+		return nil
+	}
+	return ErrTooManyAttempts
 }
 
 // BootstrapSuperadmin creates the configured initial administrator once. It

@@ -13,6 +13,7 @@ type SyncActions interface {
 	AdminLogin(*app.RequestContext)
 	AdminListAccounts(*app.RequestContext)
 	AdminSetAccountStatus(*app.RequestContext)
+	AdminListAuditLog(*app.RequestContext)
 	AdminListConfigs(*app.RequestContext)
 	AdminCreateConfig(*app.RequestContext)
 	AdminGetConfig(*app.RequestContext)

@@ -29,6 +29,7 @@ func Register(r *server.Hertz) {
 					_account_id := _accounts.Group("/:account_id", _account_idMw()...)
 					_account_id.PATCH("/status", append(_adminsetaccountstatusMw(), v1.AdminSetAccountStatus)...)
 				}
+				_admin.GET("/audit-log", append(_adminlistauditlogMw(), v1.AdminListAuditLog)...)
 				_admin.GET("/config-tokens", append(_adminlistapitokensMw(), v1.AdminListApiTokens)...)
 				_config_tokens := _admin.Group("/config-tokens", _config_tokensMw()...)
 				_config_tokens.DELETE("/:token_id", append(_adminrevokeapitokenMw(), v1.AdminRevokeApiToken)...)

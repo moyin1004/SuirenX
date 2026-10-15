@@ -2,6 +2,7 @@ package io.suirenx.app
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.EnterTransition
@@ -31,6 +32,11 @@ import androidx.core.view.WindowCompat
 import io.suirenx.core.model.ThemeMode
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.SaveableStateHolder
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
@@ -41,12 +47,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import dagger.hilt.android.AndroidEntryPoint
@@ -107,7 +110,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun SuirenXApp() {
     val navController = rememberNavController()
-    val tabNavController = rememberNavController()
+    var selectedTab by rememberSaveable { mutableStateOf(HomeTab.Overview) }
+    val tabStateHolder = rememberSaveableStateHolder()
     NavHost(
         navController = navController,
         startDestination = Routes.MAIN,
@@ -122,7 +126,9 @@ private fun SuirenXApp() {
         composable(Routes.MAIN) {
             BackendGate {
                 MainScaffold(
-                    tabNavController = tabNavController,
+                    selectedTab = selectedTab,
+                    onTabSelected = { selectedTab = it },
+                    tabStateHolder = tabStateHolder,
                     onAssetClick = { id -> navController.navigate(Routes.assetDetail(id)) },
                     onAddAsset = { navController.navigate(Routes.ASSET_CREATE) },
                     onOpenExpiry = { navController.navigate(Routes.EXPIRY) },
@@ -142,11 +148,7 @@ private fun SuirenXApp() {
                         currentRoute = HomeTab.Settings.route,
                         onTabSelected = { tab ->
                             if (navController.currentDestination?.route == route) navController.popBackStack()
-                            tabNavController.navigate(tab.route) {
-                                popUpTo(tabNavController.graph.findStartDestination().id) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
+                            selectedTab = tab
                         },
                         onAddAsset = { navController.navigate(Routes.ASSET_CREATE) },
                         modifier = Modifier.align(Alignment.BottomCenter),
@@ -193,11 +195,7 @@ private fun SuirenXApp() {
                         if (navController.currentDestination?.route == Routes.EXPIRY) {
                             navController.popBackStack()
                         }
-                        tabNavController.navigate(tab.route) {
-                            popUpTo(tabNavController.graph.findStartDestination().id) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
+                        selectedTab = tab
                     },
                     onAddAsset = { navController.navigate(Routes.ASSET_CREATE) },
                     modifier = Modifier.align(Alignment.BottomCenter),
@@ -221,79 +219,49 @@ private enum class HomeTab(
 
 @Composable
 private fun MainScaffold(
-    tabNavController: NavHostController,
+    selectedTab: HomeTab,
+    onTabSelected: (HomeTab) -> Unit,
+    tabStateHolder: SaveableStateHolder,
     onAssetClick: (String) -> Unit,
     onAddAsset: () -> Unit,
     onOpenExpiry: () -> Unit,
     onOpenSync: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val currentBackStackEntry by tabNavController.currentBackStackEntryAsState()
-    val currentRoute = currentBackStackEntry?.destination?.route
-    // Scope the main data ViewModels to the outer main destination so switching
-    // tabs cannot recreate them and briefly replace real text with loading text.
+    // Main tabs switch in the same composition as their selected indicator.
+    // Their data ViewModels belong to the main destination, not individual tabs.
     val assetsViewModel: AssetsViewModel = hiltViewModel()
     val expiryViewModel: ExpiryViewModel = hiltViewModel()
+    BackHandler(selectedTab != HomeTab.Overview) { onTabSelected(HomeTab.Overview) }
 
     Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        // Each tab is a separate navigation destination; saveState/restoreState
-        // keeps every tab's ViewModel and scroll position alive across switches.
-        NavHost(
-            navController = tabNavController,
-            startDestination = HomeTab.Overview.route,
-            enterTransition = { EnterTransition.None },
-            exitTransition = { ExitTransition.None },
-            popEnterTransition = { EnterTransition.None },
-            popExitTransition = { ExitTransition.None },
-            predictivePopEnterTransition = { EnterTransition.None },
-            predictivePopExitTransition = { ExitTransition.None },
-            sizeTransform = { null },
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            composable(HomeTab.Overview.route) {
-                OverviewRoute(
+        tabStateHolder.SaveableStateProvider(selectedTab.route) {
+            when (selectedTab) {
+                HomeTab.Overview -> OverviewRoute(
                     assetsViewModel = assetsViewModel,
                     expiryViewModel = expiryViewModel,
-                    onAssets = {
-                        tabNavController.navigate(HomeTab.Assets.route) {
-                            popUpTo(tabNavController.graph.findStartDestination().id) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
+                    onAssets = { onTabSelected(HomeTab.Assets) },
                     onSupplies = onOpenExpiry,
                     onSync = onOpenSync,
                 )
-            }
-            composable(HomeTab.Assets.route) {
-                AssetsRoute(onAssetClick = onAssetClick, viewModel = assetsViewModel)
-            }
-            composable(HomeTab.Tools.route) {
-                val expiry by expiryViewModel.uiState.collectAsStateWithLifecycle()
-                val pendingCount = if (expiry.loading || expiry.error != null) null else expiry.items.count {
-                    it.archivedAt == null && it.bucket(java.time.LocalDate.now(), expiry.soonDays) in setOf(
-                        io.suirenx.core.model.ExpiryBucket.Expired,
-                        io.suirenx.core.model.ExpiryBucket.DueToday,
-                        io.suirenx.core.model.ExpiryBucket.ExpiringSoon,
-                    )
+                HomeTab.Assets -> AssetsRoute(onAssetClick = onAssetClick, viewModel = assetsViewModel)
+                HomeTab.Tools -> {
+                    val expiry by expiryViewModel.uiState.collectAsStateWithLifecycle()
+                    val pendingCount = if (expiry.loading || expiry.error != null) null else expiry.items.count {
+                        it.archivedAt == null && it.bucket(java.time.LocalDate.now(), expiry.soonDays) in setOf(
+                            io.suirenx.core.model.ExpiryBucket.Expired,
+                            io.suirenx.core.model.ExpiryBucket.DueToday,
+                            io.suirenx.core.model.ExpiryBucket.ExpiringSoon,
+                        )
+                    }
+                    ToolsRoute(onOpenExpiry = onOpenExpiry, pendingCount = pendingCount)
                 }
-                ToolsRoute(onOpenExpiry = onOpenExpiry, pendingCount = pendingCount)
-            }
-            composable(HomeTab.Settings.route) {
-                SettingsRoute()
+                HomeTab.Settings -> SettingsRoute()
             }
         }
         FloatingTabBar(
-            currentRoute = currentRoute,
-            onTabSelected = { tab ->
-                tabNavController.navigate(tab.route) {
-                    popUpTo(tabNavController.graph.findStartDestination().id) {
-                        saveState = true
-                    }
-                    launchSingleTop = true
-                    restoreState = true
-                }
-            },
+            currentRoute = selectedTab.route,
+            onTabSelected = onTabSelected,
             onAddAsset = onAddAsset,
             modifier = Modifier.align(Alignment.BottomCenter),
         )

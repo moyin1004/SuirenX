@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -23,12 +24,16 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.SelectableDates
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -37,6 +42,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -46,12 +55,13 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.suirenx.core.model.Asset
-import io.suirenx.core.ui.icon.MaterialSymbol
 import io.suirenx.core.model.AssetStatus
 import io.suirenx.core.ui.theme.SuirenNumberFont
 import io.suirenx.core.ui.theme.SuirenXTheme
 import java.text.NumberFormat
 import java.time.LocalDate
+import java.time.Instant
+import java.time.ZoneOffset
 import java.time.ZoneId
 import java.util.Locale
 
@@ -199,6 +209,38 @@ private fun StatusChangeDialog(
     onSave: () -> Unit,
 ) {
     val retiring = state.statusTarget == AssetStatus.Retired
+    var showDatePicker by rememberSaveable { mutableStateOf(false) }
+    val purchaseDate = state.asset?.purchaseDate ?: LocalDate.now()
+    val today = LocalDate.now()
+    if (showDatePicker && retiring) {
+        val selectableDates = remember(purchaseDate, today) {
+            object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                    val date = Instant.ofEpochMilli(utcTimeMillis).atZone(ZoneOffset.UTC).toLocalDate()
+                    return !date.isBefore(purchaseDate) && !date.isAfter(today)
+                }
+                override fun isSelectableYear(year: Int) = year in purchaseDate.year..today.year
+            }
+        }
+        val dateState = rememberDatePickerState(
+            initialSelectedDateMillis = runCatching { LocalDate.parse(state.retiredDateInput) }.getOrDefault(today)
+                .atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+            yearRange = purchaseDate.year..today.year,
+            selectableDates = selectableDates,
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    dateState.selectedDateMillis?.let {
+                        onDateChange(Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().toString())
+                    }
+                    showDatePicker = false
+                }, enabled = dateState.selectedDateMillis != null && !state.isSaving) { Text("确定") }
+            },
+            dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("取消") } },
+        ) { DatePicker(state = dateState, showModeToggle = false) }
+    }
     AlertDialog(
         onDismissRequest = { if (!state.isSaving) onDismiss() },
         title = { Text(if (retiring) "标记为已退役" else "恢复服役") },
@@ -209,17 +251,17 @@ private fun StatusChangeDialog(
                     else "将清除退役日期，按购买日至今天重新计算持有天数和日均成本。",
                 )
                 if (retiring) {
-                    OutlinedTextField(
-                        value = state.retiredDateInput,
-                        onValueChange = onDateChange,
-                        label = { Text("退役日期") },
-                        placeholder = { Text("YYYY-MM-DD") },
-                        supportingText = { Text("购买日期：${state.asset?.purchaseDate}") },
-                        singleLine = true,
+                    Text("退役日期", style = MaterialTheme.typography.labelMedium)
+                    OutlinedButton(
+                        onClick = { showDatePicker = true },
                         enabled = !state.isSaving,
-                        isError = state.statusError != null,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                        shape = MaterialTheme.shapes.small,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                    ) {
+                        Text(state.retiredDateInput, modifier = Modifier.weight(1f))
+                        Icon(Icons.Default.DateRange, contentDescription = "选择退役日期")
+                    }
+                    Text("购买日期：${state.asset?.purchaseDate}", style = MaterialTheme.typography.bodySmall)
                 }
                 state.statusError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
@@ -330,17 +372,12 @@ private fun AssetDetailContent(asset: Asset, modifier: Modifier = Modifier) {
     ) {
         Spacer(Modifier.height(20.dp))
         val iconOption = assetIconOption(asset.iconKey)
-        Surface(
-            shape = RoundedCornerShape(25.dp),
-            color = MaterialTheme.colorScheme.secondary,
-        ) {
-            MaterialSymbol(
-                glyph = iconOption.glyph,
-                tint = MaterialTheme.colorScheme.onSecondary,
-                modifier = Modifier.padding(20.dp),
-                size = 38.dp,
-            )
-        }
+        AssetCategoryIcon(
+            option = iconOption,
+            modifier = Modifier.size(78.dp),
+            glyphSize = 64.dp,
+            cornerRadius = 25.dp,
+        )
         Spacer(Modifier.height(18.dp))
         Text(asset.name, fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))

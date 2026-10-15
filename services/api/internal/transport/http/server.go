@@ -8,6 +8,7 @@ import (
 	handlers "github.com/moyin1004/suirenx/services/api/biz/handler/v1"
 	"github.com/moyin1004/suirenx/services/api/biz/router"
 	"github.com/moyin1004/suirenx/services/api/internal/auth"
+	"github.com/moyin1004/suirenx/services/api/internal/domain"
 	"github.com/moyin1004/suirenx/services/api/internal/repository"
 	"github.com/moyin1004/suirenx/services/api/internal/service"
 	"github.com/moyin1004/suirenx/services/api/internal/transport/http/webui"
@@ -20,6 +21,12 @@ const (
 	httpReadTimeout  = 10 * time.Second
 	httpWriteTimeout = 30 * time.Second
 	httpIdleTimeout  = 60 * time.Second
+	// Configuration bodies are capped at domain.MaxConfigContentBytes (10 MiB).
+	// JSON can encode one byte as six bytes (for example NUL as \u0000).
+	// Allow that worst-case expansion plus 2 MiB for the envelope. The decoded
+	// content is still limited by the service. This wire cap applies globally,
+	// including to requests buffered before authentication.
+	httpMaxRequestBodySize = 6*int(domain.MaxConfigContentBytes) + (2 << 20)
 )
 
 type Server struct{ h *server.Hertz }
@@ -54,6 +61,7 @@ func NewServer(address string, assets *service.AssetService, options ...ServerOp
 		server.WithReadTimeout(httpReadTimeout),
 		server.WithWriteTimeout(httpWriteTimeout),
 		server.WithIdleTimeout(httpIdleTimeout),
+		server.WithMaxRequestBodySize(httpMaxRequestBodySize),
 	)
 	_ = assets // Kept in constructor for internal service-test compatibility.
 	s := &Server{h: h}

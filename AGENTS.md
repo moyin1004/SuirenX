@@ -133,6 +133,27 @@ support before adding another annotation-processing dependency.
 - Run `gofmt` on changed Go packages.
 - Wrap infrastructure errors with operation context.
 - Validate input in the service layer so behavior is shared by all transports.
+- Keep login, register and other unauthenticated endpoints rate limited in the
+  service layer, keyed by the requested account name and the real peer address,
+  through the shared keyed token bucket in `internal/ratelimit`
+  (`golang.org/x/time/rate`) instead of a second bespoke counter. Charge the
+  budget before verification or lookup so rejected attempts cost exactly as much
+  as successful ones, and keep a peer dimension on every unauthenticated
+  endpoint whose other key the caller chooses (an API token hash, for example),
+  because that key alone hands out a fresh budget per guess. Never derive a
+  limit key from client-controlled headers such as `X-Forwarded-For`: hertz
+  trusts every peer for those headers by default. Retain only fixed-size
+  digests of caller-controlled limiter keys so oversized rejected inputs
+  cannot amplify cache memory.
+- Logout, account disabling and password rotation never revoke an issued JWT;
+  tokens stay valid for their 30-day TTL, and only rotating
+  `SUIRENX_JWT_SECRET` invalidates them. Say so in the Web UI and
+  `docs/web-deployment.md` instead of implying that disabling ends access.
+- Bounds are shared values: configuration content is capped by
+  `domain.MaxConfigContentBytes` (10 MiB) and the HTTP request body by
+  `httpMaxRequestBodySize` (six times the content cap plus 2 MiB, currently
+  62 MiB) in the transport to allow worst-case JSON string escaping. Keep
+  decoded content validation in the service and the derived wire cap aligned.
 - Keep derived values such as held days and daily cost in the service layer.
 - Add service unit tests for business rules and transport integration tests for
   each new endpoint.

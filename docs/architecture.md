@@ -18,11 +18,17 @@ Compose / ViewModel → 领域仓储 → Room 业务表 + 同步日志（同一�
 
 服务端公开健康、认证、Android 增量同步、版本化 Web 业务 API 和超管管理 API。Web 业务路由与 Android 同步路由分开授权；Web 写入通过现有版本化同步服务提交，资产/用品行、版本和同步事件在同一事务内更新。IDL 在 api/proto，services/api/scripts/generate.sh 固定 hz v0.9.7 从 m5.proto 生成路由和模型；业务 handler 适配到服务实例。
 
-超管由 `SUIRENX_ADMIN_USERNAME` / `SUIRENX_ADMIN_PASSWORD` 首次引导，账号密码散列保存在 SQLite。配置文件以永久 opaque key 标识，正文存于服务端数据库；API token 仅保存安全散列，并通过关联表限制可读配置 key。token 内容 API 返回 UTF-8 原文并禁止缓存。Web 部署和日志脱敏要求见 [web-deployment.md](web-deployment.md)。
+超管由 `SUIRENX_ADMIN_USERNAME` / `SUIRENX_ADMIN_PASSWORD` 首次引导，账号密码散列保存在 SQLite。配置文件以永久 opaque key 标识，正文存于服务端数据库；API token 仅保存安全散列，并通过关联表限制可读配置 key。token 内容 API 返回 UTF-8 原文并禁止缓存。超管动作写入 `admin_audit_log`（账号启停、密码轮换、配置与 token 变更、服务器设置，以及超管改动其它账号的资产/用品），只保留最近 `domain.AdminAuditRetentionLimit` 条，并由 `GET /api/v1/admin/audit-log` 只读展示；日志不写入凭据或配置正文，除该只读查询外没有写入口。Web 部署和日志脱敏要求见 [web-deployment.md](web-deployment.md)。
 
 协议采用 snake_case HTTP JSON、整数 cents、YYYY-MM-DD 日期、RFC 3339 时间、字符串状态、显式零值和空数组，不使用 canonical protojson。资产与用品独立游标，版本号来自服务器，设备时间不用于决定覆盖顺序。
 
 业务写入与同步 journal 同事务提交。同步批次在 HTTP 前持久化，响应确认、游标和业务变更同事务应用。在途网络不占用 Room 事务；新修订不会被旧确认覆盖。详细的冲突、迁移、备份、后台调度与验收见 [data-sync.md](data-sync.md)。
+
+## 认证与访问控制
+
+JWT 是无状态令牌，有效期 30 天；注销、账号停用和密码轮换都不撤销已签发的令牌，需要立即失效时只能轮换 `SUIRENX_JWT_SECRET`。鉴权中间件不按会话查库，因此"停用账号"的语义是阻止后续登录，而不是断开在途访问；Web 管理界面和部署文档必须如实说明这一点。
+
+注册与登录在服务层按"被请求的账号名"与"连接对端地址"分别限流，配置内容读取按 API token 散列与连接对端地址分别限流，三者共用 `internal/ratelimit` 的键控令牌桶（`golang.org/x/time/rate`），不各自实现计数器。缓存仅保存键的固定长度 SHA-256 摘要，最多 4096 个桶，不保留超长无效输入的原始字符串。所有额度在比对或查库之前扣减，因此失败尝试与成功请求等价计费；配置读取必须保留对端维度，因为 token 散列由调用方选择，只按它计数等于让攻击者每次猜测都换一份新额度。超限统一返回 `429`，且额度耗尽时正确凭据同样被拒绝。限流键不得取自客户端可控的头（如 `X-Forwarded-For`、`X-Real-IP`）。未知账号的登录与错误密码一样执行一次 bcrypt 比较，避免以响应时序区分账号是否存在。
 
 ## 业务约定
 

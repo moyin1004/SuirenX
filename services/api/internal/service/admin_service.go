@@ -54,6 +54,19 @@ func (s *AdminService) ListAccounts() ([]domain.AdminAccount, error) {
 	return accounts, nil
 }
 
+// ListAuditLog returns the recorded administrative actions, newest first, and
+// the retention bound the server enforces so callers can state that bound.
+func (s *AdminService) ListAuditLog() ([]domain.AdminAuditEntry, int, error) {
+	entries, err := s.repository.ListAuditLog(domain.AdminAuditRetentionLimit)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list admin audit log: %w", err)
+	}
+	if entries == nil {
+		entries = []domain.AdminAuditEntry{}
+	}
+	return entries, domain.AdminAuditRetentionLimit, nil
+}
+
 func (s *AdminService) SetAccountDisabled(accountID, actorID string, disabled bool) error {
 	accountID, actorID = strings.TrimSpace(accountID), strings.TrimSpace(actorID)
 	if accountID == "" || actorID == "" {

@@ -39,6 +39,7 @@ type AdminRepository interface {
 	ListAccounts() ([]domain.AdminAccount, error)
 	SetAccountDisabled(accountID, actorID string, disabled bool, now time.Time) error
 	RecordAudit(actorID, targetType, targetID, action string, now time.Time) error
+	ListAuditLog(limit int) ([]domain.AdminAuditEntry, error)
 }
 
 type ConfigRepository interface {

@@ -20,6 +20,7 @@ class AssetFormStateTest {
             assertEquals(cents, asset.priceCents)
             assertEquals("Keyboard", asset.name)
             assertEquals("2024-02-29", asset.purchaseDate.toString())
+            assertEquals("item", asset.iconKey)
         }
     }
 

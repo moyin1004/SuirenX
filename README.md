@@ -125,7 +125,9 @@ Content-Type: application/json
 {"username":"alice","password":"a-long-password"}
 ```
 
-成功时返回 `201`。客户端应将 `access_token` 作为 bearer token 保存，并仅发送给签发它的服务器地址。注销接口要求认证，但 JWT 是无状态令牌；注销只确认本地会话结束，不会让已签发令牌立即失效，令牌在过期前仍可被接受。
+成功时返回 `201`。客户端应将 `access_token` 作为 bearer token 保存，并仅发送给签发它的服务器地址。注销接口要求认证，但 JWT 是无状态令牌；注销只确认本地会话结束，不会让已签发令牌立即失效，令牌在过期前仍可被接受。**账号停用（`PATCH /api/v1/admin/accounts/{id}/status`）同样只阻止后续登录，不会撤销已签发的令牌**；需要在凭据泄漏后立即切断访问时，必须轮换服务端 `SUIRENX_JWT_SECRET` 并重启，使全部令牌签名校验失败。
+
+注册与登录在服务层按"被请求的账号名"和"连接对端地址"分别限流：超限时返回 `429`，`code` 为 `too_many_attempts`，且该窗口内的正确密码同样被拒绝。限流键不取自 `X-Forwarded-For` 等客户端可控头；在 loopback 反向代理后所有请求共用同一个对端预算，这属于 fail-closed 的预期行为。配置文件正文上限为 10 MiB（10485760 字节），HTTP 请求体上限为 12 MiB。
 
 同步请求使用稳定的幂等键；客户端必须先持久化整个批次，网络重试时复用完全相同的键和内容。下面是空批次增量拉取示例：
 
@@ -162,3 +164,7 @@ git diff --check
 ## License
 
 见 [LICENSE](LICENSE)。
+
+Android 资产立体图标复用 [Microsoft Fluent Emoji](https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc)，固定提交 `1ffb34c752ecf5d402f04cfb4b392c77f57c54bc`，采用 MIT 许可。官方 `assets/<名称>/3D/` 下共 28 张 PNG 原样内置于资产模块的 `drawable-nodpi`（文件名前加 `fluent_`），包含通用物品（Package 箱子，默认）、电脑、手机、耳机、手表、相机、游戏设备、键盘、书籍、房屋、自行车，以及鼠标、打印机、电视、音箱、麦克风、电池、椅子、沙发、灯泡、眼镜、运动鞋、扳手、背包、行李箱、汽车、摩托车。平板使用项目原创的独立横屏矢量图标 `drawable/suiren_tablet.xml`，与原稿 `assets/suiren/tablet.svg` 保持相同路径和渐变。应用随包保留[版权与许可声明](apps/android/feature/assets/src/main/assets/licenses/FluentEmoji-MIT.txt)。
+
+消费电子产品另有 16 个项目原创矢量图标：显示器、电源、硬盘、空气净化器、扫地机器人、路由器、充电器、充电宝、插线板、投影仪、NAS、迷你主机、扩展坞、风扇、加湿器、吹风机。Android `drawable/suiren_<icon_key>.xml` 与原稿 `assets/suiren/<icon_key>.svg` 使用相同路径、描边及渐变；连同平板共 17 个原创矢量，遵循项目许可。图标库总计 45 项（28 PNG + 17 矢量），全部离线可用，默认物品和已有标识保持兼容。

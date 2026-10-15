@@ -27,6 +27,16 @@ class ExpiryScreenTest {
     val composeRule = createComposeRule()
 
     @Test
+    fun editorDatesHaveTheSameWidthAsOtherFields() {
+        showScreen(ExpiryUiState(loading = false, editor = ExpiryEditorState()))
+        val nameWidth = composeRule.onNodeWithText("名称").fetchSemanticsNode().boundsInRoot.width
+        val expiryWidth = composeRule.onNodeWithText("包装到期日").fetchSemanticsNode().boundsInRoot.width
+        val openedWidth = composeRule.onNodeWithText("开封日（选填）").fetchSemanticsNode().boundsInRoot.width
+        assertEquals(nameWidth, expiryWidth, 1f)
+        assertEquals(nameWidth, openedWidth, 1f)
+    }
+
+    @Test
     fun searchIsCollapsedUntilRequestedAndFiltersByLocation() {
         showScreen(
             ExpiryUiState(

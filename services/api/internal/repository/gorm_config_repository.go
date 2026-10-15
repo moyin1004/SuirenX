@@ -67,20 +67,15 @@ type ServerSettingRecord struct {
 
 func (ServerSettingRecord) TableName() string { return "server_settings" }
 
+// MaxConfigBytes reads the operator-configured content limit. Values stored
+// before the cap was lowered are clamped so the configured limit can never
+// exceed the current policy.
 func (r *GormAuthRepository) MaxConfigBytes() (int64, error) {
-	var record ServerSettingRecord
-	if err := r.db.Where("setting_key = ?", "config_max_bytes").First(&record).Error; err != nil {
-		return 0, err
-	}
-	var limit int64
-	if _, err := fmt.Sscan(record.Value, &limit); err != nil || limit < 1 {
-		return 0, ErrInvalidConfigLimit
-	}
-	return limit, nil
+	return maxConfigBytes(r.db)
 }
 
 func (r *GormAuthRepository) SetMaxConfigBytes(limit int64, actorID string, now time.Time) error {
-	if limit < 1 || limit > 100*1024*1024 || actorID == "" {
+	if limit < 1 || limit > domain.MaxConfigContentBytes || actorID == "" {
 		return ErrInvalidConfigLimit
 	}
 	return r.db.Transaction(func(tx *gorm.DB) error {
@@ -388,6 +383,10 @@ func maxConfigBytes(db *gorm.DB) (int64, error) {
 	if _, err := fmt.Sscan(record.Value, &limit); err != nil || limit < 1 {
 		return 0, ErrInvalidConfigLimit
 	}
+	// A limit stored before the cap was lowered must not exceed current policy.
+	if limit > domain.MaxConfigContentBytes {
+		limit = domain.MaxConfigContentBytes
+	}
 	return limit, nil
 }
 
@@ -396,7 +395,7 @@ func appendAdminAudit(tx *gorm.DB, actorID, targetType, targetID, action string,
 }
 
 func pruneAdminAudit(tx *gorm.DB) error {
-	return tx.Exec(`DELETE FROM admin_audit_log WHERE id NOT IN (SELECT id FROM admin_audit_log ORDER BY id DESC LIMIT 100)`).Error
+	return tx.Exec(`DELETE FROM admin_audit_log WHERE id NOT IN (SELECT id FROM admin_audit_log ORDER BY id DESC LIMIT ?)`, domain.AdminAuditRetentionLimit).Error
 }
 
 func isUniqueViolation(err error) bool {
