@@ -4,6 +4,11 @@
 .trae/
 build/
 
+# IDE-generated source copies
+/apps/android/core/domain/bin/
+/apps/android/core/model/bin/
+/build-logic/convention/bin/
+
 # Local configuration file (sdk path, etc)
 local.properties
 
