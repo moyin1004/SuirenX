@@ -10,6 +10,30 @@ import androidx.compose.ui.unit.dp
 
 /** Small native vectors matching the OpenDesign outline style. */
 object SuirenIcons {
+    val Visibility: ImageVector = visibilityIcon(false)
+    val VisibilityOff: ImageVector = visibilityIcon(true)
+
+    val Sort: ImageVector = ImageVector.Builder("Sort", 24.dp, 24.dp, 24f, 24f).apply {
+        path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.7f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
+            moveTo(8f, 19f); lineTo(8f, 5f)
+            moveTo(4f, 9f); lineTo(8f, 5f); lineTo(12f, 9f)
+            moveTo(16f, 5f); lineTo(16f, 19f)
+            moveTo(12f, 15f); lineTo(16f, 19f); lineTo(20f, 15f)
+        }
+    }.build()
+
+    private fun visibilityIcon(hidden: Boolean): ImageVector = ImageVector.Builder(
+        if (hidden) "VisibilityOff" else "Visibility", 24.dp, 24.dp, 24f, 24f,
+    ).apply {
+        path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.7f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
+            moveTo(2f, 12f); quadTo(12f, -2f, 22f, 12f); quadTo(12f, 26f, 2f, 12f); close()
+            moveTo(15f, 12f)
+            arcTo(3f, 3f, 0f, true, true, 9f, 12f)
+            arcTo(3f, 3f, 0f, true, true, 15f, 12f)
+            if (hidden) { moveTo(3f, 3f); lineTo(21f, 21f) }
+        }
+    }.build()
+
     val AssetBox: ImageVector = ImageVector.Builder("AssetBox", 24.dp, 24.dp, 24f, 24f).apply {
         path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.7f, strokeLineJoin = StrokeJoin.Round) {
             moveTo(4f, 8f); lineTo(12f, 4f); lineTo(20f, 8f); lineTo(12f, 12f); close()

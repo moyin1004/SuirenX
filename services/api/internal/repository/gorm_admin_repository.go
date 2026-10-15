@@ -59,8 +59,48 @@ func (r *GormAuthRepository) SetAccountDisabled(accountID, actorID string, disab
 		if err := tx.Create(&AdminAuditRecord{ActorID: actorID, TargetType: "account", TargetID: accountID, Action: action, CreatedAt: now}).Error; err != nil {
 			return err
 		}
-		return tx.Exec(`DELETE FROM admin_audit_log WHERE id NOT IN (SELECT id FROM admin_audit_log ORDER BY id DESC LIMIT 100)`).Error
+		return pruneAdminAudit(tx)
 	})
+}
+
+// ListAuditLog returns the newest administrative actions first. The acting
+// account username is resolved when it still exists; the audit row is the
+// record of truth and is returned even if the account no longer resolves.
+func (r *GormAuthRepository) ListAuditLog(limit int) ([]domain.AdminAuditEntry, error) {
+	if limit <= 0 {
+		limit = domain.AdminAuditRetentionLimit
+	}
+	var rows []struct {
+		ID            int64
+		ActorID       string
+		ActorUsername string
+		TargetType    string
+		TargetID      string
+		Action        string
+		CreatedAt     time.Time
+	}
+	err := r.db.Table("admin_audit_log AS audit").
+		Select("audit.id, audit.actor_id, COALESCE(accounts.username, '') AS actor_username, audit.target_type, audit.target_id, audit.action, audit.created_at").
+		Joins("LEFT JOIN accounts ON accounts.id = audit.actor_id").
+		Order("audit.id DESC").
+		Limit(limit).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	entries := make([]domain.AdminAuditEntry, 0, len(rows))
+	for _, row := range rows {
+		entries = append(entries, domain.AdminAuditEntry{
+			ID:            row.ID,
+			ActorID:       row.ActorID,
+			ActorUsername: row.ActorUsername,
+			TargetType:    row.TargetType,
+			TargetID:      row.TargetID,
+			Action:        row.Action,
+			CreatedAt:     row.CreatedAt,
+		})
+	}
+	return entries, nil
 }
 
 func (r *GormAuthRepository) RecordAudit(actorID, targetType, targetID, action string, now time.Time) error {

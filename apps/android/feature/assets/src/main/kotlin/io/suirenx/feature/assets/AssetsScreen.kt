@@ -3,6 +3,9 @@ package io.suirenx.feature.assets
 import io.suirenx.core.ui.component.SuirenHeader
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.MarqueeSpacing
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +15,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -26,11 +31,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material3.VerticalDivider
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.OutlinedTextField
@@ -45,7 +46,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -53,6 +53,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -61,6 +65,8 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import io.suirenx.core.ui.theme.SuirenNumberFont
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -69,6 +75,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.suirenx.core.model.Asset
 import io.suirenx.core.model.AssetStatus
 import io.suirenx.core.ui.icon.MaterialSymbol
+import io.suirenx.core.ui.icon.SuirenIcons
 import io.suirenx.core.ui.theme.SuirenXTheme
 import java.text.NumberFormat
 import java.time.LocalDate
@@ -120,6 +127,9 @@ fun AssetsScreen(
     val overviewIndex = 1
     val compact by remember(listState, overviewIndex) { derivedStateOf { listState.firstVisibleItemIndex > overviewIndex } }
     val visibleAssets = state.visibleAssets.filter { it.name.contains(query, ignoreCase = true) || it.tags.any { tag -> tag.contains(query, ignoreCase = true) } }
+    val overview = visibleAssets.assetOverview()
+    val longestHeldDays = visibleAssets.maxOfOrNull { it.heldDays } ?: 0
+    val totalAssetCount = state.assets.size
     LazyColumn(
         state = listState,
         modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding(),
@@ -129,7 +139,7 @@ fun AssetsScreen(
         item { Header(onRefresh = onRefresh, modifier = Modifier.padding(horizontal = 16.dp)) }
         if (state.assets.isNotEmpty()) {
             item {
-                AssetOverviewCard(state.overview, Modifier.padding(horizontal = 16.dp), state.assets.filterNot { it.isArchived }.maxOfOrNull { it.heldDays } ?: 0)
+                AssetOverviewCard(overview, Modifier.padding(horizontal = 16.dp), longestHeldDays, totalAssetCount)
             }
         }
         stickyHeader {
@@ -138,60 +148,52 @@ fun AssetsScreen(
                     Surface(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), shape = RoundedCornerShape(16.dp),
                         color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
                         Row(Modifier.padding(14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(NumberFormat.getCurrencyInstance(Locale.CHINA).format(state.overview.totalPriceCents / 100.0), fontSize = 18.sp, fontFamily = SuirenNumberFont)
-                            Text("购入总额 · ${state.overview.activeCount} 件服役中", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(NumberFormat.getCurrencyInstance(Locale.CHINA).format(overview.totalPriceCents / 100.0), fontSize = 18.sp, fontFamily = SuirenNumberFont)
+                            Text("筛选购入额 · ${overview.totalCount} 项 · 最长 $longestHeldDays 天", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
-                FilterChips(state.selectedFilter, onFilterSelected)
+                if (searching) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        IconButton(onClick = onSearch) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回资产列表")
+                        }
+                        OutlinedTextField(
+                            value = query,
+                            onValueChange = onQueryChange,
+                            modifier = Modifier.weight(1f),
+                            placeholder = { Text("搜索名称、类型或标签") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(14.dp),
+                            trailingIcon = {
+                                if (query.isNotEmpty()) {
+                                    IconButton(onClick = { onQueryChange("") }) {
+                                        Icon(Icons.Default.Close, contentDescription = "清除搜索")
+                                    }
+                                }
+                            },
+                        )
+                    }
+                } else {
+                    AssetListToolbar(
+                        selectedFilter = state.selectedFilter,
+                        onFilterSelected = onFilterSelected,
+                        sort = state.sort,
+                        descending = state.sortDescending,
+                        query = query,
+                        onSearch = onSearch,
+                        onSortSelected = onSortSelected,
+                        onDirectionToggle = onSortDirectionToggle,
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                    )
+                }
                 if (state.availableTags.isNotEmpty()) {
                     TagFilters(state.availableTags, state.selectedTags, onTagToggle, onClearTags)
                 }
             }
-        }
-        item {
-            if (searching) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    IconButton(onClick = onSearch) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回资产列表")
-                    }
-                    OutlinedTextField(
-                        value = query,
-                        onValueChange = onQueryChange,
-                        modifier = Modifier.weight(1f),
-                        placeholder = { Text("搜索名称、类型或标签") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(14.dp),
-                        trailingIcon = {
-                            if (query.isNotEmpty()) {
-                                IconButton(onClick = { onQueryChange("") }) {
-                                    Icon(Icons.Default.Close, contentDescription = "清除搜索")
-                                }
-                            }
-                        },
-                    )
-                }
-            } else {
-                AssetListToolbar(
-                    sort = state.sort,
-                    descending = state.sortDescending,
-                    onSearch = onSearch,
-                    onSortSelected = onSortSelected,
-                    onDirectionToggle = onSortDirectionToggle,
-                    modifier = Modifier.padding(horizontal = 12.dp),
-                )
-            }
-        }
-        item {
-            Text(
-                "状态：${state.selectedFilter.label} · 搜索：${query.ifBlank { "全部" }} · ${visibleAssets.size} 项",
-                modifier = Modifier.padding(horizontal = 16.dp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 11.sp,
-            )
         }
         when {
             state.isLoading -> item { LoadingState() }
@@ -220,26 +222,31 @@ private fun Header(onRefresh: () -> Unit, modifier: Modifier = Modifier) {
 
 @Composable
 private fun FilterChips(selected: AssetFilter, onSelected: (AssetFilter) -> Unit, modifier: Modifier = Modifier) {
-    Surface(modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.background) {
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            items(AssetFilter.entries) { filter ->
-                val isSelected = filter == selected
-                Surface(
+    LazyRow(
+        modifier = modifier.height(48.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        items(AssetFilter.entries) { filter ->
+            val isSelected = filter == selected
+            Box(
+                modifier = Modifier.height(48.dp).widthIn(min = 48.dp).selectable(
+                    selected = isSelected,
+                    role = Role.Tab,
                     onClick = { onSelected(filter) },
+                ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Surface(
+                    modifier = Modifier.height(34.dp),
                     color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
                     contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                     shape = CircleShape,
                     border = BorderStroke(1.dp, if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
                 ) {
-                    Text(
-                        filter.label,
-                        modifier = Modifier.padding(horizontal = 15.dp, vertical = 10.dp),
-                        fontSize = 12.sp,
-                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                    )
+                    Box(Modifier.padding(horizontal = 8.dp), contentAlignment = Alignment.Center) {
+                        Text(filter.label, fontSize = 12.sp, maxLines = 1,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal)
+                    }
                 }
             }
         }
@@ -281,8 +288,11 @@ private fun TagFilters(
 
 @Composable
 private fun AssetListToolbar(
+    selectedFilter: AssetFilter,
+    onFilterSelected: (AssetFilter) -> Unit,
     sort: AssetSort,
     descending: Boolean,
+    query: String,
     onSearch: () -> Unit,
     onSortSelected: (AssetSort) -> Unit,
     onDirectionToggle: () -> Unit,
@@ -290,38 +300,44 @@ private fun AssetListToolbar(
 ) {
     var expanded by remember { mutableStateOf(false) }
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text("我的资产", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-        IconButton(onClick = onSearch, modifier = Modifier.size(40.dp)) {
+        FilterChips(selectedFilter, onFilterSelected, modifier = Modifier.weight(1f))
+        IconButton(
+            onClick = onSearch,
+            modifier = Modifier.size(48.dp)
+                .clip(CircleShape)
+                .background(if (query.isNotBlank()) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+                .semantics { stateDescription = if (query.isBlank()) "未启用搜索" else "搜索条件：$query" },
+        ) {
             Icon(Icons.Default.Search, contentDescription = "搜索资产", modifier = Modifier.size(20.dp))
         }
         Box {
-            Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
+            IconButton(
+                onClick = { expanded = true },
+                modifier = Modifier.size(48.dp).semantics {
+                    stateDescription = "${sort.label}，${if (descending) "降序" else "升序"}"
+                },
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(
-                        onClick = { expanded = true },
-                        modifier = Modifier.height(32.dp),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-                    ) {
-                        Text(sort.label, fontSize = 11.sp)
-                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(16.dp))
-                    }
-                    VerticalDivider(
-                        modifier = Modifier.height(18.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant,
-                    )
-                    IconButton(onClick = onDirectionToggle, modifier = Modifier.size(32.dp)) {
-                        Text(if (descending) "↓" else "↑", fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
-                    }
-                }
+                Icon(SuirenIcons.Sort, contentDescription = "资产排序", modifier = Modifier.size(21.dp))
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 AssetSort.entries.forEach { option ->
                     DropdownMenuItem(
                         text = { Text(option.label) },
+                        leadingIcon = { if (option == sort) Text("✓") },
+                        modifier = Modifier.semantics { selected = option == sort },
                         onClick = { onSortSelected(option); expanded = false },
+                    )
+                }
+                HorizontalDivider()
+                listOf(false to "升序", true to "降序").forEach { (targetDescending, label) ->
+                    DropdownMenuItem(
+                        text = { Text(label) },
+                        leadingIcon = { if (descending == targetDescending) Text("✓") },
+                        modifier = Modifier.semantics { selected = descending == targetDescending },
+                        onClick = {
+                            if (descending != targetDescending) onDirectionToggle()
+                            expanded = false
+                        },
                     )
                 }
             }
@@ -330,38 +346,51 @@ private fun AssetListToolbar(
 }
 
 @Composable
-private fun AssetOverviewCard(overview: AssetOverview, modifier: Modifier = Modifier, longestHeldDays: Int = 0) {
+private fun AssetOverviewCard(overview: AssetOverview, modifier: Modifier = Modifier, longestHeldDays: Int = 0, totalAssetCount: Int = overview.totalCount) {
     val currency = NumberFormat.getCurrencyInstance(Locale.CHINA).apply { minimumFractionDigits = 0 }
     Surface(modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
-        Column(Modifier.padding(18.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                Text("未归档资产购入总额", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.weight(1f))
-                Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.size(30.dp)) {
-                    Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Box(Modifier.size(6.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondary))
+                    Text("资产概览", fontSize = 12.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold)
                 }
+                Text("${overview.totalCount}/$totalAssetCount", color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp, lineHeight = 18.sp, fontFamily = SuirenNumberFont, fontWeight = FontWeight.Medium)
             }
-            Row(Modifier.padding(top = 8.dp, bottom = 16.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(currency.format(overview.totalPriceCents / 100.0), modifier = Modifier.alignByBaseline(), fontSize = 28.sp, lineHeight = 34.sp, fontWeight = FontWeight.Medium, fontFamily = SuirenNumberFont, letterSpacing = (-0.84).sp)
-                Text("元", modifier = Modifier.alignByBaseline(), fontSize = 13.sp, lineHeight = 18.sp)
+            Row(Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 18.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OverviewAmount("总资产金额", currency.format(overview.totalPriceCents / 100.0), Modifier.weight(1f))
+                OverviewAmount("日均成本", currency.format(overview.totalDailyCostCents / 100.0), Modifier.weight(1f), Alignment.End)
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Row(Modifier.fillMaxWidth().padding(top = 14.dp).height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OverviewMetric("服役中日均成本", currency.format(overview.totalDailyCostCents / 100.0), Modifier.weight(1f))
-                VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                OverviewMetric("服役中", "${overview.activeCount}", Modifier.weight(1f))
-                VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                OverviewMetric("最长持有天", "$longestHeldDays", Modifier.weight(1f))
+            Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.background) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 11.dp)) {
+                    OverviewCount("服役中", "${overview.activeCount}", Modifier.weight(1f))
+                    OverviewCount("已退役", "${overview.retiredCount}", Modifier.weight(1f))
+                    OverviewCount("最长持有天", "$longestHeldDays", Modifier.weight(1f))
+                }
             }
         }
     }
 }
 
 @Composable
-private fun OverviewMetric(label: String, value: String, modifier: Modifier = Modifier) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Text(value, fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium, fontFamily = SuirenNumberFont)
-        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, lineHeight = 15.sp)
+private fun OverviewAmount(label: String, value: String, modifier: Modifier = Modifier, alignment: Alignment.Horizontal = Alignment.Start) {
+    Column(modifier, horizontalAlignment = alignment, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp, lineHeight = 16.sp)
+        Text(value, modifier = Modifier.fillMaxWidth(),
+            autoSize = TextAutoSize.StepBased(minFontSize = 12.sp, maxFontSize = if (alignment == Alignment.End) 24.sp else 28.sp, stepSize = 0.5.sp),
+            textAlign = if (alignment == Alignment.End) TextAlign.End else TextAlign.Start,
+            maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis, lineHeight = 34.sp,
+            fontWeight = FontWeight.Medium, fontFamily = SuirenNumberFont, letterSpacing = (-0.8).sp)
+    }
+}
+
+@Composable
+private fun OverviewCount(label: String, value: String, modifier: Modifier = Modifier) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterHorizontally)) {
+        Text(label, modifier = Modifier.weight(1f, fill = false), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, lineHeight = 15.sp)
+        Text(value, fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, fontFamily = SuirenNumberFont)
     }
 }
 
@@ -390,12 +419,9 @@ private fun AssetCard(asset: Asset, onClick: () -> Unit, modifier: Modifier = Mo
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.Top) {
                 AssetCategoryIcon(
-                    option = assetIconOption(asset.iconKey).copy(
-                        containerColor = if (active && asset.iconKey == "laptop") MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.surfaceVariant,
-                        contentColor = if (active && asset.iconKey == "laptop") MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSurface,
-                    ),
+                    option = assetIconOption(asset.iconKey),
                     modifier = Modifier.size(44.dp),
-                    glyphSize = 25.dp,
+                    glyphSize = 36.dp,
                     cornerRadius = 13.dp,
                 )
                 Spacer(Modifier.weight(1f))
@@ -409,7 +435,11 @@ private fun AssetCard(asset: Asset, onClick: () -> Unit, modifier: Modifier = Mo
                 )
             }
             Spacer(Modifier.height(13.dp))
-            Text(asset.name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
+            Text(asset.name,
+                modifier = Modifier.fillMaxWidth().basicMarquee(iterations = Int.MAX_VALUE,
+                    initialDelayMillis = 2_000, repeatDelayMillis = 2_000, spacing = MarqueeSpacing(32.dp), velocity = 24.dp),
+                fontSize = 14.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.sp,
+                maxLines = 1, softWrap = false)
             Spacer(Modifier.height(4.dp))
             Text(
                 buildAnnotatedString {

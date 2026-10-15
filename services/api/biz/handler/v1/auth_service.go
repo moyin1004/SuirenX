@@ -70,3 +70,7 @@ func AdminGetAccountRegistrationSetting(_ context.Context, c *app.RequestContext
 func AdminSetAccountRegistrationSetting(_ context.Context, c *app.RequestContext) {
 	dispatch[v1.AccountRegistrationSettingRequest](c, actions(c).AdminSetAccountRegistrationSetting)
 }
+
+func AdminListAuditLog(_ context.Context, c *app.RequestContext) {
+	dispatch[v1.AdminAccountsRequest](c, actions(c).AdminListAuditLog)
+}

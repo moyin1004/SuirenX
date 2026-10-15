@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 type memoryRepository struct {
@@ -57,15 +59,65 @@ func TestInvalidRegistrationRejectedBeforeRepositoryAccess(t *testing.T) {
 		{"tester", "short"},
 		{"tester", strings.Repeat("a", 73)},
 		{"tester", strings.Repeat("中", 25)},
+		{"tester", "password中"},
+		{"tester", "password😀"},
+		{"tester", "password\x00"},
+		{"tester", "password\n"},
+		{"tester", "password\x7f"},
 	} {
 		service, err := NewService(nil, []byte(strings.Repeat("s", MinimumKeyBytes)))
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, _, err = service.Register(account.username, account.password)
+		_, _, err = service.Register(account.username, account.password, "peer-a")
 		if !errors.Is(err, ErrInvalidAccount) {
 			t.Fatalf("expected invalid account, got %v", err)
 		}
+	}
+}
+
+func TestRegistrationAcceptsPrintableASCIIBoundariesWithoutTrimming(t *testing.T) {
+	for _, password := range []string{
+		strings.Repeat("a", 8),
+		strings.Repeat("1", 72),
+		" ~!@#$%^&*()_+-=[]{}|;:',.<>/? ",
+	} {
+		t.Run(password, func(t *testing.T) {
+			repository := &memoryRepository{accounts: map[string]*Account{}}
+			service, err := NewService(repository, []byte(strings.Repeat("s", MinimumKeyBytes)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := service.Register("用户", password, "peer-a"); err != nil {
+				t.Fatalf("valid ASCII password rejected: %v", err)
+			}
+			if _, _, err := service.Login("用户", password, "peer-a"); err != nil {
+				t.Fatalf("registered password cannot log in: %v", err)
+			}
+			if password != strings.TrimSpace(password) {
+				if _, _, err := service.Login("用户", strings.TrimSpace(password), "peer-a"); !errors.Is(err, ErrInvalidCredentials) {
+					t.Fatalf("password spaces must remain significant: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestLoginPreservesLegacyUnicodePasswords(t *testing.T) {
+	password := "原有密码123"
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository := &memoryRepository{accounts: map[string]*Account{
+		"existing": {ID: "legacy-account", Username: "existing", PasswordHash: hash, Role: RoleUser},
+	}}
+	service, err := NewService(repository, []byte(strings.Repeat("s", MinimumKeyBytes)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := service.Login("existing", password, "peer-a"); err != nil {
+		t.Fatalf("existing password stopped working: %v", err)
 	}
 }
 
@@ -75,7 +127,7 @@ func TestRegistrationDisabledIsReturnedByRepository(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := service.Register("tester", "correct horse battery staple"); !errors.Is(err, ErrRegistrationDisabled) {
+	if _, _, err := service.Register("tester", "correct horse battery staple", "peer-a"); !errors.Is(err, ErrRegistrationDisabled) {
 		t.Fatalf("expected registration disabled, got %v", err)
 	}
 	if _, ok := repository.accounts["tester"]; ok {
@@ -100,10 +152,10 @@ func TestSuperadminBootstrapDoesNotResetPasswordAndRejectsCollision(t *testing.T
 	if string(account.PasswordHash) != string(originalHash) {
 		t.Fatal("ordinary bootstrap changed the administrator password")
 	}
-	if _, _, err := service.Login("operator", "correct first secret"); err != nil {
+	if _, _, err := service.Login("operator", "correct first secret", "peer-a"); err != nil {
 		t.Fatalf("original configured password no longer works: %v", err)
 	}
-	if _, _, err := service.Login("operator", "different second secret"); !errors.Is(err, ErrInvalidCredentials) {
+	if _, _, err := service.Login("operator", "different second secret", "peer-a"); !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("bootstrap unexpectedly adopted a rotated password: %v", err)
 	}
 	if account.Role != RoleSuperadmin {
@@ -113,7 +165,7 @@ func TestSuperadminBootstrapDoesNotResetPasswordAndRejectsCollision(t *testing.T
 		t.Fatalf("invalid configured password should fail: %v", err)
 	}
 
-	if _, _, err := service.Register("member", "correct member password"); err != nil {
+	if _, _, err := service.Register("member", "correct member password", "peer-a"); err != nil {
 		t.Fatal(err)
 	}
 	if err := service.BootstrapSuperadmin("member", "new admin secret long"); !errors.Is(err, ErrAdminNameCollision) {
@@ -128,7 +180,7 @@ func TestJWTIsSignedAndParseOnlyDoesNotReplaceVerification(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	token, expiresAt, err := service.Register("tester", "correct horse battery staple")
+	token, expiresAt, err := service.Register("tester", "correct horse battery staple", "peer-a")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -42,13 +42,22 @@ data class AssetOverview(
     val totalDailyCostCents: Long,
     val activeCount: Int,
     val retiredCount: Int,
+    val archivedCount: Int = 0,
 ) {
-    val totalCount: Int = activeCount + retiredCount
+    val totalCount: Int = activeCount + retiredCount + archivedCount
 }
+
+internal fun List<Asset>.assetOverview() = AssetOverview(
+    totalPriceCents = sumOf { it.priceCents },
+    totalDailyCostCents = filter { it.status == AssetStatus.Active && !it.isArchived }.sumOf { it.dailyCostCents },
+    activeCount = count { it.status == AssetStatus.Active && !it.isArchived },
+    retiredCount = count { it.status == AssetStatus.Retired && !it.isArchived },
+    archivedCount = count { it.isArchived },
+)
 
 data class AssetsUiState(
     val assets: List<Asset> = emptyList(),
-    val selectedFilter: AssetFilter = AssetFilter.All,
+    val selectedFilter: AssetFilter = AssetFilter.Active,
     val isLoading: Boolean = true,
     val isRefreshing: Boolean = false,
     val hasLoaded: Boolean = false,
@@ -60,15 +69,11 @@ data class AssetsUiState(
 ) {
     private val currentAssets: List<Asset> get() = assets.filterNot { it.isArchived }
 
-    // Archive is independent of lifecycle: archived records never contribute to
-    // the everyday overview, even while browsing the archive filter.
+    // The home overview remains global; the asset page summarizes its visible list.
     val overview: AssetOverview
-        get() = AssetOverview(
-            totalPriceCents = currentAssets.sumOf { it.priceCents },
-            totalDailyCostCents = currentAssets.filter { it.status == AssetStatus.Active }.sumOf { it.dailyCostCents },
-            activeCount = currentAssets.count { it.status == AssetStatus.Active },
-            retiredCount = currentAssets.count { it.status == AssetStatus.Retired },
-        )
+        get() = currentAssets.assetOverview()
+
+    val filteredOverview: AssetOverview get() = visibleAssets.assetOverview()
 
     val availableTags: List<String>
         get() = assets.asSequence().flatMap { it.tags.asSequence() }.filter(String::isNotBlank).distinct().sorted().toList()
@@ -76,7 +81,7 @@ data class AssetsUiState(
     val visibleAssets: List<Asset>
         get() = (when (selectedFilter) {
             AssetFilter.Archived -> assets.filter { it.isArchived }
-            AssetFilter.All -> currentAssets
+            AssetFilter.All -> assets
             else -> currentAssets.filter { it.status == selectedFilter.status }
         }).filter { asset -> selectedTags.all { it in asset.tags } }.let { filtered ->
             val comparator = when (sort) {

@@ -14,6 +14,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.TextUnit
 import io.suirenx.core.domain.AssetSyncConflict
 import io.suirenx.core.domain.ExpirySyncConflict
 import io.suirenx.core.model.*
@@ -29,9 +30,17 @@ internal fun PageTitle(title: String, description: String, kicker: String? = nul
 }
 
 @Composable
-internal fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
-    Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
-        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
+internal fun SettingsCard(
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Surface(modifier = modifier, shape = RoundedCornerShape(if (compact) 20.dp else 24.dp), color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (compact) 8.dp else 16.dp),
+            verticalArrangement = Arrangement.spacedBy(if (compact) 0.dp else 12.dp),
+            content = content,
+        )
     }
 }
 
@@ -45,10 +54,16 @@ internal fun Caption(text: String) { Text(text, fontSize = 12.sp, lineHeight = 1
 internal fun ErrorNote(text: String) { Text(text, color = MaterialTheme.colorScheme.error, fontSize = 13.sp, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
 
 @Composable
-internal fun SettingsLink(title: String, description: String, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).clickable(onClick = onClick).padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+internal fun SettingsLink(
+    title: String,
+    description: String,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
+    onClick: () -> Unit,
+) {
+    Row(modifier.fillMaxWidth().heightIn(min = if (compact) 48.dp else 52.dp).clickable(onClick = onClick).padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(if (compact) 2.dp else 4.dp)) {
+            Text(title, fontSize = 14.sp, lineHeight = if (compact) 18.sp else TextUnit.Unspecified, fontWeight = FontWeight.Medium)
             Caption(description)
         }
         Text("›", fontSize = 23.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)

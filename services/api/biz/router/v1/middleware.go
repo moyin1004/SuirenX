@@ -255,3 +255,8 @@ func _adminupdateapitokenMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _adminlistauditlogMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

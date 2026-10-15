@@ -10,6 +10,29 @@ type AdminAccount struct {
 	DisabledAt *time.Time `json:"disabled_at"`
 }
 
+// AdminAuditEntry is one recorded administrative action. ActorUsername is empty
+// when the acting account no longer resolves in the accounts table.
+type AdminAuditEntry struct {
+	ID            int64     `json:"id"`
+	ActorID       string    `json:"actor_id"`
+	ActorUsername string    `json:"actor_username"`
+	TargetType    string    `json:"target_type"`
+	TargetID      string    `json:"target_id"`
+	Action        string    `json:"action"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+// AdminAuditRetentionLimit bounds how many administrative audit rows the server
+// keeps; older rows are pruned. Repository pruning, the service read bound and
+// the limit the Web client reports all use this value.
+const AdminAuditRetentionLimit = 100
+
+// MaxConfigContentBytes bounds the size of a stored configuration file body and
+// is the largest value an administrator may configure. The HTTP transport allows
+// worst-case JSON string escaping plus envelope overhead; see
+// services/api/internal/transport/http/server.go.
+const MaxConfigContentBytes int64 = 10 << 20
+
 type ConfigFile struct {
 	Key         string     `json:"config_key"`
 	DisplayName string     `json:"display_name"`

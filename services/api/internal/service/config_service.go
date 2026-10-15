@@ -7,18 +7,31 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/moyin1004/suirenx/services/api/internal/domain"
+	"github.com/moyin1004/suirenx/services/api/internal/ratelimit"
 	"github.com/moyin1004/suirenx/services/api/internal/repository"
 )
 
 var (
 	ErrConfigRateLimited = errors.New("configuration token rate limit exceeded")
 	ErrInvalidConfigName = errors.New("invalid configuration display name")
+)
+
+// Configuration content reads are budgeted on two dimensions. The supplied
+// token throttles one client's read rate; the peer address bounds guessing,
+// which would otherwise get a fresh bucket for every guessed token value, and
+// bounds anonymous load on this unauthenticated endpoint. The token hash is only
+// ever a limiter key, never stored or logged.
+const (
+	configReadLimit  = 60
+	configReadWindow = time.Minute
+
+	configReadPeerLimit  = 240
+	configReadPeerWindow = time.Minute
 )
 
 type IssuedApiToken struct {
@@ -29,13 +42,14 @@ type IssuedApiToken struct {
 type ConfigService struct {
 	repository repository.ConfigRepository
 	now        func() time.Time
-	mu         sync.Mutex
-	reads      map[string][]time.Time
-	readChecks uint64
+	limiter    *ratelimit.Limiter
 }
 
 func NewConfigService(repository repository.ConfigRepository) *ConfigService {
-	return &ConfigService{repository: repository, now: time.Now, reads: make(map[string][]time.Time)}
+	service := &ConfigService{repository: repository, now: time.Now}
+	// The limiter reads service.now so it shares this service's clock.
+	service.limiter = ratelimit.New(func() time.Time { return service.now() })
+	return service
 }
 
 func (s *ConfigService) MaxConfigBytes() (int64, error) {
@@ -47,7 +61,7 @@ func (s *ConfigService) MaxConfigBytes() (int64, error) {
 }
 
 func (s *ConfigService) SetMaxConfigBytes(limit int64, actorID string) error {
-	if limit < 1 || actorID == "" {
+	if limit < 1 || limit > domain.MaxConfigContentBytes || actorID == "" {
 		return repository.ErrInvalidConfigLimit
 	}
 	if err := s.repository.SetMaxConfigBytes(limit, actorID, s.now().UTC()); err != nil {
@@ -229,7 +243,10 @@ func (s *ConfigService) UpdateApiToken(id, label string, configKeys []string, ac
 	return nil
 }
 
-func (s *ConfigService) ReadContent(key, bearerToken, queryToken string) (string, error) {
+// ReadContent returns configuration content for a caller that presents exactly
+// one scoped API token. peerKey is the opaque, transport-supplied scope used for
+// rate limiting (for HTTP, the real peer address); see auth.Service.Login.
+func (s *ConfigService) ReadContent(key, bearerToken, queryToken, peerKey string) (string, error) {
 	if key == "" || (bearerToken == "" && queryToken == "") || (bearerToken != "" && queryToken != "") {
 		return "", repository.ErrApiTokenInvalid
 	}
@@ -239,12 +256,18 @@ func (s *ConfigService) ReadContent(key, bearerToken, queryToken string) (string
 	}
 	hash := sha256.Sum256([]byte(secret))
 	digest := hex.EncodeToString(hash[:])
+	// Consume both budgets before any lookup so that rejected attempts count
+	// too: an unknown, expired or out-of-scope token is charged exactly like a
+	// successful read. Malformed requests above carry no token to guess and are
+	// refused without touching the store, so they are not charged.
+	tokenOK := s.limiter.Allow("config-read:token:"+digest, configReadLimit, configReadWindow)
+	peerOK := s.limiter.Allow("config-read:peer:"+peerKey, configReadPeerLimit, configReadPeerWindow)
+	if !tokenOK || !peerOK {
+		return "", ErrConfigRateLimited
+	}
 	content, err := s.repository.ReadConfigContent(key, digest, mode, s.now().UTC())
 	if err != nil {
 		return "", fmt.Errorf("read configuration content: %w", err)
-	}
-	if !s.allowRead(digest) {
-		return "", ErrConfigRateLimited
 	}
 	return content, nil
 }
@@ -258,33 +281,6 @@ func (s *ConfigService) checkContentSize(content string) error {
 		return repository.ErrConfigTooLarge
 	}
 	return nil
-}
-
-func (s *ConfigService) allowRead(tokenHash string) bool {
-	now := s.now()
-	cutoff := now.Add(-time.Minute)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	active := s.reads[tokenHash][:0]
-	for _, attempt := range s.reads[tokenHash] {
-		if attempt.After(cutoff) {
-			active = append(active, attempt)
-		}
-	}
-	if len(active) >= 60 {
-		s.reads[tokenHash] = active
-		return false
-	}
-	s.reads[tokenHash] = append(active, now)
-	s.readChecks++
-	if s.readChecks%64 == 0 {
-		for digest, attempts := range s.reads {
-			if len(attempts) == 0 || !attempts[len(attempts)-1].After(cutoff) {
-				delete(s.reads, digest)
-			}
-		}
-	}
-	return true
 }
 
 func normalizeConfigName(name string) (string, error) {

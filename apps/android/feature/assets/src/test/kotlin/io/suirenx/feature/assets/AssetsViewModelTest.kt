@@ -63,6 +63,50 @@ class AssetsViewModelTest {
         assertEquals(0, uploads)
     }
 
+    @Test fun filteredOverviewFollowsStatusAndTagsWhileHomeRemainsGlobal() {
+        val active = Asset("active", "Desk", 10_000, LocalDate.now(), AssetStatus.Active, "", 10, 1_000, tags = listOf("工作"))
+        val personal = active.copy(id = "personal", name = "Camera", priceCents = 20_000, dailyCostCents = 2_000, tags = listOf("旅行"))
+        val retired = active.copy(id = "retired", status = AssetStatus.Retired, priceCents = 3_000)
+        val archived = active.copy(id = "archived", priceCents = 4_000, archivedAt = java.time.Instant.now())
+        val initial = AssetsUiState(assets = listOf(active, personal, retired, archived))
+
+        assertEquals(AssetFilter.Active, initial.selectedFilter)
+        assertEquals(listOf("active", "personal"), initial.visibleAssets.map { it.id })
+        assertEquals(30_000L, initial.filteredOverview.totalPriceCents)
+        assertEquals(3_000L, initial.filteredOverview.totalDailyCostCents)
+        val tagged = initial.copy(selectedTags = setOf("工作"))
+        assertEquals(10_000L, tagged.filteredOverview.totalPriceCents)
+        assertEquals(1, tagged.filteredOverview.totalCount)
+        val retiredState = tagged.copy(selectedFilter = AssetFilter.Retired)
+        assertEquals(3_000L, retiredState.filteredOverview.totalPriceCents)
+        assertEquals(0L, retiredState.filteredOverview.totalDailyCostCents)
+        assertEquals(1, retiredState.filteredOverview.retiredCount)
+        val archiveState = tagged.copy(selectedFilter = AssetFilter.Archived)
+        assertEquals(4_000L, archiveState.filteredOverview.totalPriceCents)
+        assertEquals(0L, archiveState.filteredOverview.totalDailyCostCents)
+        assertEquals(0, archiveState.filteredOverview.activeCount)
+        assertEquals(1, archiveState.filteredOverview.totalCount)
+        val all = initial.copy(selectedFilter = AssetFilter.All)
+        assertEquals(setOf("active", "personal", "retired", "archived"), all.visibleAssets.map { it.id }.toSet())
+        assertEquals(37_000L, all.filteredOverview.totalPriceCents)
+        assertEquals(3_000L, all.filteredOverview.totalDailyCostCents)
+        assertEquals(4, all.filteredOverview.totalCount)
+        assertEquals(2, all.filteredOverview.activeCount)
+        assertEquals(1, all.filteredOverview.retiredCount)
+        assertEquals(1, all.filteredOverview.archivedCount)
+        val allTagged = all.copy(selectedTags = setOf("工作"))
+        assertEquals(setOf("active", "retired", "archived"), allTagged.visibleAssets.map { it.id }.toSet())
+        assertEquals(17_000L, allTagged.filteredOverview.totalPriceCents)
+        val empty = tagged.copy(selectedTags = setOf("不存在"))
+        assertEquals(0L, empty.filteredOverview.totalPriceCents)
+        assertEquals(0, empty.filteredOverview.totalCount)
+        for (state in listOf(initial, tagged, retiredState, archiveState, all, allTagged, empty)) {
+            assertEquals(33_000L, state.overview.totalPriceCents)
+            assertEquals(3_000L, state.overview.totalDailyCostCents)
+            assertEquals(3, state.overview.totalCount)
+        }
+    }
+
     @Test fun overviewCoversAllAssetsButDailyCostOnlyActive() = runTest(dispatcher) {
         val repo = FakeRepository().apply {
             seed(Asset("a1", "MacBook", 1_000_000, LocalDate.now(), AssetStatus.Active, "", 10, 5_000))

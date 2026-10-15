@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -38,7 +39,7 @@ func (m *m5Handlers) Register(c *app.RequestContext) {
 		writeAPIError(c, consts.StatusBadRequest, "invalid_account_request", "invalid account request")
 		return
 	}
-	value, expiresAt, err := m.auth.Register(request.Username, request.Password)
+	value, expiresAt, err := m.auth.Register(request.Username, request.Password, peerKey(c))
 	if err != nil {
 		writeM5Error(c, err)
 		return
@@ -52,7 +53,7 @@ func (m *m5Handlers) Login(c *app.RequestContext) {
 		writeAPIError(c, consts.StatusBadRequest, "invalid_account_request", "invalid account request")
 		return
 	}
-	value, expiresAt, err := m.auth.Login(request.Username, request.Password)
+	value, expiresAt, err := m.auth.Login(request.Username, request.Password, peerKey(c))
 	if err != nil {
 		writeM5Error(c, err)
 		return
@@ -70,7 +71,7 @@ func (m *m5Handlers) AdminLogin(c *app.RequestContext) {
 		writeAPIError(c, consts.StatusBadRequest, "invalid_account_request", "invalid account request")
 		return
 	}
-	value, expiresAt, err := m.auth.Login(request.Username, request.Password)
+	value, expiresAt, err := m.auth.Login(request.Username, request.Password, peerKey(c))
 	if err != nil {
 		writeM5Error(c, err)
 		return
@@ -102,6 +103,33 @@ func (m *m5Handlers) AdminListAccounts(c *app.RequestContext) {
 		response = append(response, map[string]any{"id": account.ID, "username": account.Username, "role": account.Role, "created_at": account.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"), "disabled_at": disabledAt})
 	}
 	c.JSON(consts.StatusOK, map[string]any{"accounts": response})
+}
+
+// AdminListAuditLog exposes the retained administrative audit rows. It is
+// read-only; rows are never written through this endpoint.
+func (m *m5Handlers) AdminListAuditLog(c *app.RequestContext) {
+	if _, err := m.superadminID(c); err != nil {
+		writeM5Error(c, err)
+		return
+	}
+	entries, retentionLimit, err := m.admin.ListAuditLog()
+	if err != nil {
+		writeM5Error(c, err)
+		return
+	}
+	response := make([]map[string]any, 0, len(entries))
+	for _, entry := range entries {
+		response = append(response, map[string]any{
+			"id":             entry.ID,
+			"actor_id":       entry.ActorID,
+			"actor_username": entry.ActorUsername,
+			"target_type":    entry.TargetType,
+			"target_id":      entry.TargetID,
+			"action":         entry.Action,
+			"created_at":     formatAPITime(entry.CreatedAt),
+		})
+	}
+	c.JSON(consts.StatusOK, map[string]any{"entries": response, "retention_limit": retentionLimit})
 }
 
 func (m *m5Handlers) AdminSetAccountStatus(c *app.RequestContext) {
@@ -355,7 +383,7 @@ func (m *m5Handlers) ReadConfigContent(c *app.RequestContext) {
 		return
 	}
 	bearer, query := bearerToken(c), string(c.Query("token"))
-	content, err := m.config.ReadContent(request.ConfigKey, bearer, query)
+	content, err := m.config.ReadContent(request.ConfigKey, bearer, query, peerKey(c))
 	if err != nil {
 		writeConfigReadError(c, err)
 		return
@@ -708,6 +736,23 @@ func webExpiry(version int64, item domain.SyncExpiryItem) map[string]any {
 	return map[string]any{"id": item.ID, "version": version, "name": item.Name, "category": item.Category, "package_expiry_date": item.PackageExpiryDate, "opened_date": item.OpenedDate, "opened_validity_days": item.OpenedValidityDays, "location": item.Location, "notes": item.Notes, "status": item.Status, "archived_at": item.ArchivedAt}
 }
 
+// peerKey returns the rate-limit scope for the authentication endpoints: the
+// real peer address of the connection. It deliberately ignores X-Forwarded-For
+// and X-Real-IP because hertz trusts every peer by default (0.0.0.0/0 and ::/0),
+// so those headers are caller-controlled and would let an attacker reset its own
+// budget by rotating them. Behind a loopback reverse proxy every request shares
+// one budget; that fails closed.
+func peerKey(c *app.RequestContext) string {
+	addr := c.RemoteAddr()
+	if addr == nil {
+		return "unknown"
+	}
+	if host, _, err := net.SplitHostPort(strings.TrimSpace(addr.String())); err == nil && host != "" {
+		return host
+	}
+	return strings.TrimSpace(addr.String())
+}
+
 func bearerToken(c *app.RequestContext) string {
 	parts := strings.Fields(strings.TrimSpace(string(c.GetHeader(consts.HeaderAuthorization))))
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
@@ -809,6 +854,9 @@ func writeM5Error(c *app.RequestContext, err error) {
 	case errors.Is(err, auth.ErrRegistrationDisabled):
 		status = consts.StatusForbidden
 		code = "registration_closed"
+	case errors.Is(err, auth.ErrTooManyAttempts):
+		status = consts.StatusTooManyRequests
+		code = "too_many_attempts"
 	case errors.Is(err, auth.ErrInvalidAccount), errors.Is(err, auth.ErrUsernameTaken), errors.Is(err, service.ErrInvalidSyncRequest):
 		status = consts.StatusBadRequest
 		code = "invalid_request"

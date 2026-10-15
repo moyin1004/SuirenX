@@ -33,6 +33,21 @@ message AdminAccount {
   string disabled_at = 5;
 }
 message AdminAccountsResponse { repeated AdminAccount accounts = 1; }
+message AdminAuditEntry {
+  int64 id = 1;
+  string actor_id = 2;
+  string actor_username = 3;
+  string target_type = 4;
+  string target_id = 5;
+  string action = 6;
+  string created_at = 7;
+}
+// retention_limit reports how many rows the server keeps; older rows are
+// pruned, so the Web client can state the bound instead of guessing it.
+message AdminAuditLogResponse {
+  repeated AdminAuditEntry entries = 1;
+  int32 retention_limit = 2;
+}
 message ConfigFile {
   string config_key = 1;
   string display_name = 2;
@@ -251,6 +266,9 @@ service AuthService {
   }
   rpc AdminSetAccountRegistrationSetting(AccountRegistrationSettingRequest) returns (AccountRegistrationSettingResponse) {
     option (api.put) = "/api/v1/admin/settings/account-registration";
+  }
+  rpc AdminListAuditLog(AdminAccountsRequest) returns (AdminAuditLogResponse) {
+    option (api.get) = "/api/v1/admin/audit-log";
   }
 }
 

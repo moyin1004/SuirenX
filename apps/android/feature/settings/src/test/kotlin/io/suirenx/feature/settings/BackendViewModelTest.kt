@@ -120,10 +120,10 @@ class BackendViewModelTest {
         assertEquals("https://one.test/", backend.settings.value?.activeUrl)
     }
 
-    @Test fun registrationRulesUseUtf8AndMatchMaximumBytes() {
+    @Test fun registrationRejectsBlankOrOversizedUsernameAndNonAsciiPassword() {
         assertNotNull(accountValidation(" ", "password", "password"))
         assertNotNull(accountValidation("名".repeat(34), "password", "password"))
-        assertNull(accountValidation("name", "中".repeat(24), "中".repeat(24)))
+        assertNotNull(accountValidation("name", "中".repeat(24), "中".repeat(24)))
         assertNotNull(accountValidation("name", "中".repeat(25), "中".repeat(25)))
     }
 

@@ -12,9 +12,39 @@ import (
 	"github.com/cloudwego/hertz/pkg/common/ut"
 	"github.com/moyin1004/suirenx/services/api/internal/auth"
 	"github.com/moyin1004/suirenx/services/api/internal/database"
+	"github.com/moyin1004/suirenx/services/api/internal/domain"
 	"github.com/moyin1004/suirenx/services/api/internal/repository"
 	"github.com/moyin1004/suirenx/services/api/internal/service"
 )
+
+func TestM5RegistrationRejectsNonPrintableASCIIPasswords(t *testing.T) {
+	for _, password := range []string{"password中", "password😀", "password\x00", "password\n"} {
+		t.Run(password, func(t *testing.T) {
+			db, err := database.Open(filepath.Join(t.TempDir(), "password-policy.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			sqlDB, err := db.DB()
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = sqlDB.Close() })
+			s := NewServer(":0", service.NewAssetService(repository.NewGormAssetRepository(db)), WithM5(db, testJWTSecret))
+			body, err := json.Marshal(map[string]string{"username": "ascii-member", "password": password})
+			if err != nil {
+				t.Fatal(err)
+			}
+			invalid := request(s, "POST", "/api/v1/auth/register", string(body))
+			if invalid.Code != 400 {
+				t.Fatalf("invalid password: %d %s", invalid.Code, invalid.Body)
+			}
+			valid := request(s, "POST", "/api/v1/auth/register", `{"username":"ascii-member","password":"printable ASCII !"}`)
+			if valid.Code != 201 {
+				t.Fatalf("rejected registration must not reserve username: %d %s", valid.Code, valid.Body)
+			}
+		})
+	}
+}
 
 func TestM5ConcurrentEditorsAndDatabaseRestore(t *testing.T) {
 	directory := t.TempDir()
@@ -409,6 +439,18 @@ func TestSuperadminConfigFilesAndScopedApiTokens(t *testing.T) {
 			t.Fatalf("61st content request should be rate limited: %d %s", limited.Code, limited.Body)
 		}
 	}
+	// Rejected attempts are charged too: a wrong token drains its own budget
+	// instead of being answered by an unlimited number of store lookups.
+	for attempt := 1; attempt <= 60; attempt++ {
+		rejected := request(s, "GET", "/api/v1/configs/"+config.Key+"/content?token=sx_wrong-token-value", "")
+		if rejected.Code != 401 || !strings.Contains(rejected.Body.String(), "invalid_api_token") {
+			t.Fatalf("wrong token attempt %d: %d %s", attempt, rejected.Code, rejected.Body)
+		}
+	}
+	rejected := request(s, "GET", "/api/v1/configs/"+config.Key+"/content?token=sx_wrong-token-value", "")
+	if rejected.Code != 429 || !strings.Contains(rejected.Body.String(), "rate_limited") {
+		t.Fatalf("rejected attempts were not charged to the budget: %d %s", rejected.Code, rejected.Body)
+	}
 	deleted := requestBearer(s, "DELETE", "/api/v1/admin/configs/"+config.Key, "", adminToken.AccessToken)
 	if deleted.Code != 200 {
 		t.Fatalf("delete config: %d %s", deleted.Code, deleted.Body)
@@ -605,6 +647,127 @@ func TestWebAssetExpiryWritesAreVersionedIdempotentAndSyncable(t *testing.T) {
 	deletedPull := requestBearer(s, "POST", "/api/v1/sync/assets", `{"cursor":1,"expiry_cursor":1,"idempotency_key":"web-delete-pull","changes":[],"expiry_changes":[]}`, userToken.AccessToken)
 	if deletedPull.Code != 200 || !strings.Contains(deletedPull.Body.String(), "deleted_at") {
 		t.Fatalf("delete tombstone was not available to Android sync: %d %s", deletedPull.Code, deletedPull.Body)
+	}
+}
+
+// TestAdminAuditLogEndpointIsSuperadminReadOnly covers the Web audit view: the
+// endpoint is superadmin-only, covers both administrative and ordinary Web
+// writes, reports the retention bound the database enforces, and never returns
+// credential material.
+func TestAdminAuditLogEndpointIsSuperadminReadOnly(t *testing.T) {
+	t.Setenv("SUIRENX_ADMIN_USERNAME", "operator")
+	t.Setenv("SUIRENX_ADMIN_PASSWORD", "first secure admin secret")
+	db, err := database.Open(filepath.Join(t.TempDir(), "audit.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	s := NewServer(":0", service.NewAssetService(repository.NewGormAssetRepository(db)), WithM5(db, testJWTSecret))
+
+	if anonymous := request(s, "GET", "/api/v1/admin/audit-log", ""); anonymous.Code != 401 {
+		t.Fatalf("anonymous audit read: %d %s", anonymous.Code, anonymous.Body)
+	}
+	register := request(s, "POST", "/api/v1/auth/register", `{"username":"audit-member","password":"correct audit member password"}`)
+	var memberToken struct {
+		AccessToken string `json:"access_token"`
+	}
+	if register.Code != 201 || json.Unmarshal(register.Body.Bytes(), &memberToken) != nil {
+		t.Fatalf("register: %d %s", register.Code, register.Body)
+	}
+	denied := requestBearer(s, "GET", "/api/v1/admin/audit-log", "", memberToken.AccessToken)
+	if denied.Code != 403 || !strings.Contains(denied.Body.String(), "superadmin_required") {
+		t.Fatalf("ordinary account read the audit log: %d %s", denied.Code, denied.Body)
+	}
+
+	admin := request(s, "POST", "/api/v1/admin/auth/login", `{"username":"operator","password":"first secure admin secret"}`)
+	var adminToken struct {
+		AccessToken string `json:"access_token"`
+	}
+	if admin.Code != 200 || json.Unmarshal(admin.Body.Bytes(), &adminToken) != nil {
+		t.Fatalf("admin login: %d %s", admin.Code, admin.Body)
+	}
+	setting := requestBearer(s, "PUT", "/api/v1/admin/settings/account-registration", `{"enabled":false}`, adminToken.AccessToken)
+	if setting.Code != 200 {
+		t.Fatalf("admin setting change: %d %s", setting.Code, setting.Body)
+	}
+	assetBody := `{"name":"Audit laptop","price_cents":129900,"purchase_date":"2025-01-01","status":"ACTIVE","icon_key":"laptop","purchase_channel":"shop","warranty_end_date":"2027-01-01","notes":"audit trail","tags":["work"]}`
+	create := requestWithHeaders(s, "POST", "/api/v1/web/assets", assetBody, map[string]string{"Authorization": "Bearer " + memberToken.AccessToken, "Idempotency-Key": "audit-create-asset-1"})
+	if create.Code != 201 {
+		t.Fatalf("web asset create: %d %s", create.Code, create.Body)
+	}
+	var asset struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(create.Body.Bytes(), &asset); err != nil || asset.ID == "" {
+		t.Fatalf("created asset: %s (%v)", create.Body, err)
+	}
+	accounts := requestBearer(s, "GET", "/api/v1/admin/accounts", "", adminToken.AccessToken)
+	var accountList struct {
+		Accounts []struct {
+			ID       string `json:"id"`
+			Username string `json:"username"`
+		} `json:"accounts"`
+	}
+	if accounts.Code != 200 || json.Unmarshal(accounts.Body.Bytes(), &accountList) != nil {
+		t.Fatalf("account list: %d %s", accounts.Code, accounts.Body)
+	}
+	memberID := ""
+	for _, account := range accountList.Accounts {
+		if account.Username == "audit-member" {
+			memberID = account.ID
+		}
+	}
+	if memberID == "" {
+		t.Fatalf("member missing from account list: %s", accounts.Body)
+	}
+	// A superadmin writing into another account's workspace is an audited action;
+	// the member's own write above must stay out of the log.
+	adminEditBody := `{"base_version":1,"name":"Audit laptop","price_cents":129900,"purchase_date":"2025-01-01","status":"RETIRED","image_url":"","retired_date":"2026-01-01","archived_at":"","icon_key":"laptop","purchase_channel":"shop","warranty_end_date":"2027-01-01","notes":"admin edit","tags":["work"]}`
+	adminEdit := requestWithHeaders(s, "PUT", "/api/v1/web/assets/"+asset.ID+"?owner_id="+memberID, adminEditBody, map[string]string{"Authorization": "Bearer " + adminToken.AccessToken, "Idempotency-Key": "audit-admin-edit-2"})
+	if adminEdit.Code != 200 {
+		t.Fatalf("superadmin edit of another account asset: %d %s", adminEdit.Code, adminEdit.Body)
+	}
+
+	log := requestBearer(s, "GET", "/api/v1/admin/audit-log", "", adminToken.AccessToken)
+	if log.Code != 200 {
+		t.Fatalf("audit log read: %d %s", log.Code, log.Body)
+	}
+	var payload struct {
+		Entries []struct {
+			ActorID       string `json:"actor_id"`
+			ActorUsername string `json:"actor_username"`
+			TargetType    string `json:"target_type"`
+			TargetID      string `json:"target_id"`
+			Action        string `json:"action"`
+			CreatedAt     string `json:"created_at"`
+		} `json:"entries"`
+		RetentionLimit int `json:"retention_limit"`
+	}
+	if err := json.Unmarshal(log.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.RetentionLimit != domain.AdminAuditRetentionLimit {
+		t.Fatalf("retention limit = %d, want %d", payload.RetentionLimit, domain.AdminAuditRetentionLimit)
+	}
+	if len(payload.Entries) != 2 {
+		t.Fatalf("audit entries = %d, want exactly the two superadmin actions: %s", len(payload.Entries), log.Body)
+	}
+	// Newest first: the superadmin edit happened after the setting change.
+	newest, oldest := payload.Entries[0], payload.Entries[1]
+	if newest.Action != "WEB_ASSET_UPDATED" || newest.ActorUsername != "operator" || newest.ActorID == "" || newest.TargetType != "asset" || newest.TargetID != asset.ID || newest.CreatedAt == "" {
+		t.Fatalf("newest audit entry = %+v", newest)
+	}
+	if oldest.Action != "ACCOUNT_REGISTRATION_DISABLED" || oldest.ActorUsername != "operator" || oldest.TargetType != "server_setting" || oldest.TargetID != "allow_account_registration" {
+		t.Fatalf("oldest audit entry = %+v", oldest)
+	}
+	for _, leaked := range []string{"password_hash", "token_hash", "$2a$"} {
+		if strings.Contains(log.Body.String(), leaked) {
+			t.Fatalf("audit log leaked %q: %s", leaked, log.Body)
+		}
 	}
 }
 
