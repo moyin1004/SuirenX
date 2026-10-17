@@ -7,10 +7,11 @@ SuirenX（燧人）是一个个人工具箱项目。第一版个人资产管理�
 ## 技术栈
 
 - Android：Kotlin、Jetpack Compose、Hilt、Retrofit、Room（本地资产与用品）
+- iOS / iPadOS：SwiftUI（iOS 17+）、Swift Concurrency、SQLite、Keychain；v0.1.3 已完成模拟器验收，实体设备与发布边界见 TODO
 - API：Go、Hertz、Protobuf IDL
 - 数据库：SQLite、GORM
 - 构建：Gradle 9.6、Version Catalog、Convention Plugins
-- 暂缓评估：iOS、Web、PostgreSQL 和 C++ 模块，尚未承诺版本
+- Web：Go 内嵌原生 HTML/CSS/JavaScript；PostgreSQL 和 C++ 模块仍留待评估
 
 Proto 描述的是 HTTP + JSON API 契约，并不强制使用 gRPC 或二进制 Protobuf。这样未来将 Go 模块替换为 C++ 时，移动端契约可以保持稳定。
 
@@ -29,6 +30,7 @@ Proto 描述的是 HTTP + JSON API 契约，并不强制使用 gRPC 或二进制
 │   ├── feature/tools/               工具入口
 │   └── feature/expiry/              日用品保质期管理
 ├── build-logic/convention/          Gradle 约定插件
+├── apps/ios/                        SwiftUI 通用 iPhone/iPad 工程与可独立测试的 Swift 核心
 ├── docs/                            架构说明与任务清单
 └── services/api/                    Hertz + GORM + SQLite 服务
 ```
@@ -42,6 +44,7 @@ Proto 描述的是 HTTP + JSON API 契约，并不强制使用 gRPC 或二进制
 - Android CLI（`android` 命令，用于 SDK、模拟器管理及应用安装与运行）
 - Android SDK Platform 37、Build Tools 36、Platform Tools
 - Android Studio 自带 JDK
+- iOS 开发：Xcode 16+ 与对应 iOS Simulator Runtime，实体设备运行需自行配置签名
 - Go 1.25+
 - `hz` 0.9.7（代码生成固定版本）
 - `protoc`
@@ -95,6 +98,24 @@ API 启动时按编号执行内置 SQL 迁移，迁移记录保存在 `schema_mi
 ```
 
 输出位于 `apps/android/app/build/outputs/apk/debug/app-debug.apk`。
+
+## 运行 iPhone / iPad
+
+使用带 iOS SDK 的 Xcode 打开 `apps/ios/SuirenX.xcodeproj`，选择 `SuirenX` scheme 与 iPhone 或 iPad 模拟器运行。部署到实体设备需要维护者选择自己的签名 Team；仓库不包含证书或描述文件。最低系统为 iOS / iPadOS 17，支持 iPad 横竖屏、分屏与宽屏侧栏；窄窗口使用底部导航。
+
+```shell
+swift test --package-path apps/ios
+xcodebuild -project apps/ios/SuirenX.xcodeproj -scheme SuirenX \
+  -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+```
+
+核心测试默认跳过真实 HTTP 用例；如需验证，先启动独立临时数据库的本机 Go 服务，再设置 `SUIRENX_IOS_TEST_SERVER=http://127.0.0.1:8888/` 运行 `swift test`。用例会注册合成账号并写入测试记录，不能指向生产服务。UI 回归通过 Xcode Test 运行，在独立目录创建数据，不覆盖日常使用数据。测试运行结果和未覆盖范围见 [当前待办](docs/TODO.md)。
+
+模拟器运行使用 Xcode 默认的本机 ad-hoc 签名；`Simulator.entitlements` 仅向模拟器二进制提供本应用身份以访问 Keychain，不用于实体设备。`CODE_SIGNING_ALLOWED=NO` 适用于编译检查，运行账号流程时应保留签名。CLI 运行隔离 HTTP UI 用例时，以 `TEST_RUNNER_SUIRENX_IOS_TEST_SERVER` 环境变量传入测试服务地址；普通 UI 用例不需要服务器。
+
+iPadOS 26 的真实窗口调整用例需在专用模拟器开启“窗口化 App”，并以 `TEST_RUNNER_SUIRENX_IOS_WINDOWING_TESTS=1` 显式运行；它拖动系统窗口控制柄，检查窄窗口中的草稿和导航，默认跳过以免改动日常设备的窗口状态。最大字号回归在 iPad 使用原生 Command-S 保存入口，普通字号另有触控回归。请复用 Xcode 已安装的运行时。没有配置签名的设备目标构建、模拟器运行和实体机验收应分别记录。
+
+数据保存在设备 SQLite；账号令牌仅保存在不可跨设备迁移的 Keychain 条目。备份采用 Android 相同的本地 JSON v1，只恢复业务数据；恢复前和切换同步目标前先保存安全备份。iOS 后台同步由系统决定运行时机，定时选项为期望频率，始终保留立即同步入口。Debug 可连接开发 HTTP 服务，Release 只接受 HTTPS 地址。
 
 ## 当前 API
 

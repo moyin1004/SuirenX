@@ -38,8 +38,17 @@ services/api/data/
 .env
 .DS_Store
 
+# Native iOS local build and signing state
+apps/ios/.build/
+apps/ios/DerivedData/
+*.xcuserstate
+xcuserdata/
+*.ipa
+*.mobileprovision
+
 # Personal server deployment details (keep out of Git)
 /DEPLOYMENT.local.md
+/IOS-VERIFICATION.local.md
 
 # Keystore files
 *.jks

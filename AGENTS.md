@@ -38,6 +38,9 @@ repository boundaries.
 - `apps/android/core/domain`: repository interfaces and use cases.
 - `apps/android/core/data`: Retrofit DTOs, mappings, and repository adapters.
 - `apps/android/core/ui`: shared Compose theme and UI primitives.
+- `apps/ios/App`: universal SwiftUI iPhone/iPad application and Keychain/background wiring.
+- `apps/ios/Sources/SuirenCore`: Swift domain models, SQLite, backups, HTTP JSON and sync coordinator.
+- `apps/ios/Tests` / `apps/ios/UITests`: host core tests and isolated iPhone/iPad UI acceptance.
 - `api/proto`: Protobuf API definitions used by every client/server language.
 - `services/api`: Hertz API, domain services, GORM repository, and SQLite.
 - `build-logic`: Gradle convention plugins. Prefer changing shared Android
@@ -128,6 +131,14 @@ Hilt and Room processors on KSP when adding or updating generated Android code.
 Pure Kotlin/JVM modules continue to use the Kotlin JVM plugin. Check processor
 support before adding another annotation-processing dependency.
 
+## iOS rules
+
+- Keep `apps/ios/App` native SwiftUI and `apps/ios/Sources/SuirenCore` independent of SwiftUI/UIKit. Support iPhone and iPad from one universal target (iOS 17+), including rotation, split-screen widths and Dynamic Type.
+- The iOS local SQLite database is the sole business source of truth. Serialize access through `LocalStore`; business mutations and journal entries, frozen batches and response acknowledgements each commit atomically. Never hold a database transaction across HTTP.
+- Persist credentials only in a non-synchronizing Keychain item with `AfterFirstUnlockThisDeviceOnly`; never put tokens in settings, logs or backups. Preserve issuer URL binding, explicit sync enrollment, tombstones and conflict snapshots as on Android.
+- Use Android-compatible local JSON backup v1. Validate before restore and create an automatic safety backup before replacing business records or resetting target-specific sync metadata. Never reset an installed database to handle an upgrade.
+- Treat iOS background intervals as requested timing, not guaranteed schedules. Manual sync remains available. Run Swift core tests and build the universal Xcode target; actual iPhone/iPad UI evidence is separate from compilation.
+
 ## Go rules
 
 - Run `gofmt` on changed Go packages.
@@ -167,6 +178,9 @@ cd services/api && go test ./...
 protoc -I api/proto -I "$(go env GOPATH)/pkg/mod/github.com/cloudwego/hertz/cmd/hz@v0.9.7/protobuf/api" \
   --descriptor_set_out=/tmp/suirenx-api.pb api/proto/suirenx/asset/v1/asset.proto
 ./gradlew :apps:android:app:assembleDebug
+swift test --package-path apps/ios
+xcodebuild -project apps/ios/SuirenX.xcodeproj -scheme SuirenX \
+  -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
 git diff --check
 ```
 

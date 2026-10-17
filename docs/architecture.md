@@ -2,6 +2,10 @@
 
 SuirenX 使用 monorepo，Android/iOS 保持原生。Android 模块依赖向内：app → feature → domain/model；data 实现 domain 接口，domain/model 不依赖 android.*。服务端为 Go/Hertz 模块化单体，transport → service → repository；服务只依赖仓储接口，SQLite/GORM 细节留在基础设施与仓储层。
 
+v0.1.3 iOS/iPadOS 工程位于 `apps/ios`。SwiftUI App 仅从 `LocalStore` 获取本机快照；`SuirenCore` Swift Package 提供不依赖 UI 的领域规则、SQLite 仓储、版本化备份和 HTTP 同步协调器。SQLite 访问由 actor 串行管理，业务记录、journal、冻结批次与游标提交使用同一事务，网络等待期间不持有数据库事务。首版采用各表 JSON payload 保存完整模型，适合个人数据规模，后续结构变更通过追加显式迁移演进；数据库来自更新版本时拒绝降级打开，绝不重置。`SyncTransport` 与 `CredentialStore` 是可替换边界，核心测试在 macOS 执行，UI 通过通用 iPhone/iPad target 验证。
+
+iOS 令牌存入 `AfterFirstUnlockThisDeviceOnly`、禁止同步的单一 Keychain 条目，普通设置与备份不包含凭据。保存/选择/移除服务器地址与账号相互独立，改变地址暂停同步并保留原凭据，网络仅向签发地址发送令牌。`BGAppRefreshTask` 与前台调度复用相同同步协调器，频率只表达期望时机；系统调度延迟不能呈现为本机保存失败。
+
 v0.1.1 Web 用户端使用原生 HTML/CSS/JavaScript，由 `services/api/internal/transport/http/webui` 嵌入 Go API 二进制并通过同源 HTTPS 提供。用户无需配置服务器地址；浏览器以相对路径访问同源 Web API，由 Go Web 后端代理数据访问并执行鉴权。当前没有独立 Node 构建链或跨域会话；浏览器只持有当前标签页会话级 JWT，并通过 Bearer header 调用 Web 专用 API。新增依赖或拆分部署须另行记录架构决策。
 
 ## 本地数据与同步
@@ -14,7 +18,7 @@ Compose / ViewModel → 领域仓储 → Room 业务表 + 同步日志（同一�
                  Hertz → 同步/认证服务 → repository → SQLite
 ```
 
-资产和用品的唯一事实来源是 Room。服务器地址、认证、断网和同步开关不改变列表数据源。旧 StorageMode 名称仅作为持久化兼容值，Local 表示暂停同步、Remote 表示开启同步。
+资产和用品的唯一事实来源是设备数据库（Android Room、iOS SQLite）。服务器地址、认证、断网和同步开关不改变列表数据源。Android 旧 StorageMode 名称仅作为持久化兼容值，Local 表示暂停同步、Remote 表示开启同步。
 
 服务端公开健康、认证、Android 增量同步、版本化 Web 业务 API 和超管管理 API。Web 业务路由与 Android 同步路由分开授权；Web 写入通过现有版本化同步服务提交，资产/用品行、版本和同步事件在同一事务内更新。IDL 在 api/proto，services/api/scripts/generate.sh 固定 hz v0.9.7 从 m5.proto 生成路由和模型；业务 handler 适配到服务实例。
 
