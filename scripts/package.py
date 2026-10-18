@@ -7,12 +7,40 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import re
 import shutil
 import subprocess
 import sys
 import zipfile
 
 from build_info import CI_BASE, ROOT, ci_number, ios_build, load_current, metadata
+
+
+def verify_android_identity(apk, expected, aapt=None):
+    with zipfile.ZipFile(apk) as bundle:
+        resource = "res/raw/suirenx_build.json"
+        if resource not in bundle.namelist():
+            # Release resource optimization renames files. Resolve the resource
+            # actually used by the app instead of accepting an arbitrary JSON.
+            if aapt is None:
+                sdk = os.environ.get("ANDROID_HOME") or os.environ.get("ANDROID_SDK_ROOT")
+                local = ROOT / "local.properties"
+                if not sdk and local.exists():
+                    sdk = next((line.split("=", 1)[1].strip() for line in local.read_text().splitlines()
+                                if line.startswith("sdk.dir=")), None)
+                candidates = list((Path(sdk) / "build-tools").glob("*/aapt")) if sdk else []
+                if not candidates:
+                    raise ValueError("Android SDK aapt is required to verify optimized APK resources")
+                aapt = max(candidates, key=lambda path: tuple(map(int, re.findall(r"\d+", path.parent.name))))
+            resources = subprocess.check_output([str(aapt), "dump", "--values", "resources", str(apk)], text=True)
+            paths = set(re.findall(
+                r'^\s*resource 0x[0-9a-fA-F]+ io\.suirenx\.app:raw/suirenx_build:[^\n]*\n\s*\(string8\) "([^"]+)"',
+                resources, re.MULTILINE))
+            if len(paths) != 1:
+                raise ValueError("APK build identity resource is missing or ambiguous")
+            resource = paths.pop()
+        if json.loads(bundle.read(resource)) != expected:
+            raise ValueError("APK identity differs from the frozen package record")
 
 
 def reserve_local(root=ROOT):
@@ -73,9 +101,7 @@ def package(args):
         for apk in apks:
             retained = record / apk.name
             shutil.copy2(apk, retained)
-            with zipfile.ZipFile(retained) as bundle:
-                if json.loads(bundle.read("res/raw/suirenx_build.json")) != data:
-                    raise ValueError("APK identity differs from the frozen package record")
+            verify_android_identity(retained, data)
             digest = hashlib.sha256(retained.read_bytes()).hexdigest()
             retained.with_suffix(retained.suffix + ".sha256").write_text(f"{digest}  {retained.name}\n")
     else:

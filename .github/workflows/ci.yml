@@ -43,6 +43,7 @@ jobs:
         id: package
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+          PACKAGER_REVISION: ${{ github.sha }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -55,7 +56,18 @@ jobs:
             echo "A newer packaging run exists. Start a new workflow run instead of retrying an older run." >&2
             exit 1
           fi
-          python3 scripts/package.py android --release --tag "$RELEASE_TAG"
+          # Keep release sources clean and immutable while allowing the current
+          # workflow to repair packaging of an existing tag.
+          git show "$PACKAGER_REVISION:scripts/package.py" > "$RUNNER_TEMP/suirenx-package.py"
+          echo "Packaging tool revision: $PACKAGER_REVISION"
+          PYTHONPATH="$GITHUB_WORKSPACE/scripts" python3 "$RUNNER_TEMP/suirenx-package.py" android --release --tag "$RELEASE_TAG"
+          python3 - <<'PY'
+          import json, os, pathlib, subprocess
+          record = {"workflow_revision": os.environ["PACKAGER_REVISION"],
+                    "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
+                    "release_tag": os.environ["RELEASE_TAG"]}
+          (pathlib.Path(os.environ["RUNNER_TEMP"]) / "suirenx-release-tooling.json").write_text(json.dumps(record, indent=2) + "\n")
+          PY
       - name: Check release signing configuration
         id: signing
         shell: bash
@@ -131,6 +143,7 @@ jobs:
             apps/android/app/build/outputs/apk/release/*-signed.apk.sha256
             apps/android/app/build/outputs/apk/release/app-release-signature.txt
             ${{ steps.package.outputs.metadata }}
+            ${{ runner.temp }}/suirenx-release-tooling.json
           if-no-files-found: error
           retention-days: 90
       - name: Upload unsigned release APK

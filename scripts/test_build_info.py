@@ -6,10 +6,46 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import zipfile
 from unittest.mock import patch
 
 import build_info
-from package import reserve_local
+from package import reserve_local, verify_android_identity
+
+
+class ApkIdentityTests(unittest.TestCase):
+    def test_debug_identity_uses_raw_resource(self):
+        with tempfile.TemporaryDirectory() as directory:
+            apk = Path(directory) / "debug.apk"
+            with zipfile.ZipFile(apk, "w") as bundle:
+                bundle.writestr("res/raw/suirenx_build.json", '{"build_number":11}')
+            verify_android_identity(apk, {"build_number": 11})
+
+    def test_optimized_release_resolves_resource_table_and_rejects_decoy(self):
+        resources = '''
+    resource 0x7f0d0000 io.suirenx.app:raw/suirenx_build: t=0x03
+      (string8) "res/kv.json"
+    resource 0x7f0e0000 io.suirenx.app:raw/other: t=0x03
+      (string8) "res/other.json"
+'''
+        with tempfile.TemporaryDirectory() as directory:
+            apk = Path(directory) / "release.apk"
+            with zipfile.ZipFile(apk, "w") as bundle:
+                bundle.writestr("res/kv.json", '{"build_number":1000502}')
+                bundle.writestr("res/other.json", '{"build_number":1000501}')
+            with patch("package.subprocess.check_output", return_value=resources):
+                verify_android_identity(apk, {"build_number": 1000502}, aapt="aapt")
+                with self.assertRaisesRegex(ValueError, "differs"):
+                    verify_android_identity(apk, {"build_number": 1000501}, aapt="aapt")
+
+    def test_optimized_release_rejects_missing_resource_mapping(self):
+        with tempfile.TemporaryDirectory() as directory:
+            apk = Path(directory) / "release.apk"
+            with zipfile.ZipFile(apk, "w") as bundle:
+                bundle.writestr("res/unrelated.json", '{"build_number":11}')
+            with patch("package.subprocess.check_output", return_value=""):
+                with self.assertRaisesRegex(ValueError, "missing or ambiguous"):
+                    verify_android_identity(apk, {"build_number": 11}, aapt="aapt")
 
 
 class BuildInfoTests(unittest.TestCase):
