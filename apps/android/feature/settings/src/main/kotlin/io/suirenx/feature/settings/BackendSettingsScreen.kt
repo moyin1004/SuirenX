@@ -1,5 +1,6 @@
 package io.suirenx.feature.settings
 
+import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -9,10 +10,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AccountCircle
+import androidx.compose.material.icons.outlined.DateRange
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -31,6 +39,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 /** Native implementation of the approved OpenDesign settings flow. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BackendSettingsScreen(
     state: BackendUiState,
@@ -74,12 +83,12 @@ fun BackendSettingsScreen(
     var expiryConflict by rememberSaveable { mutableStateOf(false) }
     var resolution by remember { mutableStateOf<SyncConflictResolution?>(null) }
     var confirmation by remember { mutableStateOf<String?>(null) }
-    var pendingServer by remember { mutableStateOf<String?>(null) }
+    var addingServer by rememberSaveable { mutableStateOf(false) }
+    var deletingServer by remember { mutableStateOf(false) }
     var registering by rememberSaveable { mutableStateOf(false) }
     var confirmPassword by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var authReturnPage by rememberSaveable { mutableStateOf("account") }
-    var serverSaveReturnPage by rememberSaveable { mutableStateOf("server-detail") }
     var seenAuthSuccess by rememberSaveable { mutableStateOf(state.authSuccessVersion) }
     val connectionBusy = state.busy || state.authBusy || state.migrationBusy
     val inspectedServer = state.settings?.servers?.find { it.url == state.inspectedServerUrl }
@@ -92,7 +101,15 @@ fun BackendSettingsScreen(
     var seenServerSave by rememberSaveable { mutableStateOf(state.serverSavedVersion) }
     LaunchedEffect(state.serverSavedVersion) {
         if (state.serverSavedVersion != seenServerSave) {
-            seenServerSave = state.serverSavedVersion; page = serverSaveReturnPage
+            seenServerSave = state.serverSavedVersion
+            addingServer = false
+            page = "server"
+        }
+    }
+    LaunchedEffect(state.settings, state.busy) {
+        if (page == "server-detail" && state.inspectedServerUrl != null && inspectedServer == null && !state.busy) {
+            deletingServer = false
+            page = "server"
         }
     }
     LaunchedEffect(state.authSuccessVersion) {
@@ -121,7 +138,6 @@ fun BackendSettingsScreen(
     }
     val parent = when (page) {
         "auth" -> authReturnPage
-        "delete-server" -> "server-detail"
         "server-detail" -> "server"
         "account" -> "home"
         "conflict" -> "conflicts"
@@ -138,16 +154,6 @@ fun BackendSettingsScreen(
     val remoteDeleted = a?.remoteDeleted ?: e?.remoteDeleted ?: false
     val conflictExists = a != null || e != null
 
-    fun requestServerSave(returnPage: String) {
-        val changingAddress = state.editingServerUrl != null && state.address.trim() != state.editingServerUrl
-        if (changingAddress) {
-            serverSaveReturnPage = returnPage
-            confirmation = "save-server"
-        } else {
-            onSave()
-        }
-    }
-
     val scroll = rememberScrollState()
     var scrollPage by rememberSaveable { mutableStateOf(page) }
     LaunchedEffect(page) {
@@ -160,32 +166,30 @@ fun BackendSettingsScreen(
     Column(modifier.fillMaxSize().statusBarsPadding().imePadding().padding(horizontal = 16.dp)) {
         Column(Modifier.weight(1f).verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             if (page != "home") Spacer(Modifier.height(0.dp))
-            if (page == "home" && onExit == null) SuirenHeader() else TextButton(onClick = goBack) {
-                Text("‹  " + if (exitsToOverview) "总览" else when(parent) { "server" -> "服务器管理"; "server-detail" -> "服务器详情"; "sync" -> "同步设置"; "conflicts" -> "冲突列表"; else -> "设置" })
+            if (page == "home" && onExit == null) SuirenHeader(title = "设置") else TextButton(onClick = goBack) {
+                Text("‹  " + if (exitsToOverview) "总览" else when(parent) { "server" -> "服务器地址"; "server-detail" -> "服务器详情"; "sync" -> "同步设置"; "conflicts" -> "冲突列表"; else -> "设置" })
             }
             when (page) {
                 "home" -> {
-                    PageTitle("设置", "本机数据、同步方式和显示偏好，都在这里管理。")
-                    GroupTitle("账号")
-                    SettingsCard(compact = true) {
-                        SettingsLink("账号", accountSummary, compact = true) { page = "account" }
-                    }
-                    GroupTitle("同步")
-                    SettingsCard(compact = true) {
-                        SettingsLink("同步设置", statusTitle, compact = true) { page = "sync" }
-                    }
-                    GroupTitle("数据")
-                    SettingsCard(compact = true) { SettingsLink("备份与恢复", "本机完整 JSON · 含归档和用品，不含凭证", compact = true) { page = "backup" } }
-                    GroupTitle("个性化")
-                    SettingsCard(compact = true) {
-                        SettingsLink("外观", themeLabel(themeMode), compact = true) { page = "appearance" }
+                    Text("数据始终保存在本机，同步由你决定。", fontSize = 13.sp, lineHeight = 21.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 12.dp))
+                    SettingsHomeGroup {
+                        SettingsHomeLink("账号", accountSummary, Icons.Outlined.AccountCircle) { page = "account" }
                         HorizontalDivider()
-                        SettingsLink("用品临期提醒", "提前 ${state.soonDays} 天标记临期", compact = true) { page = "reminders" }
+                        SettingsHomeLink("同步设置", statusTitle, Icons.Outlined.Refresh) { page = "sync" }
                     }
-                    GroupTitle("关于")
-                    SettingsCard(compact = true) { SettingsLink("燧人", "个人工具箱 · 资产与用品管理", compact = true) { page = "about" } }
-                    GroupTitle("连接设置")
-                    SettingsCard(compact = true) { SettingsLink("服务器地址", activeServer?.url ?: "可选 · 添加前先测试连接", compact = true) { onEditServer(null); page = "server" } }
+                    SettingsHomeGroup {
+                        SettingsHomeLink("备份与恢复", "导出、预览和安全恢复本机数据", SuirenIcons.Backup) { page = "backup" }
+                        HorizontalDivider()
+                        SettingsHomeLink("外观", themeLabel(themeMode), SuirenIcons.Appearance) { page = "appearance" }
+                        HorizontalDivider()
+                        SettingsHomeLink("用品临期提醒", "提前 ${state.soonDays} 天标记临期", Icons.Outlined.DateRange) { page = "reminders" }
+                    }
+                    SettingsHomeGroup {
+                        SettingsHomeLink("服务器地址", activeServer?.url ?: "未选择 · 可选", SuirenIcons.Server) { onEditServer(null); page = "server" }
+                        HorizontalDivider()
+                        SettingsHomeLink("关于", "个人工具箱 · 资产与用品管理", Icons.Outlined.Info) { page = "about" }
+                    }
                 }
                 "account" -> {
                     PageTitle("账号", "像普通应用一样管理当前登录账号。")
@@ -274,65 +278,36 @@ fun BackendSettingsScreen(
                     }
                 }
                 "server" -> {
-                    PageTitle("服务器地址", "独立管理可选的同步地址。添加前必须测试连接成功。")
-                    SettingsCard {
-                        Text("添加服务器", fontWeight = FontWeight.SemiBold)
-                        OutlinedTextField(state.name, onNameChanged, Modifier.fillMaxWidth(), label = { Text("名称（可选）") }, singleLine = true, enabled = !connectionBusy)
-                        OutlinedTextField(state.address, onAddressChanged, Modifier.fillMaxWidth(), label = { Text("服务器地址") }, placeholder = { Text("https://sync.example.com") }, singleLine = true, enabled = !connectionBusy, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
-                        Caption("账号与地址设置相互独立。地址变更会保留登录信息；若同步校验失败，请到账号设置注销。")
-                        SecondaryAction(if (state.testingConnection) "测试中…" else "测试连接", !connectionBusy && !state.testingConnection && state.address.isNotBlank()) { onTestConnection(state.address) }
-                        ConnectionTestResult(state)
-                        PrimaryAction("添加服务器", !connectionBusy && state.connectionTestAddress == state.address.trim() && !state.connectionTestFailed, onSave)
-                        state.error?.let { ErrorNote(it) }
-                    }
-                    GroupTitle("已保存的服务器 · ${state.settings?.servers.orEmpty().size} 个")
-                    if (state.settings?.servers.orEmpty().isEmpty()) SettingsCard { Caption("还没有服务器地址；测试连接成功后才能添加。") }
+                    PageTitle("服务器地址", "添加或修改地址前需通过该地址的健康测试。测试不登录，也不上传。")
                     state.settings?.servers.orEmpty().forEach { server ->
-                        SettingsCard {
-                            SettingsLink(server.name, server.url + if (server.url == state.settings?.activeUrl) " · 当前同步服务器" else "") {
-                                onOpenServer(server.url); page = "server-detail"
+                        SettingsCard(Modifier.clickable(enabled = !connectionBusy) {
+                            onOpenServer(server.url); page = "server-detail"
+                        }) {
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Text(server.name.ifBlank { "未命名服务器" }, Modifier.weight(1f), fontWeight = FontWeight.Medium)
+                                if (server.url == state.settings?.activeUrl) {
+                                    Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.secondary) {
+                                        Text("当前选择", Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                                            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSecondary)
+                                    }
+                                }
                             }
+                            Caption(server.url)
                         }
                     }
+                    if (state.settings?.servers.orEmpty().isEmpty()) SettingsCard {
+                        Text("尚无服务器", fontWeight = FontWeight.Medium)
+                        Caption("离线功能可直接使用。")
+                    }
+                    PrimaryAction("添加服务器", !connectionBusy) { onEditServer(null); addingServer = true }
                 }
                 "server-detail" -> {
                     val server = inspectedServer
-                    if (server == null) {
-                        PageTitle("服务器已删除", "本机数据仍然保留。")
-                        PrimaryAction("返回服务器管理") { onEditServer(null); page = "server" }
-                    } else {
-                        PageTitle(server.name, server.url)
-                        SettingsCard {
-                            Text("编辑服务器", fontWeight = FontWeight.SemiBold)
-                            OutlinedTextField(state.name, onNameChanged, Modifier.fillMaxWidth(), label = { Text("名称（可选）") }, singleLine = true, enabled = !connectionBusy)
-                            OutlinedTextField(state.address, onAddressChanged, Modifier.fillMaxWidth(), label = { Text("服务器地址") }, singleLine = true, enabled = !connectionBusy, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
-                            Caption("修改地址前先测试新地址。账号信息会保留；如同步校验失败，请到独立的账号设置注销。")
-                            SecondaryAction(if (state.testingConnection) "测试中…" else "测试连接", !connectionBusy && !state.testingConnection && state.address.isNotBlank()) { onTestConnection(state.address) }
-                            ConnectionTestResult(state)
-                            val addressChanged = state.address.trim() != server.url
-                            PrimaryAction("保存修改", !connectionBusy && state.address.isNotBlank() && (!addressChanged || state.connectionTestAddress == state.address.trim())) { requestServerSave("server-detail") }
-                            state.error?.let { ErrorNote(it) }
-                        }
-                        SettingsCard {
-                            Caption(if (state.settings?.activeUrl == server.url) "当前同步服务器地址。" else "当前未使用此服务器地址。")
-                        }
-                        if (server.url != state.settings?.activeUrl) PrimaryAction("设为当前同步服务器", !connectionBusy) { pendingServer = server.url; confirmation = "server" }
-                        else if (state.auth.authenticated) PrimaryAction("预览本机数据并开启同步", !connectionBusy, onPreviewMigration)
-                        SecondaryAction("删除服务器", !connectionBusy) { pendingServer = server.url; page = "delete-server" }
-                    }
-                }
-                "delete-server" -> {
-                    val server = state.settings?.servers?.find { it.url == pendingServer }
-                    PageTitle("删除这个服务器地址？", "仅删除连接配置，不退出账号。")
-                    SettingsCard {
-                        Text(server?.name ?: "地址已删除", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                        Caption(server?.url.orEmpty())
-                        Caption("只移除连接配置，不删除账号、本机资产、用品、同步队列或服务端数据。")
-                        if (server?.url == state.settings?.activeUrl && server != null) Caption("删除当前地址将停止同步；不会自动选择其他服务器。")
-                        SecondaryAction("取消", enabled = !connectionBusy) { page = "server-detail" }
-                        PrimaryAction("确认删除", enabled = server != null && !connectionBusy) {
-                            server?.let { onDeleteServer(it.url) }; onEditServer(null); page = "server"
-                        }
+                    if (server != null) {
+                        Text("服务器详情", fontSize = 29.sp, fontWeight = FontWeight.SemiBold)
+                        ServerEditorFields(state, server, onAddressChanged, onNameChanged,
+                            onTestConnection, onSave, onSelect, { deletingServer = true })
                     }
                 }
                 "auth" -> {
@@ -402,8 +377,32 @@ fun BackendSettingsScreen(
                     Caption("此设置控制应用内临期状态，不会开启系统推送通知。")
                 }
                 "about" -> {
+                    val context = LocalContext.current
+                    val buildInfo = remember(context) { InstalledBuildInfo.read(context) }
+                    val packageInfo = remember(context) {
+                        @Suppress("DEPRECATION")
+                        context.packageManager.getPackageInfo(context.packageName, 0)
+                    }
+                    val buildNumber = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        packageInfo.longVersionCode
+                    } else {
+                        @Suppress("DEPRECATION")
+                        packageInfo.versionCode.toLong()
+                    }
                     PageTitle("燧人", "把日常工具放在一起。")
                     SettingsCard { Text("个人工具箱"); Caption("记录资产、计算持有成本，管理用品与到期时间。数据始终保存在本机，可选多端同步。") }
+                    SettingsCard {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Caption("版本号")
+                            Text(packageInfo.versionName ?: "未知", modifier = Modifier.testTag("about.version"))
+                        }
+                        HorizontalDivider()
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Caption("Build 号")
+                            Text(buildNumber.toString(), modifier = Modifier.testTag("about.build"))
+                        }
+                        DevelopmentBuildRows(buildInfo)
+                    }
                 }
             }
             // Errors are rendered once at the action/status card that owns them.
@@ -434,14 +433,42 @@ fun BackendSettingsScreen(
             }
         }, confirmButton = { TextButton(onClick = { confirmation = "restore" }, enabled = !state.backupBusy) { Text(if(state.backupBusy) "恢复中…" else "继续恢复") } }, dismissButton = { TextButton(onClick = onCancelRestore, enabled = !state.backupBusy) { Text("取消") } })
     }
+    if (addingServer) {
+        val editorBusy = connectionBusy || state.testingConnection
+        val currentEditorBusy by rememberUpdatedState(editorBusy)
+        ModalBottomSheet(
+            onDismissRequest = { if (!editorBusy) { addingServer = false; onEditServer(null) } },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true,
+                confirmValueChange = { it != SheetValue.Hidden || !currentEditorBusy }),
+            properties = ModalBottomSheetProperties(shouldDismissOnBackPress = !editorBusy),
+            containerColor = MaterialTheme.colorScheme.background,
+        ) {
+            Column(Modifier.testTag("server.add").fillMaxHeight(0.95f).imePadding().verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp).padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { addingServer = false; onEditServer(null) }, enabled = !editorBusy) { Text("取消") }
+                    Text("添加服务器", fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+                }
+                ServerEditorFields(state, null, onAddressChanged, onNameChanged, onTestConnection,
+                    onSave, onSelect, {})
+            }
+        }
+    }
+    if (deletingServer && inspectedServer != null) {
+        AlertDialog(onDismissRequest = { if (!connectionBusy) deletingServer = false },
+            title = { Text("删除此地址？") },
+            text = { Text("仅删除连接配置。账号、本机业务数据和同步记录保留；删除当前地址将暂停同步且不自动选择其他地址。") },
+            confirmButton = { TextButton(onClick = { onDeleteServer(inspectedServer.url); deletingServer = false },
+                enabled = !connectionBusy, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("确认删除地址") } },
+            dismissButton = { TextButton(onClick = { deletingServer = false }, enabled = !connectionBusy) { Text("取消") } })
+    }
     resolution?.let { choice -> AlertDialog(onDismissRequest = { resolution = null }, title = { Text("确认处理此记录？") }, text = { Text(if(choice == SyncConflictResolution.KeepBoth) "将创建修改版副本，保留两份内容。" else "未选择的版本将被替换；此操作只影响当前记录。") }, confirmButton = { TextButton(onClick = { onResolveConflict(conflictId, expiryConflict, choice); resolution = null }, enabled = conflictExists && !state.conflictBusy && !unavailable) { Text("确认处理") } }, dismissButton = { TextButton(onClick = { resolution = null }) { Text("取消") } }) }
-    confirmation?.let { action -> AlertDialog(onDismissRequest = { confirmation = null }, title = { Text(when(action) { "restore" -> "替换本机数据？"; "pause" -> "暂停同步？"; "logout" -> "退出同步账号？"; "save-server" -> "切换服务器地址？"; else -> "切换同步连接？" }) }, text = { Text(when(action) {
+    confirmation?.let { action -> AlertDialog(onDismissRequest = { confirmation = null }, title = { Text(when(action) { "restore" -> "替换本机数据？"; "pause" -> "暂停同步？"; "logout" -> "退出同步账号？"; else -> "切换同步连接？" }) }, text = { Text(when(action) {
         "restore" -> "会先自动备份当前资产和用品，再恢复所选文件。此操作会替换本机记录。"
-        "save-server" -> "服务器地址将变更，账号信息和登录凭证会保留；网络同步会暂时暂停。本机资产和用品不受影响。重新开启同步时若账号校验失败，请手动注销后再登录。"
-        "server" -> "切换后网络同步会暂时暂停；账号信息和登录凭证会保留，不会自动发给新服务器。重新开启同步时若账号校验失败，请先手动注销后再登录。"
         else -> "网络同步将停止，本机数据与待发送修改保留。登录后可预览并开启同步到新目标。"
     }) }, confirmButton = { TextButton(onClick = {
-        when(action) { "restore" -> onConfirmRestore(); "pause" -> onUseLocal(); "logout" -> onLogout(); "save-server" -> onSave(); "server" -> pendingServer?.let(onSelect) }
+        when(action) { "restore" -> onConfirmRestore(); "pause" -> onUseLocal(); "logout" -> onLogout() }
         confirmation = null
     }) { Text("确认") } }, dismissButton = { TextButton(onClick = { confirmation = null }) { Text("取消") } }) }
 }
@@ -482,4 +509,21 @@ private fun AccountPasswordField(
             }
         },
     )
+}
+
+/** Development trace is deliberately absent from release About screens. */
+@Composable
+internal fun DevelopmentBuildRows(buildInfo: InstalledBuildInfo?) {
+    if (buildInfo?.isDevelopment == true) {
+        HorizontalDivider()
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Caption("代码")
+            Text(buildInfo.code, modifier = Modifier.testTag("about.code"))
+        }
+        HorizontalDivider()
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Caption("打包时间")
+            Text(buildInfo.localTime, modifier = Modifier.testTag("about.builtAt"))
+        }
+    }
 }

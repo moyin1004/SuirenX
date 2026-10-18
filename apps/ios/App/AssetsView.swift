@@ -6,7 +6,7 @@ struct AssetsView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Binding var query: AssetQuery
     @Binding var showSearch: Bool
-    @State private var showEditor = false
+    @Binding var showEditor: Bool
     @Binding var compact: Bool
     private var visible: [Asset] { query.apply(model.assets) }
     var body: some View {
@@ -20,14 +20,6 @@ struct AssetsView: View {
                 if showSearch {
                     HStack { Image(systemName: "magnifyingglass"); TextField("搜索名称或标签", text: $query.search).accessibilityIdentifier("asset.search"); if !query.search.isEmpty { Button { query.search = "" } label: { Image(systemName: "xmark.circle.fill") }.accessibilityLabel("清除搜索") } }.padding(12).background(Palette.surface, in: RoundedRectangle(cornerRadius: 12))
                 } else if !query.search.isEmpty { Text("搜索生效：\(query.search)").font(.caption).foregroundStyle(.secondary) }
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 7) {
-                        Chip(title: "全部标签", selected: query.tags.isEmpty) { query.tags.removeAll() }
-                        ForEach(Array(Set(model.assets.flatMap(\.tags))).sorted(), id: \.self) { tag in
-                            Chip(title: tag, selected: query.tags.contains(tag)) { if query.tags.contains(tag) { query.tags.remove(tag) } else { query.tags.insert(tag) } }
-                        }
-                    }
-                }
                 if visible.isEmpty { EmptyState(title: "暂无资产", detail: "添加第一件资产，或调整筛选条件。") }
                 LazyVGrid(columns: dynamicTypeSize.isAccessibilitySize ? [GridItem(.flexible())] : [GridItem(.adaptive(minimum: 154), spacing: 10)], spacing: 10) {
                     ForEach(visible) { asset in
@@ -36,8 +28,6 @@ struct AssetsView: View {
                 }
             }.sxPage()
         }
-        .navigationTitle("燧人")
-        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { showEditor = true } label: { Image(systemName: "plus") }.accessibilityLabel("新增资产").accessibilityIdentifier("asset.add") } }
         .sheet(isPresented: $showEditor) { AssetEditor() }
         .refreshable { await model.refresh() }
     }
@@ -48,12 +38,45 @@ struct AssetsView: View {
     }
     private var toolbar: some View {
         HStack(spacing: 8) {
+            tagMenu
             Button { showSearch.toggle() } label: { Image(systemName: "magnifyingglass").frame(width: 44, height: 44).background(Palette.surface, in: RoundedRectangle(cornerRadius: 12)) }.accessibilityLabel(showSearch ? "收起搜索" : "搜索资产")
             Menu {
                 Picker("排序字段", selection: $query.sort) { ForEach(AssetSort.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
                 Picker("方向", selection: $query.descending) { Text("升序").tag(false); Text("降序").tag(true) }
             } label: { Image(systemName: "arrow.up.arrow.down").frame(width: 44, height: 44).background(Palette.surface, in: RoundedRectangle(cornerRadius: 12)) }.accessibilityLabel("排序：\(query.sort.rawValue)，\(query.descending ? "降序" : "升序")")
         }.buttonStyle(.plain)
+    }
+    private var tagMenu: some View {
+        let tags = Set(model.assets.flatMap(\.tags)).union(query.tags).sorted()
+        return Menu {
+            Button { query.tags.removeAll() } label: {
+                if query.tags.isEmpty { Label("全部标签", systemImage: "checkmark") }
+                else { Text("全部标签") }
+            }.menuActionDismissBehavior(.disabled).accessibilityIdentifier("asset.tags.clear")
+            Divider()
+            if tags.isEmpty { Text("暂无标签") }
+            ForEach(tags, id: \.self) { tag in
+                Button {
+                    if query.tags.contains(tag) { query.tags.remove(tag) } else { query.tags.insert(tag) }
+                } label: {
+                    if query.tags.contains(tag) { Label(tag, systemImage: "checkmark") }
+                    else { Text(tag) }
+                }.menuActionDismissBehavior(.disabled).accessibilityIdentifier("asset.tag.\(tag)")
+            }
+            Divider()
+            Button("完成") {}.accessibilityIdentifier("asset.tags.done")
+        } label: {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: "line.3.horizontal.decrease").frame(width: 44, height: 44)
+                    .foregroundStyle(query.tags.isEmpty ? Color.primary : Color.black)
+                    .background(query.tags.isEmpty ? Palette.surface : Palette.accent, in: RoundedRectangle(cornerRadius: 12))
+                if !query.tags.isEmpty {
+                    Text("\(query.tags.count)").font(.caption2.weight(.semibold)).padding(3)
+                        .foregroundStyle(.white).background(Color.black, in: Capsule()).offset(x: 3, y: -3)
+                }
+            }
+        }.accessibilityLabel("标签筛选").accessibilityValue(query.tags.isEmpty ? "全部标签" : "已选 \(query.tags.count) 个标签")
+            .accessibilityIdentifier("asset.tagFilter")
     }
 }
 
@@ -152,6 +175,7 @@ private struct RetirementSheet: View {
     var body: some View {
         NavigationStack {
             Form { Section { DateField(label: "退役日期", value: $date, range: asset.purchaseDate.date...LocalDay.today.date.addingTimeInterval(86399)) } footer: { Text("持有天数包含购买日和退役日。取消不会修改记录。") } }
+                .sxNavigationBackground()
                 .navigationTitle("退役资产").toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(saving) }
                     ToolbarItem(placement: .confirmationAction) { Button("确定") { saving = true; Task { var a = asset; a.status = .retired; a.retiredDate = date; if await model.mutate({ try await model.store.saveAsset(a) }) { dismiss() }; saving = false } }.disabled(saving) }
@@ -199,7 +223,7 @@ struct AssetEditor: View {
                     TextField("备注（可选）", text: $asset.notes, axis: .vertical).lineLimit(4...8)
                 }
                 if let validation { Section { Text(validation).foregroundStyle(.red).accessibilityAddTraits(.updatesFrequently) } }
-            }.scrollDismissesKeyboard(.immediately).frame(maxWidth: 640).frame(maxWidth: .infinity).scrollContentBackground(.hidden).background(Palette.background)
+            }.scrollDismissesKeyboard(.immediately).frame(maxWidth: 640).frame(maxWidth: .infinity).sxNavigationBackground()
                 .navigationTitle(isNew ? "新增资产" : "编辑资产").navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(saving) }
@@ -236,7 +260,7 @@ private struct IconPicker: View {
                         }
                     }.padding(14)
                 }
-            }.padding(.top, 12).frame(maxWidth: 600).frame(maxWidth: .infinity).background(Palette.background).navigationTitle("选择资产图标").navigationBarTitleDisplayMode(.inline)
+            }.padding(.top, 12).frame(maxWidth: 600).frame(maxWidth: .infinity).sxNavigationBackground().navigationTitle("选择资产图标").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button("确定") { selected = draft; dismiss() } } }
         }
     }

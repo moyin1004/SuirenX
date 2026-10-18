@@ -93,6 +93,27 @@ import XCTest
         tapControl(app.buttons["nav.tools"]); tapControl(app.buttons["tools.expiry"])
         XCTAssertTrue(app.buttons["expiry.add"].waitForExistence(timeout: 5)); shot("ipad-real-tiled-tools")
     }
+    func testSettingsRowsRespondAcrossEntireRow() {
+        launch()
+        if app.windows.firstMatch.frame.width >= 700 { XCUIDevice.shared.orientation = .landscapeLeft }
+        defer { XCUIDevice.shared.orientation = .portrait }
+        app.buttons["nav.settings"].tap()
+        let titles = ["账号", "同步设置", "备份与恢复", "外观", "用品临期提醒", "服务器地址", "关于"]
+        // Exercise the Spacer and both padded edges, outside the text and chevron.
+        let points = [CGVector(dx: 0.75, dy: 0.5), CGVector(dx: 0.02, dy: 0.08), CGVector(dx: 0.98, dy: 0.92)]
+        shot("settings-full-row-before-navigation")
+        for title in titles {
+            for point in points {
+                let row = app.buttons["settings.row.\(title)"]
+                reveal(row)
+                row.coordinate(withNormalizedOffset: point).tap()
+                XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 5), "\(title) must open from \(point)")
+                goBack()
+                XCTAssertTrue(row.waitForExistence(timeout: 5))
+            }
+        }
+        shot("settings-full-row-all-destinations-verified")
+    }
     func testBackupExportAndRestore() throws {
         launch()
         app.buttons["nav.assets"].tap(); app.buttons["asset.add"].tap()
@@ -213,6 +234,86 @@ import XCTest
         shot("adaptive-landscape")
         XCUIDevice.shared.orientation = .portrait
     }
+    func testAboutDisplaysInstalledVersionAndBuild() throws {
+        launch(); app.buttons["nav.settings"].tap()
+        let summary = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "SuirenX ")).firstMatch
+        XCTAssertTrue(summary.waitForExistence(timeout: 5))
+        let version = String(summary.label.dropFirst("SuirenX ".count))
+        XCTAssertFalse(version.isEmpty)
+        XCTAssertNotEqual(version, "未知")
+        tapText("关于")
+        XCTAssertTrue(app.staticTexts["版本号"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Build 号"].exists)
+        XCTAssertTrue(app.staticTexts[version].exists)
+        XCTAssertFalse(app.staticTexts["未知"].exists)
+        if let expectedVersion = ProcessInfo.processInfo.environment["SUIRENX_EXPECTED_VERSION"] {
+            XCTAssertEqual(version, expectedVersion)
+        }
+        if let expectedBuild = ProcessInfo.processInfo.environment["SUIRENX_EXPECTED_BUILD"] {
+            XCTAssertTrue(app.staticTexts[expectedBuild].exists)
+        }
+        #if DEBUG
+            XCTAssertTrue(app.staticTexts["代码"].exists)
+            XCTAssertTrue(app.staticTexts["打包时间"].exists)
+            XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "[0-9a-f]{7}(-dirty)?")).firstMatch.exists)
+            XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}")).firstMatch.exists)
+        #else
+        XCTAssertFalse(app.staticTexts["代码"].exists)
+        XCTAssertFalse(app.staticTexts["打包时间"].exists)
+        #endif
+        XCTAssertTrue(app.buttons["Fluent Emoji 开源许可"].exists)
+        shot("about-installed-metadata-light")
+        goBack(); tapText("外观"); tapText("深色"); goBack(); tapText("关于")
+        shot("about-installed-metadata-dark")
+    }
+    func testMainPageHeadersAndBackgrounds() throws {
+        launch()
+        for (page, title) in [("overview", "燧人"), ("assets", "资产"), ("tools", "工具"), ("settings", "设置")] {
+            app.buttons["nav.\(page)"].tap()
+            let heading = app.staticTexts["page.title"]
+            XCTAssertTrue(heading.waitForExistence(timeout: 5))
+            XCTAssertEqual(heading.label, title)
+            let window = app.windows.firstMatch.frame
+            let leadingLimit = window.minX + (window.width >= 700 ? window.width / 2 : 70)
+            XCTAssertLessThan(heading.frame.minX, leadingLimit, "Title should remain on the leading side of the page")
+            XCTAssertGreaterThan(heading.frame.width, 40, "Title must remain visible rather than collapse into an overflow menu")
+            XCTAssertLessThan(heading.frame.midY, window.minY + 140, "Title should be at the top of the page")
+            XCTAssertFalse(app.scrollViews.staticTexts[page == "overview" ? "总览" : title].exists)
+            shot("main-\(page)-light")
+        }
+        tapText("外观"); tapText("深色"); goBack()
+        shot("main-settings-dark")
+        for page in ["overview", "assets", "tools"] {
+            app.buttons["nav.\(page)"].tap(); shot("main-\(page)-dark")
+        }
+    }
+    func testTagFilterMenuPreservesIntersectionAcrossPagesAndSearch() throws {
+        launch(); app.buttons["nav.assets"].tap()
+        for (name, tags) in [("标签电脑", "工作,常用"), ("标签阅读器", "工作")] {
+            app.buttons["asset.add"].tap()
+            app.textFields["asset.name"].tap(); app.textFields["asset.name"].typeText(name)
+            app.textFields["asset.price"].tap(); app.textFields["asset.price"].typeText("100")
+            dismissKeyboard()
+            reveal(app.textFields["asset.tags"]); app.textFields["asset.tags"].tap(); app.textFields["asset.tags"].typeText(tags)
+            dismissKeyboard(); saveEditor("asset.save")
+            XCTAssertTrue(record(name).waitForExistence(timeout: 5))
+        }
+        XCTAssertFalse(app.buttons["全部标签"].exists)
+        app.buttons["asset.tagFilter"].tap()
+        app.buttons["asset.tag.工作"].tap(); app.buttons["asset.tag.常用"].tap()
+        shot("asset-tag-menu")
+        app.buttons["asset.tags.done"].tap()
+        XCTAssertTrue(record("标签电脑").exists); XCTAssertFalse(record("标签阅读器").exists)
+        XCTAssertEqual(app.buttons["asset.tagFilter"].value as? String, "已选 2 个标签")
+        shot("asset-tags-selected")
+        app.buttons["nav.settings"].tap(); app.buttons["nav.assets"].tap()
+        XCTAssertEqual(app.buttons["asset.tagFilter"].value as? String, "已选 2 个标签")
+        app.buttons["搜索资产"].tap(); app.textFields["asset.search"].tap(); app.textFields["asset.search"].typeText("电脑")
+        app.buttons["收起搜索"].tap()
+        app.buttons["asset.tagFilter"].tap(); app.buttons["asset.tags.clear"].tap(); app.buttons["asset.tags.done"].tap()
+        XCTAssertTrue(record("标签电脑").exists); XCTAssertFalse(record("标签阅读器").exists)
+        XCTAssertTrue(app.staticTexts["搜索生效：电脑"].exists)
+    }
     private func post(_ server: String, path: String, body: [String: Any], token: String? = nil) async throws -> [String: Any] {
         let base = try XCTUnwrap(URL(string: server))
         guard ["127.0.0.1", "localhost", "::1"].contains(base.host ?? "") else { throw XCTSkip("HTTP UI acceptance must use an isolated loopback server") }
@@ -292,7 +393,7 @@ import XCTest
         reveal(app.buttons["两份都保留"]); app.buttons["两份都保留"].tap(); tapControl(app.buttons["确认选择"].firstMatch)
         app.buttons["nav.assets"].tap()
         XCTAssertTrue(record("另一端资产").waitForExistence(timeout: 5)); XCTAssertTrue(record("本机冲突资产（副本）").waitForExistence(timeout: 5)); shot("conflict-kept-both-native")
-        app.buttons["远端"].tap(); app.buttons["验收"].tap()
+        app.buttons["asset.tagFilter"].tap(); app.buttons["asset.tag.远端"].tap(); app.buttons["asset.tag.验收"].tap(); app.buttons["asset.tags.done"].tap()
         XCTAssertFalse(record("本机冲突资产（副本）").exists)
         app.buttons["搜索资产"].tap(); app.textFields["asset.search"].tap(); app.textFields["asset.search"].typeText("另一端")
         app.buttons["nav.settings"].tap(); app.buttons["nav.assets"].tap()
@@ -301,7 +402,8 @@ import XCTest
         app.buttons["收起搜索"].tap(); XCTAssertTrue(app.staticTexts["搜索生效：另一端"].exists)
         app.buttons["排序：购买日期，降序"].tap(); tapControl(app.buttons["购买金额"])
         XCTAssertTrue(app.buttons["排序：购买金额，降序"].waitForExistence(timeout: 5)); shot("asset-query-preserved-across-pages")
-        app.buttons["搜索资产"].tap(); app.buttons["清除搜索"].tap(); app.buttons["收起搜索"].tap(); app.buttons["全部标签"].tap()
+        app.buttons["搜索资产"].tap(); app.buttons["清除搜索"].tap(); app.buttons["收起搜索"].tap()
+        app.buttons["asset.tagFilter"].tap(); app.buttons["asset.tags.clear"].tap(); app.buttons["asset.tags.done"].tap()
         XCTAssertTrue(record("本机冲突资产（副本）").waitForExistence(timeout: 5))
         app.buttons["nav.settings"].tap(); tapText("同步设置"); XCTAssertTrue(app.staticTexts["已同步"].waitForExistence(timeout: 15))
         goBack(); tapText("账号"); app.buttons["退出账号"].tap()

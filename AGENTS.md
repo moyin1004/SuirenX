@@ -200,6 +200,12 @@ in the verification command instead of vendoring files from a module cache.
 
 ## Change discipline
 
+- Android/iOS share the product version in root `version.xcconfig`. Use
+  `scripts/package.py` for numbered local packages and the existing GitHub
+  release workflow for distribution numbers. Ordinary IDE builds do not consume
+  numbers. Freeze package identity before compilation; never distribute a dirty
+  release or reuse a tag for different source. Development About screens show
+  commit/time metadata; release About screens show only version/build.
 - Preserve user changes and avoid broad formatting-only rewrites.
 - Do not commit secrets, signing keys, `local.properties`, generated build
   output, APKs, or local SQLite files.

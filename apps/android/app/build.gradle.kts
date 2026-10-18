@@ -1,3 +1,5 @@
+import groovy.json.JsonSlurper
+
 plugins {
     alias(libs.plugins.suirenx.android.application)
     alias(libs.plugins.suirenx.android.compose)
@@ -5,14 +7,40 @@ plugins {
     alias(libs.plugins.hilt)
 }
 
+abstract class GenerateBuildInfoTask : DefaultTask() {
+    @get:Input abstract val identity: Property<String>
+    @get:OutputDirectory abstract val outputDir: DirectoryProperty
+
+    @TaskAction fun generate() {
+        val output = outputDir.file("raw/suirenx_build.json").get().asFile
+        output.parentFile.mkdirs()
+        output.writeText(identity.get())
+    }
+}
+
+val packageIdentity = providers.exec {
+    workingDir(rootDir)
+    commandLine("python3", rootProject.file("scripts/build_info.py"))
+}.standardOutput.asText.get()
+val packageInfo = JsonSlurper().parseText(packageIdentity) as Map<*, *>
+val generatedBuildInfo = layout.buildDirectory.dir("generated/suirenxBuildInfo/res")
+val generateBuildInfo = tasks.register<GenerateBuildInfoTask>("generateSuirenxBuildInfo") {
+    identity.set(packageIdentity)
+    outputDir.set(generatedBuildInfo)
+}
+
 android {
     namespace = "io.suirenx.app"
 
     defaultConfig {
         applicationId = "io.suirenx.app"
-        versionCode = 3
-        versionName = "0.1.2"
+        versionCode = (packageInfo["build_number"] as Number).toInt()
+        versionName = packageInfo["version"] as String
     }
+}
+
+androidComponents.onVariants { variant ->
+    variant.sources.res?.addGeneratedSourceDirectory(generateBuildInfo, GenerateBuildInfoTask::outputDir)
 }
 
 dependencies {

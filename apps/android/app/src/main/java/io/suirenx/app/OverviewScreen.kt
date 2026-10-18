@@ -73,7 +73,6 @@ private fun OverviewScreen(
             }
         }
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("总览", fontSize = 29.sp, fontWeight = FontWeight.SemiBold)
             Text("资产与日常用品，都在这里。", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {

@@ -37,29 +37,31 @@ struct SettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                PageHeading(title: "设置", subtitle: "数据始终保存在本机，同步由你决定。")
+                Text("数据始终保存在本机，同步由你决定。")
+                    .font(.subheadline).foregroundStyle(.secondary).padding(.vertical, 12)
                 VStack(spacing: 0) {
-                    NavigationLink(value: SettingsDestination.account) { settingsRow("账号", subtitle: model.credential?.username ?? "未登录", icon: "person.crop.circle") }
+                    NavigationLink(value: SettingsDestination.account) { settingsRow("账号", subtitle: model.credential?.username ?? "未登录", icon: "person.crop.circle") }.accessibilityIdentifier("settings.row.账号")
                     Divider()
-                    NavigationLink(value: SettingsDestination.sync) { settingsRow("同步设置", subtitle: model.syncLabel, icon: "arrow.triangle.2.circlepath") }
+                    NavigationLink(value: SettingsDestination.sync) { settingsRow("同步设置", subtitle: model.syncLabel, icon: "arrow.triangle.2.circlepath") }.accessibilityIdentifier("settings.row.同步设置")
                 }.sxCard(padding: 0)
                 VStack(spacing: 0) {
-                    NavigationLink(value: SettingsDestination.backup) { settingsRow("备份与恢复", subtitle: "导出、预览和安全恢复本机数据", icon: "externaldrive") }
+                    NavigationLink(value: SettingsDestination.backup) { settingsRow("备份与恢复", subtitle: "导出、预览和安全恢复本机数据", icon: "externaldrive") }.accessibilityIdentifier("settings.row.备份与恢复")
                     Divider()
-                    NavigationLink(value: SettingsDestination.appearance) { settingsRow("外观", subtitle: model.settings.theme == "system" ? "跟随系统" : model.settings.theme == "dark" ? "深色" : "浅色", icon: "circle.lefthalf.filled") }
+                    NavigationLink(value: SettingsDestination.appearance) { settingsRow("外观", subtitle: model.settings.theme == "system" ? "跟随系统" : model.settings.theme == "dark" ? "深色" : "浅色", icon: "circle.lefthalf.filled") }.accessibilityIdentifier("settings.row.外观")
                     Divider()
-                    NavigationLink(value: SettingsDestination.expiryPreferences) { settingsRow("用品临期提醒", subtitle: "提前 \(model.settings.soonDays) 天标记临期", icon: "calendar.badge.clock") }
+                    NavigationLink(value: SettingsDestination.expiryPreferences) { settingsRow("用品临期提醒", subtitle: "提前 \(model.settings.soonDays) 天标记临期", icon: "calendar.badge.clock") }.accessibilityIdentifier("settings.row.用品临期提醒")
                 }.sxCard(padding: 0)
                 VStack(spacing: 0) {
-                    NavigationLink(value: SettingsDestination.servers) { settingsRow("服务器地址", subtitle: model.settings.activeURL ?? "未选择 · 可选", icon: "network") }
+                    NavigationLink(value: SettingsDestination.servers) { settingsRow("服务器地址", subtitle: model.settings.activeURL ?? "未选择 · 可选", icon: "network") }.accessibilityIdentifier("settings.row.服务器地址")
                     Divider()
-                    NavigationLink(value: SettingsDestination.about) { settingsRow("关于", subtitle: "SuirenX 0.1.3", icon: "info.circle") }
+                    NavigationLink(value: SettingsDestination.about) { settingsRow("关于", subtitle: "SuirenX \(InstalledAppInfo.version)", icon: "info.circle") }.accessibilityIdentifier("settings.row.关于")
                 }.sxCard(padding: 0)
             }.sxPage()
-        }.navigationTitle("燧人").buttonStyle(.plain)
+        }.buttonStyle(.plain)
     }
     private func settingsRow(_ title: String, subtitle: String, icon: String) -> some View {
         HStack(spacing: 12) { Image(systemName: icon).frame(width: 26); VStack(alignment: .leading, spacing: 5) { Text(title).font(.subheadline.weight(.medium)); Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(2) }; Spacer(); Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary) }.padding(.horizontal, 16).padding(.vertical, 12).frame(minHeight: 64)
+            .contentShape(Rectangle())
     }
 }
 
@@ -169,7 +171,7 @@ private struct ServerEditor: View {
                 }
                 Section { Button("删除地址", role: .destructive) { deleteConfirmation = true }.disabled(busy) }
             }
-        }.frame(maxWidth: 640).frame(maxWidth: .infinity).navigationTitle(server == nil ? "添加服务器" : "服务器详情")
+        }.frame(maxWidth: 640).frame(maxWidth: .infinity).sxNavigationBackground().navigationTitle(server == nil ? "添加服务器" : "服务器详情")
             .toolbar { if server == nil { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(busy) } } }
             .confirmationDialog("删除此地址？", isPresented: $deleteConfirmation, titleVisibility: .visible) { Button("确认删除地址", role: .destructive) { remove() } } message: { Text("仅删除连接配置。账号、本机业务数据和同步记录保留；删除当前地址将暂停同步且不自动选择其他地址。") }
     }
@@ -233,7 +235,7 @@ private struct SyncSettingsView: View {
                     Text("相同编号的数据差异将进入显式冲突处理。切换同步目标会重建目标专属版本与游标，本机记录和删除记录保留。").font(.subheadline).foregroundStyle(.secondary)
                     Button("确认开启并同步") { preview = false; Task { await model.enableSync() } }.buttonStyle(PrimaryButtonStyle())
                     Spacer()
-                }.padding(24).frame(maxWidth: 600).navigationTitle("同步预览").toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { preview = false } } }
+                }.padding(24).frame(maxWidth: 600).frame(maxWidth: .infinity, maxHeight: .infinity).sxNavigationBackground().navigationTitle("同步预览").toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { preview = false } } }
             }
         }
     }
@@ -354,6 +356,46 @@ private struct ExpiryPreferencesView: View {
     @EnvironmentObject private var model: AppModel
     var body: some View { Form { Section { Stepper("提前 \(model.settings.soonDays) 天", value: Binding(get: { model.settings.soonDays }, set: { value in Task { var s = model.settings; s.soonDays = value; await model.updateSettings(s) } }), in: 1...30) } footer: { Text("用于首页待处理数量与用品临期标记。当前与 Android 一致，尚未提供系统通知推送。") } }.navigationTitle("用品临期提醒") }
 }
+private enum InstalledAppInfo {
+    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "未知"
+    static let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "未知"
+    static let trace: PackageTrace? = {
+        guard let url = Bundle.main.url(forResource: "suirenx-build", withExtension: "json"),
+              let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(PackageTrace.self, from: data)
+    }()
+    struct PackageTrace: Decodable {
+        let channel: String
+        let commit: String
+        let dirty: Bool
+        let built_at: String
+        var code: String { String(commit.prefix(7)) + (dirty ? "-dirty" : "") }
+        var localTime: String {
+            guard let date = ISO8601DateFormatter().date(from: built_at) else { return "未知" }
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "yyyy-MM-dd HH:mm"
+            return formatter.string(from: date)
+        }
+    }
+}
+
 private struct AboutView: View {
-    var body: some View { ScrollView { VStack(alignment: .leading, spacing: 16) { PageHeading(title: "燧人 · SuirenX", subtitle: "个人工具箱 · 本地优先"); InfoRow(label: "版本", value: "0.1.3 (1)"); Text("原生 iPhone / iPad 应用。资产和用品存于本机，仅在明确开启同步后发送到所选服务器。").font(.subheadline); NavigationLink("Fluent Emoji 开源许可", value: SettingsDestination.license) }.sxPage() }.navigationTitle("关于") }
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                PageHeading(title: "燧人 · SuirenX", subtitle: "个人工具箱 · 本地优先")
+                InfoRow(label: "版本号", value: InstalledAppInfo.version).accessibilityIdentifier("about.version")
+                InfoRow(label: "Build 号", value: InstalledAppInfo.build).accessibilityIdentifier("about.build")
+                #if DEBUG
+                if let trace = InstalledAppInfo.trace, trace.channel == "development" {
+                    InfoRow(label: "代码", value: trace.code).accessibilityIdentifier("about.code")
+                    InfoRow(label: "打包时间", value: trace.localTime).accessibilityIdentifier("about.builtAt")
+                }
+                #endif
+                Text("原生 iPhone / iPad 应用。资产和用品存于本机，仅在明确开启同步后发送到所选服务器。").font(.subheadline)
+                NavigationLink("Fluent Emoji 开源许可", value: SettingsDestination.license)
+            }.sxPage()
+        }.navigationTitle("关于")
+    }
 }

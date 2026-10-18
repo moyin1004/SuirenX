@@ -13,6 +13,12 @@ extension View {
             .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(.primary.opacity(0.09)))
     }
     func sxPage() -> some View { self.frame(maxWidth: 1000).padding(.horizontal, 16).padding(.bottom, 24).frame(maxWidth: .infinity).background(Palette.background) }
+    func sxNavigationBackground() -> some View {
+        self.scrollContentBackground(.hidden)
+            .background(Palette.background.ignoresSafeArea())
+            .toolbarBackground(Palette.background, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+    }
 }
 struct PrimaryButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var enabled

@@ -141,7 +141,7 @@ private struct ExpiryEditor: View {
                 }
                 Section("备注") { TextField("备注（可选）", text: $item.notes, axis: .vertical).lineLimit(4...8) }
                 if let validation { Text(validation).foregroundStyle(.red) }
-            }.scrollDismissesKeyboard(.immediately).frame(maxWidth: 640).frame(maxWidth: .infinity).scrollContentBackground(.hidden).background(Palette.background)
+            }.scrollDismissesKeyboard(.immediately).frame(maxWidth: 640).frame(maxWidth: .infinity).sxNavigationBackground()
                 .navigationTitle(isNew ? "新增用品" : "编辑用品").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(saving) }; ToolbarItem(placement: .confirmationAction) { Button(saving ? "保存中" : "保存") { save() }.keyboardShortcut("s", modifiers: .command).disabled(saving).accessibilityIdentifier("expiry.save") } }
         }.interactiveDismissDisabled(saving)

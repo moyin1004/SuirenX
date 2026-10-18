@@ -3,6 +3,8 @@
 .kotlin/
 .trae/
 build/
+__pycache__/
+/.suirenx-build/
 
 # IDE-generated source copies
 /apps/android/core/domain/bin/

@@ -10,7 +10,6 @@ import SuirenCore
             Group {
                 if let model {
                     RootView().environmentObject(model)
-                        .preferredColorScheme(model.settings.theme == "light" ? .light : model.settings.theme == "dark" ? .dark : nil)
                         .onChange(of: phase) { _, new in model.sceneChanged(new) }
                 } else if let startupError {
                     ContentUnavailableView { Label("本机数据暂时无法打开", systemImage: "externaldrive.badge.exclamationmark") }

@@ -16,6 +16,7 @@ struct RootView: View {
     @State private var assetQuery = AssetQuery()
     @State private var assetSearch = false
     @State private var assetCompact = false
+    @State private var assetEditor = false
     @State private var path = NavigationPath()
     @State private var columnVisibility: NavigationSplitViewVisibility = .detailOnly
     @State private var compactColumn: NavigationSplitViewColumn = .detail
@@ -24,12 +25,13 @@ struct RootView: View {
             let usesSidebar = UIDevice.current.userInterfaceIdiom == .pad && horizontalSizeClass == .regular && geometry.size.width >= 700
             VStack(spacing: 0) {
                 if UIDevice.current.userInterfaceIdiom == .pad { splitPages(usesSidebar: usesSidebar) }
-                else { pages }
+                else { pages() }
                 if !usesSidebar { bottomNavigation }
-            }.frame(maxWidth: .infinity, maxHeight: .infinity).background(Palette.background)
+            }.frame(maxWidth: .infinity, maxHeight: .infinity).background(Palette.background.ignoresSafeArea())
         }
         .onChange(of: selection) { _, _ in path = NavigationPath(); compactColumn = .detail }
         .alert("操作未完成", isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) { Button("好") { model.error = nil } } message: { Text(model.error ?? "") }
+        .preferredColorScheme(model.settings.theme == "light" ? .light : model.settings.theme == "dark" ? .dark : nil)
     }
     // One iPad detail hierarchy survives window-width changes, preserving unfinished forms.
     private func splitPages(usesSidebar: Bool) -> some View {
@@ -39,10 +41,14 @@ struct RootView: View {
                     .accessibilityIdentifier("nav.\(page.id)").listRowBackground(selection == page ? Palette.accent.opacity(0.65) : Color.clear)
                     .accessibilityAddTraits(selection == page ? .isSelected : [])
             } }
-                .navigationTitle("燧人").navigationSplitViewColumnWidth(min: 190, ideal: 220, max: 260)
-                .scrollContentBackground(.hidden).background(Palette.background).accessibilityHidden(!usesSidebar)
+                .navigationTitle("").navigationSplitViewColumnWidth(min: 190, ideal: 220, max: 260)
+                .sxNavigationBackground().toolbar(.hidden, for: .navigationBar)
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    Text("燧人").font(.title2.weight(.semibold)).frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+                        .padding(.horizontal, 16).background(Palette.background)
+                }.accessibilityHidden(!usesSidebar)
         } detail: {
-            pages.toolbar(removing: usesSidebar ? nil : .sidebarToggle).background(Palette.background)
+            pages(usesSidebar: usesSidebar).toolbar(removing: usesSidebar ? nil : .sidebarToggle).background(Palette.background)
         }
         .navigationSplitViewStyle(.balanced)
         .onChange(of: usesSidebar, initial: true) { _, wide in
@@ -60,23 +66,45 @@ struct RootView: View {
             }
         }.padding(7).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22)).overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(.primary.opacity(0.08))).padding(.horizontal, 14).padding(.bottom, 8)
     }
-    private var pages: some View {
+    private func pages(usesSidebar: Bool = false) -> some View {
         NavigationStack(path: $path) {
-            selectedPage.navigationBarTitleDisplayMode(.inline)
+            selectedPage.navigationTitle("").navigationBarTitleDisplayMode(.inline)
+                .sxNavigationBackground()
+                .toolbar(.hidden, for: .navigationBar)
+                .safeAreaInset(edge: .top, spacing: 0) { mainHeader(usesSidebar: usesSidebar) }
                 .navigationDestination(for: RecordDestination.self) { destination in
-                    switch destination {
-                    case .asset(let id): AssetDetailView(id: id)
-                    case .expiry(let id): ExpiryDetailView(id: id)
-                    case .expiryList: ExpiryView()
-                    }
+                    Group {
+                        switch destination {
+                        case .asset(let id): AssetDetailView(id: id)
+                        case .expiry(let id): ExpiryDetailView(id: id)
+                        case .expiryList: ExpiryView()
+                        }
+                    }.sxNavigationBackground().toolbar(.visible, for: .navigationBar)
                 }
-                .navigationDestination(for: SettingsDestination.self) { SettingsDestinationView(destination: $0) }
-        }.id(selection)
+                .navigationDestination(for: SettingsDestination.self) { SettingsDestinationView(destination: $0).sxNavigationBackground().toolbar(.visible, for: .navigationBar) }
+        }.background(Palette.background.ignoresSafeArea()).id(selection)
+    }
+    private func mainHeader(usesSidebar: Bool) -> some View {
+        HStack(spacing: 12) {
+            if usesSidebar {
+                Button { columnVisibility = columnVisibility == .all ? .detailOnly : .all } label: {
+                    Image(systemName: "sidebar.left").frame(width: 44, height: 44)
+                }.accessibilityLabel("切换侧栏")
+            }
+            Text(selection == .overview ? "燧人" : selection.rawValue)
+                .font(.title2.weight(.semibold)).accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("page.title")
+            Spacer(minLength: 0)
+            if selection == .assets {
+                Button { assetEditor = true } label: { Image(systemName: "plus").frame(width: 44, height: 44) }
+                    .accessibilityLabel("新增资产").accessibilityIdentifier("asset.add")
+            }
+        }.buttonStyle(.plain).frame(minHeight: 56).padding(.horizontal, 16).background(Palette.background)
     }
     @ViewBuilder private var selectedPage: some View {
         switch selection {
         case .overview: OverviewView { selection = $0 }
-        case .assets: AssetsView(query: $assetQuery, showSearch: $assetSearch, compact: $assetCompact)
+        case .assets: AssetsView(query: $assetQuery, showSearch: $assetSearch, showEditor: $assetEditor, compact: $assetCompact)
         case .tools: ToolsView()
         case .settings: SettingsView()
         }
@@ -99,7 +127,7 @@ struct OverviewView: View {
                 }.buttonStyle(.plain)
                 HStack { Text(model.syncLabel).font(.caption).foregroundStyle(.secondary); Spacer(); Button("同步设置") { select(.settings) }.font(.caption.weight(.semibold)) }.padding(.vertical, 8)
             }.sxPage()
-        }.navigationTitle("燧人").refreshable { await model.refresh() }
+        }.refreshable { await model.refresh() }
     }
 }
 struct ToolsView: View {
@@ -114,6 +142,6 @@ struct ToolsView: View {
                 }.buttonStyle(.plain).accessibilityIdentifier("tools.expiry")
                 Text("更多工具 · 即将加入").font(.subheadline).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).sxCard()
             }.sxPage()
-        }.navigationTitle("燧人")
+        }
     }
 }

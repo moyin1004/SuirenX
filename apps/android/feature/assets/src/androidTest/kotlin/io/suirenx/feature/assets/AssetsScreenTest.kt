@@ -26,6 +26,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -188,12 +189,14 @@ class AssetsScreenTest {
         composeRule.onAllNodesWithText("我的资产").assertCountEquals(0)
         val search = composeRule.onNodeWithContentDescription("搜索资产").assertIsDisplayed()
         val sort = composeRule.onNodeWithContentDescription("资产排序").assertIsDisplayed()
+        val tags = composeRule.onNodeWithContentDescription("标签筛选").assertIsDisplayed()
         val rowCenter = search.fetchSemanticsNode().boundsInRoot.center.y
         assertTrue(abs(sort.fetchSemanticsNode().boundsInRoot.center.y - rowCenter) < 2f)
+        assertTrue(abs(tags.fetchSemanticsNode().boundsInRoot.center.y - rowCenter) < 2f)
         AssetFilter.entries.forEach { filter ->
             val chip = composeRule.onNode(
                 hasText(filter.label) and SemanticsMatcher.keyIsDefined(SemanticsProperties.Selected),
-            ).assertIsDisplayed()
+            ).performScrollTo().assertIsDisplayed()
             assertTrue("${filter.label} must share the controls row", abs(chip.fetchSemanticsNode().boundsInRoot.center.y - rowCenter) < 2f)
         }
         captureScreen("asset-controls-one-row.png")
@@ -210,6 +213,46 @@ class AssetsScreenTest {
         assertEquals("搜索条件：Mac", composeRule.onNodeWithContentDescription("搜索资产").fetchSemanticsNode().config[SemanticsProperties.StateDescription])
         composeRule.onNodeWithText("MacBook Pro").assertIsDisplayed()
         composeRule.onAllNodesWithText("Kindle").assertCountEquals(0)
+    }
+
+    @Test
+    fun tagMenuKeepsIntersectionAndSearchWhenReopenedOrCleared() {
+        setScreen(AssetsUiState(isLoading = false, assets = listOf(
+            asset("mac", "MacBook Pro").copy(tags = listOf("工作", "常用")),
+            asset("kindle", "Kindle").copy(tags = listOf("工作")),
+        )), modifier = Modifier.width(320.dp))
+        composeRule.onAllNodesWithText("工作").assertCountEquals(0)
+        composeRule.onNodeWithContentDescription("标签筛选").performClick()
+        composeRule.onNodeWithText("工作").performClick()
+        composeRule.onNodeWithText("常用").performClick()
+        composeRule.onNodeWithText("常用").assertIsSelected()
+        captureDisplay("asset-tag-menu.png")
+        composeRule.onNodeWithText("完成").performClick()
+        composeRule.onNodeWithText("MacBook Pro").assertIsDisplayed()
+        composeRule.onAllNodesWithText("Kindle").assertCountEquals(0)
+        assertEquals("已选 2 个标签", composeRule.onNodeWithContentDescription("标签筛选")
+            .fetchSemanticsNode().config[SemanticsProperties.StateDescription])
+        captureScreen("asset-tag-selected.png")
+        composeRule.onNodeWithContentDescription("搜索资产").performClick()
+        composeRule.onNodeWithText("搜索名称、类型或标签").performTextInput("Mac")
+        composeRule.onNodeWithContentDescription("返回资产列表").performClick()
+        composeRule.onNodeWithContentDescription("标签筛选").performClick()
+        composeRule.onNodeWithText("工作").assertIsSelected()
+        composeRule.onNodeWithText("常用").assertIsSelected()
+        composeRule.onNodeWithText("全部标签").performClick()
+        composeRule.onNodeWithText("完成").performClick()
+        composeRule.onAllNodesWithText("Kindle").assertCountEquals(0)
+        assertEquals("搜索条件：Mac", composeRule.onNodeWithContentDescription("搜索资产")
+            .fetchSemanticsNode().config[SemanticsProperties.StateDescription])
+        assertEquals("全部标签", composeRule.onNodeWithContentDescription("标签筛选")
+            .fetchSemanticsNode().config[SemanticsProperties.StateDescription])
+    }
+
+    private fun captureDisplay(name: String) {
+        composeRule.waitForIdle()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val directory = instrumentation.targetContext.getExternalFilesDir(null)!!
+        File(directory, name).outputStream().use { instrumentation.uiAutomation.takeScreenshot().compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
     private fun captureScreen(name: String) {
@@ -250,6 +293,9 @@ class AssetsScreenTest {
                     searching = searching.value,
                     onQueryChange = { query.value = it },
                     onSearch = { searching.value = !searching.value },
+                    onTagToggle = { tag -> screenState.value = screenState.value.copy(selectedTags =
+                        if (tag in screenState.value.selectedTags) screenState.value.selectedTags - tag else screenState.value.selectedTags + tag) },
+                    onClearTags = { screenState.value = screenState.value.copy(selectedTags = emptySet()) },
                 )
             }
         }

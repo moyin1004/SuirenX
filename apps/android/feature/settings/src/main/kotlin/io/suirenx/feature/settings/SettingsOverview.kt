@@ -8,6 +8,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -41,6 +42,29 @@ internal fun SettingsCard(
             verticalArrangement = Arrangement.spacedBy(if (compact) 0.dp else 12.dp),
             content = content,
         )
+    }
+}
+
+@Composable
+internal fun SettingsHomeGroup(content: @Composable ColumnScope.() -> Unit) {
+    Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+        Column(Modifier.fillMaxWidth(), content = content)
+    }
+}
+
+@Composable
+internal fun SettingsHomeLink(title: String, description: String, icon: ImageVector, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp)
+        .heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(26.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text(title, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Text(description, fontSize = 12.sp, lineHeight = 17.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        }
+        Text("›", fontSize = 23.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
