@@ -4,6 +4,8 @@
 
 ## v0.1.3 发布范围与门禁
 
+本版已于 2026-10-18 完成 [GitHub Release](https://github.com/moyin1004/SuirenX/releases/tag/v0.1.3)、Android `0.1.3 / 1000601` 签名附件与服务端迁移 003 部署。以下条目是已执行门禁及保留的验证边界，证据见 [执行记录](history/roadmap-execution.md#v013-正式发布与配套部署)。
+
 2026-10-18：维护者授权发布 `v0.1.3`（非 `v0.1.13`），执行 review/提交、最终门禁、真机升级验收、服务端配套部署和 Android 签名发布。Android/iOS 产品版本统一为 `0.1.3`。本次 GitHub Release 分发 Android 签名 APK，包含 iOS/iPadOS 源码；iOS 继续本机签名安装，不把公开 IPA、TestFlight 或 App Store 分发作为本次门禁。
 
 - 最终源码须通过 Go 全量测试、两个 Proto descriptor、Android 相关单测/升级与 UI 回归、Debug/Release 构建、Swift 核心真实 HTTP 测试、通用 Xcode 构建及 `git diff --check`。
@@ -19,6 +21,7 @@
 - 普通 Android Studio / Xcode Build 复用本地最近分配的编号（首次为 4），不消耗新编号；会重新采集 Git 提交、未提交状态、源码摘要与 UTC 时间。脚本在忽略的 `.suirenx-build/development.xcconfig` 中同步最近编号，避免打包后再用 IDE 编译退回较低构建号。需要新编号和可保留的安装包时使用打包脚本。
 - 正式 Android 包由 GitHub Actions 的现有 Release APK workflow 分配独立编号：`1000000 + (GITHUB_RUN_NUMBER - 1) * 100 + GITHUB_RUN_ATTEMPT`。尝试号仅允许 1–99；为下一次运行保留间隔。开发号限制在 1000000 以下；两个渠道版本号相同，构建号不同。旧运行在已有更新运行时禁止重试，改为新建 workflow run；串行发布构建避免完成顺序反转。编号允许跳号，不要求每次加一。
 - 新规则随包含打包脚本的 tag 生效。重建 v0.1.2 等历史 tag 时，应运行该 tag 上固化的历史 workflow，保留当时的版本机制；新版 workflow 对不含脚本的 tag 明确失败，不改写历史源码或 tag。
+- 重建 `v0.1.3` 可从当前 main workflow 指定 `release_tag=v0.1.3`：工具从工作流自己的不可变提交读取到 `RUNNER_TEMP`，编译与身份逻辑仍来自干净的目标 tag。资源校验按 aapt 表定位实际构建 JSON，支持 Release 优化后的文件路径；缺失、歧义或内容差异仍拒绝交付。随包的 `suirenx-release-tooling.json` 分别记录工具工作流提交与应用源码提交，不通过移动 tag 修复发布工具。
 - Android 的 `versionCode` 使用上述整数；iOS 为满足三段数字格式，将同一逻辑构建号 N 映射为 `(N / 10000 + 1).(N / 100 % 100).(N % 100)`（整数除法），例如 N=4 对应 `1.0.4`，N=1000001 对应 `101.0.1`。包内 JSON 保留原始整数编号。两端不需要手改构建号。
 - 每个包内包含 `suirenx-build.json`（Android 为 raw 资源），记录产品版本、构建号、完整 Git SHA、是否含未提交改动、源码 SHA-256 摘要和 UTC 时间。关于页仅在开发包显示「代码」（7 位 SHA，修改中附 `-dirty`）与「打包时间」（设备本地时区，精确到分钟）；正式包只显示版本号 / Build 号。
 - 打包脚本先冻结身份，再编译；源码发生变化时拒绝交付。记录保存在忽略的 `build/packages/<平台>-<编号>/`。`dirty` 和摘要只能识别源码状态，不等同于保留未提交源码快照；要重现开发包，应先提交代码。正式打包要求干净工作区、tag 与产品版本一致且指向 HEAD。
