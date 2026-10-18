@@ -32,7 +32,7 @@ fun ToolsRoute(
             .padding(horizontal = 16.dp).padding(bottom = 110.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        SuirenHeader()
+        SuirenHeader(title = "工具")
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("把日常工具放在一起", fontSize = 29.sp, lineHeight = 36.sp, fontWeight = FontWeight.SemiBold)
             Text("从一个工具开始，后续可以继续扩展你的个人工作流。", fontSize = 13.sp, lineHeight = 21.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)

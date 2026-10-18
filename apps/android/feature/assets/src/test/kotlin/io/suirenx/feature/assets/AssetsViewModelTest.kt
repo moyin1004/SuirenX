@@ -331,6 +331,14 @@ class AssetsViewModelTest {
             return Result.success(saved)
         }
 
+        override suspend fun updateAssetSalePrice(id: String, salePriceCents: Long?): Result<Asset> {
+            pending?.await()
+            if (fail) return Result.failure(IllegalStateException("offline"))
+            val updated = assets.first { it.id == id }.copy(salePriceCents = salePriceCents)
+            replace(updated)
+            return Result.success(updated)
+        }
+
         override suspend fun updateAssetArchive(id: String, archive: Boolean): Result<Asset> {
             archiveCalls++
             pending?.await()

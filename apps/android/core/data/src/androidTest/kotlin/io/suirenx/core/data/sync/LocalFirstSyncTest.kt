@@ -23,6 +23,7 @@ import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
 import okio.Buffer
+import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import org.junit.*
 import org.junit.Assert.*
 import org.junit.runner.RunWith
@@ -47,9 +48,72 @@ class LocalFirstSyncTest {
     }
     private lateinit var tokens: AuthTokenStore
     private lateinit var backendSettings: MutableStateFlow<BackendSettings?>
+    private var supportsSalePrice = true
+    private var dropSalePrice = false
     private var loseResponse = false
     private var duringRequest: (() -> Unit)? = null
     private val date = LocalDate.of(2020, 1, 1)
+
+    @Test fun archivedSalePricePersistsBacksUpSyncsAndClears() = runBlocking {
+        val asset = assets.createAsset(NewAsset("卖出设备", 12345, date)).getOrThrow()
+        assertTrue(assets.updateAssetSalePrice(asset.id, 50).isFailure)
+        assets.updateAssetArchive(asset.id, true).getOrThrow()
+        assertTrue(assets.updateAssetSalePrice(asset.id, -1).isFailure)
+        assets.updateAssetSalePrice(asset.id, 8050).getOrThrow()
+        val exported = backup.export().getOrThrow()
+        assertTrue(exported.contains("\"salePriceCents\":8050"))
+        backup.restore(exported).getOrThrow()
+        assertEquals(8050L, assets.getAsset(asset.id).getOrThrow().salePriceCents)
+        val row = db.syncDao().all().first { it.id == asset.id }
+        assertEquals(8050L, json.decodeFromString<SyncAssetPayload>(row.payload).salePriceCents)
+        sync.retry().getOrThrow()
+        assertEquals(8050L, records[asset.id]!!.asset.salePriceCents)
+        assets.updateAssetArchive(asset.id, false).getOrThrow()
+        assertEquals(8050L, assets.getAsset(asset.id).getOrThrow().salePriceCents)
+        assets.updateAssetArchive(asset.id, true).getOrThrow()
+        assets.updateAssetSalePrice(asset.id, 0).getOrThrow()
+        assertEquals(0L, assets.getAsset(asset.id).getOrThrow().salePriceCents)
+        assets.updateAssetSalePrice(asset.id, null).getOrThrow()
+        assertNull(assets.getAsset(asset.id).getOrThrow().salePriceCents)
+    }
+
+    @Test fun oldServerCannotEraseSalePriceOnAcknowledgement() = runBlocking {
+        val asset = assets.createAsset(NewAsset("旧服务器", 12345, date)).getOrThrow()
+        assets.updateAssetArchive(asset.id, true).getOrThrow()
+        assets.updateAssetSalePrice(asset.id, 8050).getOrThrow()
+        dropSalePrice = true
+        assertTrue(sync.retry().isFailure)
+        assertEquals(8050L, assets.getAsset(asset.id).getOrThrow().salePriceCents)
+        assertNotNull(db.syncDao().session()!!.batch)
+        assertTrue(db.syncDao().all().first { it.id == asset.id }.dirty)
+    }
+
+    @Test fun oldServerPreflightKeepsBatchAndUpgradeRetriesWithoutPriorUpload() = runBlocking {
+        val asset = assets.createAsset(NewAsset("待升级服务器", 12345, date)).getOrThrow()
+        assets.updateAssetArchive(asset.id, true).getOrThrow()
+        assets.updateAssetSalePrice(asset.id, 0).getOrThrow()
+        supportsSalePrice = false
+        assertTrue(sync.retry().isFailure)
+        assertTrue(keys.isEmpty())
+        val frozen = db.syncDao().session()!!.batch!!
+        assertEquals(0L, assets.getAsset(asset.id).getOrThrow().salePriceCents)
+        supportsSalePrice = true
+        sync.retry().getOrThrow()
+        assertTrue(frozen.contains(keys.first()))
+        assertEquals(0L, records[asset.id]!!.asset.salePriceCents)
+        assertEquals(1L, records[asset.id]!!.version)
+    }
+
+    @Test fun productionHealthCapabilitiesNeverSendCredentials() = runBlocking {
+        val client = io.suirenx.core.data.di.NetworkModule.provideOkHttpClient(tokens).newBuilder().addInterceptor { chain ->
+            assertNull(chain.request().header("Authorization"))
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                .body("{\"asset_sale_price\":true}".toResponseBody("application/json".toMediaType())).build()
+        }.build()
+        val api = retrofit2.Retrofit.Builder().baseUrl("https://sync.test/").client(client)
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType())).build().create(SyncApi::class.java)
+        assertTrue(api.capabilities().assetSalePrice)
+    }
 
     @Before fun setUp() {
         db = Room.databaseBuilder(context, LocalDatabase::class.java, databaseName).build()
@@ -84,10 +148,15 @@ class LocalFirstSyncTest {
             override suspend fun select(mode: StorageMode) = Result.success(Unit)
         }
         val client = OkHttpClient.Builder().addInterceptor { chain ->
+            if (chain.request().url.encodedPath.endsWith("/healthz")) {
+                check(chain.request().header("Authorization") == null)
+                return@addInterceptor Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                    .body("{\"status\":\"ok\",\"asset_sale_price\":$supportsSalePrice}".toResponseBody("application/json".toMediaType())).build()
+            }
             val buffer = Buffer(); chain.request().body!!.writeTo(buffer)
             val request = json.decodeFromString<SyncRequest>(buffer.readUtf8())
             keys += request.idempotencyKey
-            val result = responses.getOrPut(request.idempotencyKey) {
+            var result = responses.getOrPut(request.idempotencyKey) {
                 val applied = mutableListOf<SyncAppliedChange>(); val conflicts = mutableListOf<SyncConflict>()
                 for (item in request.changes) {
                     val current = records[item.id]
@@ -101,6 +170,7 @@ class LocalFirstSyncTest {
                 SyncResponse(nextCursor = records.values.maxOfOrNull { it.cursor } ?: 0, applied = applied,
                     changes = records.values.filter { it.cursor > request.cursor }, conflicts = conflicts)
             }
+            if (dropSalePrice) result = result.copy(applied = result.applied.map { it.copy(asset = it.asset.copy(salePriceCents = null)) })
             duringRequest?.also { duringRequest = null; it() }
             if (loseResponse) { loseResponse = false; throw IOException("response lost") }
             Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")

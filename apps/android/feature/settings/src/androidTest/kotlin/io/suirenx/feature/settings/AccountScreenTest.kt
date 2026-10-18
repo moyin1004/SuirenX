@@ -2,6 +2,11 @@ package io.suirenx.feature.settings
 
 import android.graphics.Bitmap
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.SoftwareKeyboardController
@@ -23,6 +28,48 @@ import org.junit.runner.RunWith
 class AccountScreenTest {
     @get:Rule val composeRule = createComposeRule()
 
+    @Test fun developmentTraceIsHiddenForReleasePackages() {
+        val info = mutableStateOf(InstalledBuildInfo("development", "a1b2c3d4567890", true, "2026-10-18T08:30:00Z"))
+        composeRule.setContent {
+            SuirenXTheme {
+                androidx.compose.foundation.layout.Column { DevelopmentBuildRows(info.value) }
+            }
+        }
+        composeRule.onNodeWithTag("about.code").assertTextEquals("a1b2c3d-dirty")
+        composeRule.onNodeWithTag("about.builtAt").assertTextEquals(info.value.localTime)
+        composeRule.runOnIdle { info.value = info.value.copy(channel = "release", dirty = false) }
+        composeRule.onNodeWithTag("about.code").assertDoesNotExist()
+        composeRule.onNodeWithTag("about.builtAt").assertDoesNotExist()
+        composeRule.onNodeWithText("代码").assertDoesNotExist()
+        composeRule.onNodeWithText("打包时间").assertDoesNotExist()
+    }
+
+    @Test fun aboutShowsInstalledPackageVersionAndBuild() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        @Suppress("DEPRECATION")
+        val installed = context.packageManager.getPackageInfo(context.packageName, 0)
+        val theme = mutableStateOf(ThemeMode.Light)
+        composeRule.setContent {
+            SuirenXTheme(theme.value) {
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                    BackendSettingsScreen(state = BackendUiState(),
+                        onAddressChanged = {}, onNameChanged = {}, onSave = {}, onSelect = {},
+                        onRetry = {}, onUseLocal = {}, onUseRemote = {})
+                }
+            }
+        }
+        composeRule.onNodeWithText("关于").performScrollTo().performClick()
+        composeRule.onNodeWithText("版本号").assertIsDisplayed()
+        composeRule.onNodeWithText("Build 号").assertIsDisplayed()
+        composeRule.onNodeWithTag("about.version").assertTextEquals(installed.versionName ?: "未知")
+        @Suppress("DEPRECATION")
+        val build = if (android.os.Build.VERSION.SDK_INT >= 28) installed.longVersionCode else installed.versionCode.toLong()
+        composeRule.onNodeWithTag("about.build").assertTextEquals(build.toString())
+        capture("about-light.png")
+        composeRule.runOnIdle { theme.value = ThemeMode.Dark }
+        capture("about-dark.png")
+    }
+
     @Test fun passwordToggleAndRegistrationRulesPreserveInput() {
         val url = "https://example.test/"
         val state = mutableStateOf(BackendUiState(
@@ -30,18 +77,25 @@ class AccountScreenTest {
             inspectedServerUrl = url,
         ))
         var keyboard: SoftwareKeyboardController? = null
+        val theme = mutableStateOf(ThemeMode.Light)
         composeRule.setContent {
             keyboard = LocalSoftwareKeyboardController.current
-            SuirenXTheme(ThemeMode.Light) {
-                BackendSettingsScreen(state = state.value,
-                    onAddressChanged = {}, onNameChanged = {}, onSave = {}, onSelect = {},
-                    onRetry = {}, onUseLocal = {}, onUseRemote = {},
-                    onAuthUsernameChanged = { state.value = state.value.copy(authUsername = it) },
-                    onAuthPasswordChanged = { state.value = state.value.copy(authPassword = it) },
-                    onResetAuthForm = { state.value = state.value.copy(authPassword = "") },
-                )
+            SuirenXTheme(theme.value) {
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                    BackendSettingsScreen(state = state.value,
+                        onAddressChanged = {}, onNameChanged = {}, onSave = {}, onSelect = {},
+                        onRetry = {}, onUseLocal = {}, onUseRemote = {},
+                        onAuthUsernameChanged = { state.value = state.value.copy(authUsername = it) },
+                        onAuthPasswordChanged = { state.value = state.value.copy(authPassword = it) },
+                        onResetAuthForm = { state.value = state.value.copy(authPassword = "") },
+                    )
+                }
             }
         }
+        capture("settings-home-light.png")
+        composeRule.runOnIdle { theme.value = ThemeMode.Dark }
+        capture("settings-home-dark.png")
+        composeRule.runOnIdle { theme.value = ThemeMode.Light }
         composeRule.onAllNodesWithText("账号").onLast().performClick()
         composeRule.onNodeWithText("登录 / 注册").performClick()
         composeRule.onNode(hasSetTextAction() and hasText("账号")).performTextInput("tester")
@@ -70,10 +124,14 @@ class AccountScreenTest {
         composeRule.waitForIdle()
         // Let the platform IME resize finish before capturing the complete form.
         Thread.sleep(600)
+        capture("account-registration.png")
+    }
+
+    private fun capture(name: String) {
         composeRule.waitForIdle()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         composeRule.onRoot().captureToImage().asAndroidBitmap().let { bitmap ->
-            File(instrumentation.targetContext.cacheDir, "account-registration.png").outputStream().use {
+            File(instrumentation.targetContext.cacheDir, name).outputStream().use {
                 bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
             }
         }

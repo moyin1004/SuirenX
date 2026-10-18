@@ -44,6 +44,9 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -187,11 +190,12 @@ fun AssetsScreen(
                         onSearch = onSearch,
                         onSortSelected = onSortSelected,
                         onDirectionToggle = onSortDirectionToggle,
+                        tags = state.availableTags,
+                        selectedTags = state.selectedTags,
+                        onTagToggle = onTagToggle,
+                        onClearTags = onClearTags,
                         modifier = Modifier.padding(horizontal = 12.dp),
                     )
-                }
-                if (state.availableTags.isNotEmpty()) {
-                    TagFilters(state.availableTags, state.selectedTags, onTagToggle, onClearTags)
                 }
             }
         }
@@ -209,7 +213,7 @@ fun AssetsScreen(
 
 @Composable
 private fun Header(onRefresh: () -> Unit, modifier: Modifier = Modifier) {
-    SuirenHeader(modifier) {
+    SuirenHeader(modifier, title = "资产") {
         Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onRefresh, modifier = Modifier.size(44.dp)) {
@@ -254,35 +258,54 @@ private fun FilterChips(selected: AssetFilter, onSelected: (AssetFilter) -> Unit
 }
 
 @Composable
-private fun TagFilters(
+private fun TagFilterMenu(
     tags: List<String>,
     selectedTags: Set<String>,
     onToggle: (String) -> Unit,
     onClear: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    LazyRow(
-        modifier = modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        if (selectedTags.isNotEmpty()) {
-            item {
-                Surface(onClick = onClear, shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {
-                    Text("清除标签", modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp), fontSize = 11.sp)
-                }
+    var expanded by remember { mutableStateOf(false) }
+    Box(modifier) {
+        AssetToolbarButton(onClick = { expanded = true }, active = selectedTags.isNotEmpty(), modifier = Modifier
+            .semantics { stateDescription = if (selectedTags.isEmpty()) "全部标签" else "已选 ${selectedTags.size} 个标签" }) {
+            BadgedBox(badge = { if (selectedTags.isNotEmpty()) Badge { Text("${selectedTags.size}") } }) {
+                Icon(SuirenIcons.Filter, contentDescription = "标签筛选", modifier = Modifier.size(21.dp))
             }
         }
-        items(tags) { tag ->
-            val selected = tag in selectedTags
-            Surface(
-                onClick = { onToggle(tag) },
-                shape = CircleShape,
-                color = if (selected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.surface,
-                contentColor = if (selected) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
-                border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outlineVariant),
-            ) { Text(tag, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp), fontSize = 11.sp) }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.widthIn(max = 280.dp)) {
+            DropdownMenuItem(text = { Text("全部标签") }, onClick = onClear,
+                leadingIcon = { Checkbox(checked = selectedTags.isEmpty(), onCheckedChange = null) })
+            HorizontalDivider()
+            val options = (tags + selectedTags).distinct().sorted()
+            if (options.isEmpty()) DropdownMenuItem(text = { Text("暂无标签") }, enabled = false, onClick = {})
+            options.forEach { tag ->
+                DropdownMenuItem(text = { Text(tag, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
+                    leadingIcon = { Checkbox(checked = tag in selectedTags, onCheckedChange = null) },
+                    modifier = Modifier.semantics { selected = tag in selectedTags }, onClick = { onToggle(tag) })
+            }
+            HorizontalDivider()
+            DropdownMenuItem(text = { Text("完成") }, onClick = { expanded = false })
         }
+    }
+}
+
+@Composable
+private fun AssetToolbarButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    active: Boolean = false,
+    content: @Composable () -> Unit,
+) {
+    // Keep 48 dp touch targets while the 40 dp frames sit only 8 dp apart.
+    IconButton(onClick = onClick, modifier = modifier.size(48.dp)) {
+        Box(
+            Modifier.size(40.dp).background(
+                if (active) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                RoundedCornerShape(12.dp),
+            ),
+            contentAlignment = Alignment.Center,
+        ) { content() }
     }
 }
 
@@ -296,24 +319,28 @@ private fun AssetListToolbar(
     onSearch: () -> Unit,
     onSortSelected: (AssetSort) -> Unit,
     onDirectionToggle: () -> Unit,
+    tags: List<String>,
+    selectedTags: Set<String>,
+    onTagToggle: (String) -> Unit,
+    onClearTags: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         FilterChips(selectedFilter, onFilterSelected, modifier = Modifier.weight(1f))
-        IconButton(
+        TagFilterMenu(tags, selectedTags, onTagToggle, onClearTags)
+        AssetToolbarButton(
             onClick = onSearch,
-            modifier = Modifier.size(48.dp)
-                .clip(CircleShape)
-                .background(if (query.isNotBlank()) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+            active = query.isNotBlank(),
+            modifier = Modifier
                 .semantics { stateDescription = if (query.isBlank()) "未启用搜索" else "搜索条件：$query" },
         ) {
             Icon(Icons.Default.Search, contentDescription = "搜索资产", modifier = Modifier.size(20.dp))
         }
         Box {
-            IconButton(
+            AssetToolbarButton(
                 onClick = { expanded = true },
-                modifier = Modifier.size(48.dp).semantics {
+                modifier = Modifier.semantics {
                     stateDescription = "${sort.label}，${if (descending) "降序" else "升序"}"
                 },
             ) {
@@ -453,7 +480,14 @@ private fun AssetCard(asset: Asset, onClick: () -> Unit, modifier: Modifier = Mo
                 lineHeight = 15.sp,
                 maxLines = 1,
             )
-            Spacer(Modifier.height(14.dp))
+            // Reuse the original 14 dp gap so a sale price never grows the card.
+            val salePrice = asset.salePriceCents
+            if (salePrice != null) {
+                Text("卖出 ¥${java.math.BigDecimal.valueOf(salePrice, 2).toPlainString()}",
+                    modifier = Modifier.height(14.dp), fontSize = 11.sp, lineHeight = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+                    softWrap = false, autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 6.sp, maxFontSize = 11.sp))
+            } else Spacer(Modifier.height(14.dp))
             Text(
                 buildAnnotatedString {
                     withStyle(SpanStyle(fontFamily = SuirenNumberFont, letterSpacing = (-0.28).sp)) {

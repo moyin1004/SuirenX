@@ -34,6 +34,7 @@ type AssetView struct {
 	Version         int64    `json:"version"`
 	Name            string   `json:"name"`
 	PriceCents      int64    `json:"price_cents"`
+	SalePriceCents  *int64   `json:"sale_price_cents"`
 	PurchaseDate    string   `json:"purchase_date"`
 	Status          string   `json:"status"`
 	ImageURL        string   `json:"image_url"`
@@ -442,6 +443,7 @@ func (s *AssetService) toView(asset domain.Asset) AssetView {
 		ID:              asset.ID,
 		Name:            asset.Name,
 		PriceCents:      asset.PriceCents,
+		SalePriceCents:  asset.SalePriceCents,
 		PurchaseDate:    asset.PurchaseDate.Format(time.DateOnly),
 		Status:          string(asset.Status),
 		ImageURL:        asset.ImageURL,

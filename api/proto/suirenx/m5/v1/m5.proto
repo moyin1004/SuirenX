@@ -114,6 +114,7 @@ message WebAsset {
   string warranty_end_date = 14;
   string notes = 15;
   repeated string tags = 16;
+  optional int64 sale_price_cents = 17;
 }
 message WebAssetListRequest {
   string owner_id = 1 [(api.query) = "owner_id"];
@@ -326,6 +327,8 @@ message SyncAsset {
   string warranty_end_date = 13;
   string notes = 14;
   repeated string tags = 15;
+  // Integer cents; null clears, omission by an older writer preserves the stored value.
+  optional int64 sale_price_cents = 16;
 }
 
 message SyncAssetsRequest {

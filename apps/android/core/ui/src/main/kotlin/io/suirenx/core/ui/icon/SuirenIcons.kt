@@ -13,6 +13,42 @@ object SuirenIcons {
     val Visibility: ImageVector = visibilityIcon(false)
     val VisibilityOff: ImageVector = visibilityIcon(true)
 
+    val Filter: ImageVector = ImageVector.Builder("Filter", 24.dp, 24.dp, 24f, 24f).apply {
+        path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.7f, strokeLineCap = StrokeCap.Round) {
+            moveTo(4f, 6f); lineTo(20f, 6f)
+            moveTo(7f, 12f); lineTo(17f, 12f)
+            moveTo(10f, 18f); lineTo(14f, 18f)
+        }
+    }.build()
+
+    val Backup: ImageVector = ImageVector.Builder("Backup", 24.dp, 24.dp, 24f, 24f).apply {
+        path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.7f, strokeLineJoin = StrokeJoin.Round) {
+            moveTo(5f, 4f); lineTo(19f, 4f); lineTo(22f, 14f); lineTo(22f, 20f); lineTo(2f, 20f); lineTo(2f, 14f); close()
+            moveTo(2f, 14f); lineTo(22f, 14f)
+            moveTo(15f, 17f); lineTo(18f, 17f)
+        }
+    }.build()
+
+    val Appearance: ImageVector = ImageVector.Builder("Appearance", 24.dp, 24.dp, 24f, 24f).apply {
+        path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.7f) {
+            moveTo(12f, 3f); arcTo(9f, 9f, 0f, true, true, 12f, 21f)
+            arcTo(9f, 9f, 0f, true, true, 12f, 3f); close()
+        }
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(12f, 3f); arcTo(9f, 9f, 0f, false, false, 12f, 21f); close()
+        }
+    }.build()
+
+    val Server: ImageVector = ImageVector.Builder("Server", 24.dp, 24.dp, 24f, 24f).apply {
+        path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.7f, strokeLineJoin = StrokeJoin.Round) {
+            moveTo(12f, 3f); arcTo(9f, 9f, 0f, true, true, 12f, 21f)
+            arcTo(9f, 9f, 0f, true, true, 12f, 3f); close()
+            moveTo(3f, 12f); lineTo(21f, 12f)
+            moveTo(12f, 3f); curveTo(6f, 8f, 6f, 16f, 12f, 21f)
+            curveTo(18f, 16f, 18f, 8f, 12f, 3f)
+        }
+    }.build()
+
     val Sort: ImageVector = ImageVector.Builder("Sort", 24.dp, 24.dp, 24f, 24f).apply {
         path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.7f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
             moveTo(8f, 19f); lineTo(8f, 5f)

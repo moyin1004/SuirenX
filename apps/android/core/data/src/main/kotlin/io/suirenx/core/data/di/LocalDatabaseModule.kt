@@ -38,6 +38,11 @@ object LocalDatabaseModule {
                     db.execSQL("CREATE TABLE IF NOT EXISTS local_sync_session (singleton INTEGER NOT NULL PRIMARY KEY, target TEXT NOT NULL, cursor INTEGER NOT NULL, expiryCursor INTEGER NOT NULL, batch TEXT, lastSyncedAt TEXT)")
                 }
             })
+            .addMigrations(object : Migration(3, 4) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE assets ADD COLUMN salePriceCents INTEGER")
+                }
+            })
             .build()
 
     @Provides

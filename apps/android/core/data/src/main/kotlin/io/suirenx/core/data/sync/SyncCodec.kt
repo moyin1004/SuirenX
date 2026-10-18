@@ -8,7 +8,7 @@ import javax.inject.Inject
 class SyncCodec @Inject constructor(private val clock: Clock) {
     fun toPayload(asset: Asset, deleted: Boolean, baseVersion: Long) = SyncAssetPayload(
         id = asset.id, baseVersion = baseVersion, deleted = deleted,
-        name = asset.name, priceCents = asset.priceCents, purchaseDate = asset.purchaseDate.toString(),
+        name = asset.name, priceCents = asset.priceCents, salePriceCents = asset.salePriceCents, purchaseDate = asset.purchaseDate.toString(),
         status = asset.status.toApiValue(), imageUrl = asset.imageUrl,
         retiredDate = asset.retiredDate?.toString().orEmpty(), archivedAt = asset.archivedAt?.toString().orEmpty(),
         iconKey = asset.iconKey, purchaseChannel = asset.purchaseChannel.orEmpty(),
@@ -29,7 +29,7 @@ class SyncCodec @Inject constructor(private val clock: Clock) {
         val heldDays = calculateHeldDays(purchase, statusValue, retired, today())
         val timestamp = deletedAt.takeIf(String::isNotBlank)?.let(Instant::parse) ?: Instant.now(clock)
         return Asset(
-            id = id, name = name, priceCents = priceCents, purchaseDate = purchase, status = statusValue,
+            id = id, name = name, priceCents = priceCents, salePriceCents = salePriceCents, purchaseDate = purchase, status = statusValue,
             imageUrl = imageUrl, heldDays = heldDays, dailyCostCents = calculateDailyCostCents(priceCents, heldDays),
             retiredDate = retired, archivedAt = archivedAt.takeIf(String::isNotBlank)?.let(Instant::parse),
             iconKey = iconKey.ifBlank { "devices" }, purchaseChannel = purchaseChannel.takeIf(String::isNotBlank),

@@ -19,6 +19,7 @@ import io.suirenx.core.ui.theme.SuirenXTheme
 @Composable
 fun SuirenHeader(
     modifier: Modifier = Modifier,
+    title: String = "燧人",
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     Row(
@@ -26,7 +27,7 @@ fun SuirenHeader(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            "燧人",
+            title,
             modifier = Modifier.weight(1f),
             fontSize = 23.sp,
             lineHeight = 32.sp,

@@ -10,22 +10,24 @@ import (
 )
 
 type SyncAssetInput struct {
-	ID              string
-	BaseVersion     int64
-	Deleted         bool
-	Name            string
-	PriceCents      int64
-	PurchaseDate    string
-	Status          string
-	ImageURL        string
-	RetiredDate     string
-	ArchivedAt      string
-	IconKey         string
-	PurchaseChannel string
-	WarrantyEndDate string
-	Notes           string
-	Tags            []string
-	RequireRestore  bool
+	ID                string
+	BaseVersion       int64
+	Deleted           bool
+	Name              string
+	PriceCents        int64
+	SalePriceCents    *int64
+	SalePriceProvided bool
+	PurchaseDate      string
+	Status            string
+	ImageURL          string
+	RetiredDate       string
+	ArchivedAt        string
+	IconKey           string
+	PurchaseChannel   string
+	WarrantyEndDate   string
+	Notes             string
+	Tags              []string
+	RequireRestore    bool
 }
 
 type SyncRepository interface {
@@ -188,6 +190,9 @@ func (r *GormAssetRepository) ApplyBatch(ownerID string, cursor int64, idempoten
 
 func applyInput(record *AssetRecord, input SyncAssetInput, now time.Time) {
 	record.Name = input.Name
+	if input.SalePriceProvided || input.SalePriceCents != nil {
+		record.SalePriceCents = input.SalePriceCents
+	}
 	record.PriceCents = input.PriceCents
 	record.PurchaseDate, _ = time.Parse(time.DateOnly, input.PurchaseDate)
 	record.Status = input.Status
@@ -214,7 +219,12 @@ func assetArchiveTransitionOnly(record AssetRecord, input SyncAssetInput) bool {
 	if record.ArchivedAt == nil {
 		return true
 	}
-	if input.ArchivedAt != "" {
+	if input.ArchivedAt != "" && input.ArchivedAt != formatTimestamp(record.ArchivedAt) {
+		return false
+	}
+	// While still archived only the sale price may change. Restoration preserves it.
+	if input.ArchivedAt == "" && (input.SalePriceProvided || input.SalePriceCents != nil) &&
+		!equalOptionalCents(record.SalePriceCents, input.SalePriceCents) {
 		return false
 	}
 	return record.Name == input.Name &&
@@ -230,6 +240,10 @@ func assetArchiveTransitionOnly(record AssetRecord, input SyncAssetInput) bool {
 		equalTags(decodeTags(record.TagsJSON), input.Tags)
 }
 
+func equalOptionalCents(a, b *int64) bool {
+	return a == nil && b == nil || a != nil && b != nil && *a == *b
+}
+
 func equalTags(left, right []string) bool {
 	if len(left) != len(right) {
 		return false
@@ -243,7 +257,7 @@ func equalTags(left, right []string) bool {
 }
 
 func snapshot(record AssetRecord) domain.SyncAsset {
-	return domain.SyncAsset{ID: record.ID, Name: record.Name, PriceCents: record.PriceCents, PurchaseDate: formatDate(record.PurchaseDate), Status: record.Status, ImageURL: record.ImageURL, RetiredDate: formatDatePtr(record.RetiredAt), ArchivedAt: formatTimestamp(record.ArchivedAt), IconKey: record.IconKey, PurchaseChannel: record.PurchaseChannel, WarrantyEndDate: formatDatePtr(record.WarrantyEndDate), Notes: record.Notes, Tags: decodeTags(record.TagsJSON)}
+	return domain.SyncAsset{ID: record.ID, Name: record.Name, PriceCents: record.PriceCents, SalePriceCents: record.SalePriceCents, PurchaseDate: formatDate(record.PurchaseDate), Status: record.Status, ImageURL: record.ImageURL, RetiredDate: formatDatePtr(record.RetiredAt), ArchivedAt: formatTimestamp(record.ArchivedAt), IconKey: record.IconKey, PurchaseChannel: record.PurchaseChannel, WarrantyEndDate: formatDatePtr(record.WarrantyEndDate), Notes: record.Notes, Tags: decodeTags(record.TagsJSON)}
 }
 
 func mustJSON(value domain.SyncAsset) string {

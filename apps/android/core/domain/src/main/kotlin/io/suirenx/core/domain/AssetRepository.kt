@@ -6,6 +6,8 @@ import io.suirenx.core.model.NewAsset
 import java.time.LocalDate
 
 interface AssetRepository {
+    suspend fun updateAssetSalePrice(id: String, salePriceCents: Long?): Result<Asset>
+
     suspend fun deleteAsset(id: String): Result<Unit>
 
     suspend fun updateAssetArchive(id: String, archive: Boolean): Result<Asset>

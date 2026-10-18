@@ -19,4 +19,5 @@ data class AssetEntity(
     val tagsJson: String,
     val createdAt: String,
     val updatedAt: String,
+    val salePriceCents: Long? = null,
 )

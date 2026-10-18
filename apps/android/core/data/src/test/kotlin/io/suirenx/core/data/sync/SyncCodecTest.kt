@@ -37,6 +37,13 @@ class SyncCodecTest {
             baseVersion = 0,
         )
 
+        for (cents in listOf(null, 0L, 8050L, Long.MAX_VALUE)) {
+            val withPrice = payload.copy(salePriceCents = cents)
+            val wire = json.encodeToString(withPrice)
+            assertTrue(wire.contains("\"sale_price_cents\":${cents ?: "null"}"))
+            val restored = json.decodeFromString<io.suirenx.core.data.network.SyncAssetPayload>(wire)
+            assertEquals(cents, with(codec) { restored.toAsset(1, "").salePriceCents })
+        }
         assertEquals("ACTIVE", payload.status)
         assertEquals("", payload.warrantyEndDate)
         val encoded = json.encodeToString(payload)
