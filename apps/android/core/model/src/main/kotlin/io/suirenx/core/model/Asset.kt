@@ -27,6 +27,7 @@ data class Asset(
     val createdAt: Instant = Instant.EPOCH,
     val updatedAt: Instant = Instant.EPOCH,
     val syncVersion: Long = 0,
+    val salePriceCents: Long? = null,
 ) {
     val isArchived: Boolean get() = archivedAt != null
 }

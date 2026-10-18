@@ -70,6 +70,7 @@ type Asset struct {
 	Version         int64
 	Name            string
 	PriceCents      int64
+	SalePriceCents  *int64
 	PurchaseDate    time.Time
 	RetiredAt       *time.Time
 	ArchivedAt      *time.Time
@@ -88,6 +89,7 @@ type SyncAsset struct {
 	ID              string   `json:"id"`
 	Name            string   `json:"name"`
 	PriceCents      int64    `json:"price_cents"`
+	SalePriceCents  *int64   `json:"sale_price_cents"`
 	PurchaseDate    string   `json:"purchase_date"`
 	Status          string   `json:"status"`
 	ImageURL        string   `json:"image_url"`

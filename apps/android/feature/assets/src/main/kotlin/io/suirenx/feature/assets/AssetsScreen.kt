@@ -480,7 +480,14 @@ private fun AssetCard(asset: Asset, onClick: () -> Unit, modifier: Modifier = Mo
                 lineHeight = 15.sp,
                 maxLines = 1,
             )
-            Spacer(Modifier.height(14.dp))
+            // Reuse the original 14 dp gap so a sale price never grows the card.
+            val salePrice = asset.salePriceCents
+            if (salePrice != null) {
+                Text("卖出 ¥${java.math.BigDecimal.valueOf(salePrice, 2).toPlainString()}",
+                    modifier = Modifier.height(14.dp), fontSize = 11.sp, lineHeight = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+                    softWrap = false, autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 6.sp, maxFontSize = 11.sp))
+            } else Spacer(Modifier.height(14.dp))
             Text(
                 buildAnnotatedString {
                     withStyle(SpanStyle(fontFamily = SuirenNumberFont, letterSpacing = (-0.28).sp)) {

@@ -167,6 +167,35 @@ import XCTest
         XCTAssertTrue(app.buttons["nav.assets"].waitForExistence(timeout: 5)); shot("accessibility-largest-landscape")
         XCUIDevice.shared.orientation = .portrait
     }
+    func testArchivedSalePriceAndCard() throws {
+        launch()
+        app.buttons["nav.assets"].tap()
+        app.buttons["asset.filter"].tap(); app.buttons["全部"].tap()
+        app.buttons["asset.add"].tap()
+        app.textFields["asset.name"].tap(); app.textFields["asset.name"].typeText("卖出价格验收设备")
+        app.textFields["asset.price"].tap(); app.textFields["asset.price"].typeText("168.50")
+        dismissKeyboard(); tapControl(app.buttons["asset.save"])
+        let card = record("卖出价格验收设备")
+        XCTAssertTrue(card.waitForExistence(timeout: 5)); XCTAssertFalse(card.label.contains("卖出 ¥"))
+        XCTAssertTrue(card.label.contains("/天")); let originalSize = card.frame.size
+        card.tap(); reveal(app.buttons["归档记录"]); app.buttons["归档记录"].tap()
+        let input = app.textFields["asset.salePrice"]
+        reveal(input); input.tap(); input.typeText("80.50")
+        if app.buttons["asset.salePrice.done"].exists { tapControl(app.buttons["asset.salePrice.done"]) }; reveal(app.buttons["asset.saveSalePrice"]); tapControl(app.buttons["asset.saveSalePrice"])
+        shot("sale-price-editor")
+        goBack()
+        XCTAssertTrue(record("卖出 ¥80.50").waitForExistence(timeout: 5))
+        XCTAssertEqual(card.frame.width, originalSize.width, accuracy: 1)
+        XCTAssertEqual(card.frame.height, originalSize.height, accuracy: 1)
+        XCTAssertTrue(card.label.contains("/天")); shot("sale-price-card")
+        card.tap(); reveal(input); input.tap()
+        input.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: (input.value as? String ?? "").count) + "0")
+        if app.buttons["asset.salePrice.done"].exists { tapControl(app.buttons["asset.salePrice.done"]) }; reveal(app.buttons["asset.saveSalePrice"]); tapControl(app.buttons["asset.saveSalePrice"]); goBack()
+        XCTAssertTrue(record("卖出 ¥0.00").waitForExistence(timeout: 5)); shot("sale-zero-card")
+        card.tap(); reveal(input); input.tap(); input.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: (input.value as? String ?? "").count))
+        if app.buttons["asset.salePrice.done"].exists { tapControl(app.buttons["asset.salePrice.done"]) }; reveal(app.buttons["asset.saveSalePrice"]); tapControl(app.buttons["asset.saveSalePrice"]); goBack()
+        XCTAssertTrue(card.waitForExistence(timeout: 5)); XCTAssertFalse(card.label.contains("卖出 ¥")); shot("sale-empty-card")
+    }
     func testOfflineAssetAndExpiryRoundTrip() throws {
         launch()
         app.buttons["nav.assets"].tap(); app.buttons["asset.add"].tap()

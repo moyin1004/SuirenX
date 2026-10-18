@@ -770,3 +770,25 @@ Android 列表只展示已保存地址、当前选择标记、空态与添加入
 - Workflow YAML、Python 语法和 `git diff --check` 通过。新版 GitHub Actions 尚未真正触发，不将编号逻辑单测与本地 unsigned Release 编译称为云端签名发布；iOS 云端签名/Archive/App Store 流程未新增。未更新实体设备、提交源码、创建 tag、发布或部署。
 
 日志、结果包和截图保留于忽略的本地构建目录及临时目录。保留本轮开始时的其它界面修改。
+
+### 归档卖出价格与两端卡片统一
+
+2026-10-18：维护者要求已归档设备可填写卖出价格，有值显示在卡片；随后要求两端卡片以 Android 为准、主要关注日均成本，保留卡片原尺寸，只重排内容。
+
+先读取并更新唯一 `suirenx-asset-ui-redesign / suirenx-asset-redesign.html` 原稿（Version 80/81），实际预览验证输入保存与卡片展示，再实现原生界面。最终顺序为图标/状态、名称、购入价与持有天数、可选卖出价格、主金额日均成本 `/天`。Android 复用原 14 dp 留白，iOS 保留原 minHeight 170 与 14 pt 内边距；没有增加卡片尺寸配置。iPhone/iPad UI 用同一记录填写前后的 frame 验证宽高不变，Android 360 dp 用有值/零元/空值三卡对比高度。零元显示，空值隐藏；恢复归档保留价格，不改购入总额或日均成本算法。其它资产资料仍需先恢复后编辑。iOS 数字键盘附带原生「完成」入口，可先收起浮动键盘再保存。
+
+新增可空整数分 `salePriceCents` / HTTP `sale_price_cents`，贯通本地业务记录、原子 journal、固定批次、同步响应/历史/冲突快照及 JSON v1 备份。Room 追加 3→4 可空列，既有 1→2→3 不变；升级测试覆盖 1/2/3→4，保留归档资产、备注/标签、用品、同步 revision 与固定批次。iOS SQLite 的 JSON 旧记录缺字段解码为空，不改表结构。服务端只追加 `003_asset_sale_price.sql`，校验非负；失败迁移证明列、原记录与迁移历史整体回滚。
+
+跨版本保护：旧客户端不传卖出价时保留服务端现值；新客户端传 JSON null 才清空。含非空卖出价（包括 0）的批次发送前，通过不带凭据的 `/healthz` 检查 `asset_sale_price=true`；旧服务器不支持时不上传，固定批次留存，升级后用原批次和幂等键重试。另防御服务端确认丢失价格的异常响应，拒绝覆盖本机数据。Android 生产网络拦截器也明确排除健康探测凭据，模拟器回归验证实际配置无 Authorization。
+
+验证：Go 全量测试通过（含真实监听 HTTP 边界、卖出价同步/历史及迁移升级回滚）；使用仓库脚本重新生成 Hertz 模型并通过两份 Proto descriptor。Android Debug 构建、资产 35 项与数据 9 项 JVM 测试通过；标准 AndroidJUnitRunner 在 API 36 模拟器执行 25 项数据/升级测试与 1 项卡片显示/尺寸测试通过。Swift 24 项核心测试全部通过、无跳过，含本机临时 Go 服务双端真实 HTTP 的卖出价/零元/清空、旧服务预检不上传。通用 Xcode target 编译通过，iPhone 与 iPad 归档卖出价完整 UI 回归和截图通过；最终数字键盘版本已在 iPhone 再跑同一流程通过。`git diff --check` 通过。
+
+环境区别：沙箱阻止本机 socket/Swift 缓存，改用批准的本机测试执行；Gradle 隔离缓存缺插件，使用已填充默认缓存离线构建。离线 UTP 插件缺失时，直接通过标准 instrumentation runner 执行已构建的测试 APK。首次未签名 iOS UI 包缺 Keychain entitlement，改用项目既有模拟器临时签名后解决。iPad 浮动键盘下的 AX 判定问题通过原生键盘「完成」入口复验，不改凭据安全规则或实体设备。
+
+本轮未发布、未更新实体设备、未部署生产服务。原安装库与生产库数据未写入验收记录。生产服务需先部署支持能力声明与 003 迁移的新版本再同步卖出价；本机填写/备份可独立使用。截图与本机测试日志保留在忽略目录 `.suirenx-build/verification/2026-10-18-sale-price/`，包含 Android、iPhone、iPad 卡片和 iPad 输入截图。
+
+### v0.1.3 发布前 review 与范围冻结
+
+2026-10-18：维护者明确授权发布 `v0.1.3`，包含原生 iOS/iPadOS 源码、Android/iOS 界面调整、共享构建追溯和归档卖出价格；GitHub 分发 Android 签名 APK，iOS 继续本机签名安装。本轮 review 检查本地业务写入/journal 原子性、Room 3→4 与服务端 003 迁移、缺字段/null/零元、旧客户端保值、固定批次预检与响应确认、备份兼容和构建身份冻结，未发现新增阻塞问题。旧服务器会阻塞整个含价批次及此客户端后续同步，这是现有兼容保护行为，已补入发布门禁。
+
+提交前 Go 全量非缓存测试通过，构建编号 6 项 Python 测试通过，GitHub release Environment 与四项签名 secret 名称已重新核验（不读取 secret 值）。当前分支相对远端 main 为 ahead 2 / behind 0，无现有本版 PR。最终提交门禁、实体设备升级、生产部署与正式签名产物仍需后续执行，不以既有模拟器或历史发布记录替代。

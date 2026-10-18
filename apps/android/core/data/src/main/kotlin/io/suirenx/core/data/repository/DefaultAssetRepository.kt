@@ -12,6 +12,9 @@ class DefaultAssetRepository @Inject constructor(
     private val scheduler: io.suirenx.core.domain.SyncScheduleRepository,
     private val local: LocalAssetRepository,
 ) : AssetRepository {
+    override suspend fun updateAssetSalePrice(id: String, salePriceCents: Long?): Result<Asset> =
+        local.updateAssetSalePrice(id, salePriceCents).also { if (it.isSuccess) scheduler.onLocalChange() }
+
     override suspend fun deleteAsset(id: String): Result<Unit> =
         local.deleteAsset(id).also { if (it.isSuccess) scheduler.onLocalChange() }
 

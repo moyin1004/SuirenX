@@ -34,8 +34,12 @@ data class AssetDetailUiState(
     val archiveTarget: Boolean? = null,
     val archiveError: String? = null,
     val isSavingArchive: Boolean = false,
+    val salePriceInput: String = "",
+    val salePriceError: String? = null,
+    val salePriceDirty: Boolean = false,
+    val isSavingSalePrice: Boolean = false,
 ) {
-    val isSaving: Boolean get() = isSavingStatus || isSavingArchive || isDeleting
+    val isSaving: Boolean get() = isSavingStatus || isSavingArchive || isDeleting || isSavingSalePrice
 }
 
 @HiltViewModel
@@ -47,6 +51,7 @@ class AssetDetailViewModel @Inject constructor(
     private val modes: StorageModeRepository = NoopDetailModes,
     private val deleteAsset: io.suirenx.core.domain.DeleteAssetUseCase? = null,
     private val dataChanges: io.suirenx.core.domain.DataChangeNotifier = io.suirenx.core.domain.DataChangeNotifier(),
+    private val updateAssetSalePrice: io.suirenx.core.domain.UpdateAssetSalePriceUseCase? = null,
 ) : ViewModel() {
     val uiState: StateFlow<AssetDetailUiState>
         field = MutableStateFlow(AssetDetailUiState())
@@ -110,6 +115,37 @@ class AssetDetailViewModel @Inject constructor(
             } finally {
                 uiState.update { it.copy(isDeleting = false) }
             }
+        }
+    }
+
+    fun changeSalePrice(value: String) {
+        if (!uiState.value.isSaving) uiState.update { it.copy(salePriceInput = value, salePriceError = null, salePriceDirty = true) }
+    }
+
+    fun saveSalePrice() {
+        val state = uiState.value
+        val asset = state.asset ?: return
+        val action = updateAssetSalePrice ?: return
+        if (state.isSaving || !asset.isArchived) return
+        val cents = try { parseSalePrice(state.salePriceInput) } catch (error: IllegalArgumentException) {
+            uiState.update { it.copy(salePriceError = error.message) }; return
+        }
+        loadJob?.cancel()
+        uiState.update { it.copy(isSavingSalePrice = true, salePriceError = null) }
+        viewModelScope.launch {
+            try {
+                action(asset.id, cents).fold(
+                    onSuccess = { saved ->
+                        uiState.update { it.copy(asset = saved, salePriceDirty = false,
+                            salePriceInput = saved.salePriceCents?.let { cents -> java.math.BigDecimal.valueOf(cents, 2).toPlainString() }.orEmpty()) }
+                        changeNotifier.notifyAssetChanged()
+                    },
+                    onFailure = { error ->
+                        if (error is CancellationException) throw error
+                        uiState.update { it.copy(salePriceError = error.message ?: "卖出价格保存失败，请重试") }
+                    },
+                )
+            } finally { uiState.update { it.copy(isSavingSalePrice = false) } }
         }
     }
 
@@ -228,7 +264,8 @@ class AssetDetailViewModel @Inject constructor(
             getAsset(id).fold(
                 onSuccess = { asset ->
                     uiState.update {
-                        it.copy(isLoading = false, asset = asset, errorMessage = null)
+                        it.copy(isLoading = false, asset = asset, errorMessage = null,
+                            salePriceInput = if (it.asset?.id != asset.id || !it.salePriceDirty) asset.salePriceCents?.let { cents -> java.math.BigDecimal.valueOf(cents, 2).toPlainString() }.orEmpty() else it.salePriceInput)
                     }
                 },
                 onFailure = {
@@ -251,4 +288,12 @@ private object NoopDetailModes : StorageModeRepository {
     override val mode = MutableStateFlow<io.suirenx.core.model.StorageMode?>(null)
     override suspend fun initialize() = Result.success(Unit)
     override suspend fun select(mode: io.suirenx.core.model.StorageMode) = Result.success(Unit)
+}
+
+internal fun parseSalePrice(value: String): Long? {
+    val amount = value.trim()
+    if (amount.isEmpty()) return null
+    require(amount.matches(Regex("[0-9]+(\\.[0-9]{1,2})?"))) { "请输入非负金额，最多两位小数" }
+    return try { java.math.BigDecimal(amount).movePointRight(2).longValueExact() }
+    catch (_: ArithmeticException) { throw IllegalArgumentException("金额过大，请检查输入") }
 }

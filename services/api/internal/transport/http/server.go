@@ -70,7 +70,7 @@ func NewServer(address string, assets *service.AssetService, options ...ServerOp
 		option(s, h)
 	}
 	h.GET("/healthz", func(_ context.Context, c *app.RequestContext) {
-		c.JSON(consts.StatusOK, map[string]string{"status": "ok"})
+		c.JSON(consts.StatusOK, map[string]any{"status": "ok", "asset_sale_price": true})
 	})
 	router.GeneratedRegister(h)
 	webui.Register(h)

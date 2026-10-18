@@ -6,6 +6,7 @@ public struct AssetPayload: Codable, Equatable, Sendable {
     public var base_version: Int64 = 0
     public var deleted = false
     public var name = ""
+    public var sale_price_cents: Int64?
     public var price_cents: Int64 = 0
     public var purchase_date = ""
     public var status = "ACTIVE"
@@ -17,13 +18,14 @@ public struct AssetPayload: Codable, Equatable, Sendable {
     public var warranty_end_date = ""
     public var notes = ""
     public var tags: [String] = []
-    enum CodingKeys: String, CodingKey { case id, base_version, deleted, name, price_cents, purchase_date, status, image_url, retired_date, archived_at, icon_key, purchase_channel, warranty_end_date, notes, tags }
+    enum CodingKeys: String, CodingKey { case id, base_version, deleted, name, sale_price_cents, price_cents, purchase_date, status, image_url, retired_date, archived_at, icon_key, purchase_channel, warranty_end_date, notes, tags }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
         base_version = try c.decodeIfPresent(Int64.self, forKey: .base_version) ?? 0
         deleted = try c.decodeIfPresent(Bool.self, forKey: .deleted) ?? false
         name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+        sale_price_cents = try c.decodeIfPresent(Int64.self, forKey: .sale_price_cents)
         price_cents = try c.decodeIfPresent(Int64.self, forKey: .price_cents) ?? 0
         purchase_date = try c.decodeIfPresent(String.self, forKey: .purchase_date) ?? ""
         status = try c.decodeIfPresent(String.self, forKey: .status) ?? "ACTIVE"
@@ -36,8 +38,28 @@ public struct AssetPayload: Codable, Equatable, Sendable {
         notes = try c.decodeIfPresent(String.self, forKey: .notes) ?? ""
         tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
     }
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(base_version, forKey: .base_version)
+        try c.encode(deleted, forKey: .deleted)
+        try c.encode(name, forKey: .name)
+        try c.encode(sale_price_cents, forKey: .sale_price_cents)
+        try c.encode(price_cents, forKey: .price_cents)
+        try c.encode(purchase_date, forKey: .purchase_date)
+        try c.encode(status, forKey: .status)
+        try c.encode(image_url, forKey: .image_url)
+        try c.encode(retired_date, forKey: .retired_date)
+        try c.encode(archived_at, forKey: .archived_at)
+        try c.encode(icon_key, forKey: .icon_key)
+        try c.encode(purchase_channel, forKey: .purchase_channel)
+        try c.encode(warranty_end_date, forKey: .warranty_end_date)
+        try c.encode(notes, forKey: .notes)
+        try c.encode(tags, forKey: .tags)
+    }
     public init(_ asset: Asset, version: Int64 = 0, deleted: Bool = false) {
         id = asset.id; base_version = version; self.deleted = deleted; name = asset.name
+        sale_price_cents = asset.salePriceCents
         price_cents = asset.priceCents; purchase_date = asset.purchaseDate.rawValue
         status = asset.status == .active ? "ACTIVE" : "RETIRED"; retired_date = asset.retiredDate?.rawValue ?? ""
         archived_at = asset.archivedAt ?? ""; icon_key = asset.iconKey; purchase_channel = asset.purchaseChannel ?? ""
@@ -46,6 +68,7 @@ public struct AssetPayload: Codable, Equatable, Sendable {
     public func domain() throws -> Asset {
         guard let day = LocalDay(rawValue: purchase_date), status == "ACTIVE" || status == "RETIRED" else { throw SuirenError("服务器资产日期或状态无效") }
         var a = Asset(id: id, name: name, priceCents: price_cents, purchaseDate: day)
+        a.salePriceCents = sale_price_cents
         a.status = status == "ACTIVE" ? .active : .retired
         if !retired_date.isEmpty { guard let d = LocalDay(rawValue: retired_date) else { throw SuirenError("服务器退役日期无效") }; a.retiredDate = d }
         if !warranty_end_date.isEmpty { guard let d = LocalDay(rawValue: warranty_end_date) else { throw SuirenError("服务器保修日期无效") }; a.warrantyEndDate = d }

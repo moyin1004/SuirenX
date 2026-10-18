@@ -72,6 +72,15 @@ public actor LocalStore {
             asset.updatedAt = timestamp(); state.assets[asset.id] = asset; journal(.asset(AssetPayload(asset)), in: &state)
         }
     }
+    public func updateAssetSalePrice(id: String, cents: Int64?) throws {
+        guard cents == nil || cents! >= 0 else { throw SuirenError("卖出价格不能为负数") }
+        try transaction { state in
+            guard var asset = state.assets[id] else { throw SuirenError("记录不存在") }
+            guard asset.archivedAt != nil else { throw SuirenError("仅归档资产可填写卖出价格") }
+            asset.salePriceCents = cents; asset.updatedAt = timestamp()
+            state.assets[id] = asset; journal(.asset(AssetPayload(asset)), in: &state)
+        }
+    }
     public func saveExpiry(_ input: ExpiryItem) throws {
         var item = input; item.name = item.name.trimmingCharacters(in: .whitespacesAndNewlines)
         item.category = item.category.trimmingCharacters(in: .whitespacesAndNewlines); item.location = item.location.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -194,6 +203,11 @@ public actor LocalStore {
     public func apply(_ response: SyncResponse, batch: FrozenBatch, target: String) throws {
         try transaction { state in
             guard var session = state.session, session.target == target, session.batch == batch else { throw SuirenError("同步目标已改变，未应用迟到响应") }
+            for sent in batch.request.changes where !sent.deleted && sent.sale_price_cents != nil {
+                if let ack = response.applied.first(where: { $0.asset.id == sent.id }), ack.asset.sale_price_cents != sent.sale_price_cents {
+                    throw SuirenError("服务器未保留卖出价格，请先升级服务器；本机数据和批次已保留")
+                }
+            }
             let accounted = Set(response.applied.map { "asset/\($0.asset.id)" } + response.applied_expiry.map { "expiry/\($0.item.id)" } + response.conflicts.map { "asset/\($0.id)" } + response.expiry_conflicts.map { "expiry/\($0.id)" })
             guard batch.revisions.keys.allSatisfy(accounted.contains) else { throw SuirenError("服务器响应缺少确认，原批次已保留") }
             func accept(_ payload: RecordPayload, version: Int64) throws {

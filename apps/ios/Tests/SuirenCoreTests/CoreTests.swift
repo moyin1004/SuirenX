@@ -8,6 +8,46 @@ final class CoreTests: XCTestCase {
         return try LocalStore(databaseURL: root.appendingPathComponent("local.sqlite"), backupsDirectory: root.appendingPathComponent("backups"))
     }
     func asset(_ name: String = "电脑") -> Asset { Asset(name: name, priceCents: 10001, purchaseDate: day("2026-10-01")) }
+    func testArchivedSalePricePersistenceBackupJournalAndNull() async throws {
+        let s = try store(), a = asset()
+        try await s.saveAsset(a)
+        do { try await s.updateAssetSalePrice(id: a.id, cents: 1); XCTFail("unarchived edit") } catch {}
+        try await s.archive(kind: "asset", id: a.id, archived: true)
+        do { try await s.updateAssetSalePrice(id: a.id, cents: -1); XCTFail("negative price") } catch {}
+        for value: Int64? in [80050, 0, nil, Int64.max] {
+            try await s.updateAssetSalePrice(id: a.id, cents: value)
+            let snap = try await s.snapshot()
+            XCTAssertEqual(snap.assets[0].salePriceCents, value)
+            XCTAssertEqual(snap.assets[0].priceCents, a.priceCents)
+            guard case .asset(let payload) = snap.journal[0].payload else { return XCTFail("payload") }
+            XCTAssertEqual(try payload.domain().salePriceCents, value)
+            let wire = try JSONSerialization.jsonObject(with: JSONEncoder().encode(payload)) as! [String: Any]
+            XCTAssertNotNil(wire["sale_price_cents"])
+            if value == nil { XCTAssertTrue(wire["sale_price_cents"] is NSNull) }
+            let backup = try await s.exportBackup()
+            let decoded = try LocalBackup.inspect(backup)
+            XCTAssertEqual(decoded.assets[0].salePriceCents, value)
+            try await s.restore(backup)
+        }
+        try await s.archive(kind: "asset", id: a.id, archived: false)
+        let restored = try await s.snapshot()
+        XCTAssertEqual(restored.assets[0].salePriceCents, Int64.max)
+        let legacy = try JSONSerialization.jsonObject(with: JSONEncoder().encode(a)) as! [String: Any]
+        XCTAssertNil(legacy["salePriceCents"])
+        XCTAssertNil(try JSONDecoder().decode(Asset.self, from: JSONSerialization.data(withJSONObject: legacy)).salePriceCents)
+    }
+    func testOldServerCannotAcknowledgeAndEraseSalePrice() async throws {
+        let s = try store(), a = asset()
+        try await s.saveAsset(a); try await s.archive(kind: "asset", id: a.id, archived: true)
+        try await s.updateAssetSalePrice(id: a.id, cents: 8050); try await s.enableSync(target: "old")
+        let batch = try await s.freezeBatch(alreadyPulled: false)!
+        var old = batch.request.changes[0]; old.sale_price_cents = nil
+        var response = SyncResponse(); response.applied = [AssetChange(cursor: 1, version: 1, asset: old)]
+        do { try await s.apply(response, batch: batch, target: "old"); XCTFail("old server erased sale price") } catch {}
+        let snapshot = try await s.snapshot()
+        XCTAssertEqual(snapshot.assets[0].salePriceCents, 8050); XCTAssertEqual(snapshot.session?.batch, batch)
+        XCTAssertTrue(snapshot.journal[0].dirty)
+    }
     func testDateAndMoneyBoundaries() throws {
         XCTAssertNil(LocalDay(rawValue: "2026-02-29")); XCTAssertNil(LocalDay(rawValue: "2026-2-01"))
         XCTAssertEqual(day("2024-02-28").adding(1), day("2024-02-29"))

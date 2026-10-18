@@ -89,6 +89,8 @@ fun AssetDetailRoute(
         onChangeArchive = viewModel::openArchiveDialog,
         onDismissArchive = viewModel::dismissArchiveDialog,
         onSaveArchive = viewModel::saveArchive,
+        onSalePriceChange = viewModel::changeSalePrice,
+        onSaveSalePrice = viewModel::saveSalePrice,
         onDelete = viewModel::requestDelete,
         onConfirmDelete = viewModel::confirmDelete,
         onDismissDelete = viewModel::dismissDelete,
@@ -110,6 +112,8 @@ fun AssetDetailScreen(
     onDismissArchive: () -> Unit,
     onSaveArchive: () -> Unit,
     modifier: Modifier = Modifier,
+    onSalePriceChange: (String) -> Unit = {},
+    onSaveSalePrice: () -> Unit = {},
     onDelete: () -> Unit = {},
     onConfirmDelete: () -> Unit = {},
     onDismissDelete: () -> Unit = {},
@@ -173,6 +177,22 @@ fun AssetDetailScreen(
                 }
                 state.asset != null -> {
                     AssetDetailContent(state.asset)
+                    if (state.asset.isArchived) {
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            androidx.compose.material3.OutlinedTextField(
+                                value = state.salePriceInput, onValueChange = onSalePriceChange,
+                                label = { Text("卖出价格（可选）") }, placeholder = { Text("留空表示未填写") },
+                                enabled = !state.isSaving, singleLine = true, isError = state.salePriceError != null,
+                                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Text(state.salePriceError ?: "支持 0 和两位小数；留空保存可清除。其它资料请恢复后编辑。", style = MaterialTheme.typography.bodySmall,
+                                color = if (state.salePriceError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+                            Button(onClick = onSaveSalePrice, enabled = !state.isSaving, modifier = Modifier.fillMaxWidth()) {
+                                Text(if (state.isSavingSalePrice) "保存中…" else "保存卖出价格")
+                            }
+                        }
+                    }
                     if (!state.asset.isArchived) {
                         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Button(onClick = onEdit, enabled = !state.isSaving, modifier = Modifier.weight(1f).height(48.dp),
@@ -387,7 +407,7 @@ private fun AssetDetailContent(asset: Asset, modifier: Modifier = Modifier) {
         Text("购入价格", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
         if (asset.isArchived) {
             Spacer(Modifier.height(10.dp))
-            Text("已归档 · 恢复后可编辑", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("已归档", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(Modifier.height(20.dp))
         Row(

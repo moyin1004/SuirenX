@@ -44,6 +44,7 @@ public enum ExpiryBucket: String, CaseIterable { case expired, today, soon, norm
 public struct Asset: Codable, Identifiable, Equatable, Sendable {
     public var id: String
     public var name: String
+    public var salePriceCents: Int64?
     public var priceCents: Int64
     public var purchaseDate: LocalDay
     public var status: AssetStatus = .active
@@ -68,17 +69,18 @@ public struct Asset: Codable, Identifiable, Equatable, Sendable {
     }
     public func validate(on today: LocalDay = .today, importing: Bool = false) throws {
         guard !id.isEmpty, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              priceCents >= 0, importing || purchaseDate <= today else { throw SuirenError("请检查名称、金额和购买日期") }
+              priceCents >= 0, salePriceCents == nil || salePriceCents! >= 0, importing || purchaseDate <= today else { throw SuirenError("请检查名称、金额和购买日期") }
         guard importing || warrantyEndDate == nil || warrantyEndDate! >= purchaseDate else { throw SuirenError("保修截止日不能早于购买日期") }
         guard (status == .active && retiredDate == nil) ||
                 (status == .retired && retiredDate != nil && retiredDate! >= purchaseDate && (importing || retiredDate! <= today)) else { throw SuirenError("退役日期必须在购买日至今天之间") }
         guard notes.utf16.count <= 2000, tags.count <= 20, tags.allSatisfy({ !$0.isEmpty && $0.utf16.count <= 30 }) else { throw SuirenError("备注最多 2000 字，标签最多 20 个且每个最多 30 字") }
         try validateTimestamps([createdAt, updatedAt, archivedAt ?? ""])
     }
-    enum CodingKeys: String, CodingKey { case id, name, priceCents, purchaseDate, status, retiredDate, archivedAt, iconKey, purchaseChannel, warrantyEndDate, notes, tags, createdAt, updatedAt }
+    enum CodingKeys: String, CodingKey { case id, name, salePriceCents, priceCents, purchaseDate, status, retiredDate, archivedAt, iconKey, purchaseChannel, warrantyEndDate, notes, tags, createdAt, updatedAt }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id); name = try c.decode(String.self, forKey: .name)
+        salePriceCents = try c.decodeIfPresent(Int64.self, forKey: .salePriceCents)
         priceCents = try c.decode(Int64.self, forKey: .priceCents); purchaseDate = try c.decode(LocalDay.self, forKey: .purchaseDate)
         let raw = try c.decodeIfPresent(String.self, forKey: .status) ?? "Active"
         guard let s = AssetStatus(rawValue: raw) ?? (raw == "ACTIVE" ? .active : raw == "RETIRED" ? .retired : nil) else { throw SuirenError("未知资产状态") }; status = s

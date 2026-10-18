@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -17,22 +18,40 @@ var (
 )
 
 type SyncAssetInput struct {
-	ID              string   `json:"id"`
-	BaseVersion     int64    `json:"base_version"`
-	Deleted         bool     `json:"deleted"`
-	Name            string   `json:"name"`
-	PriceCents      int64    `json:"price_cents"`
-	PurchaseDate    string   `json:"purchase_date"`
-	Status          string   `json:"status"`
-	ImageURL        string   `json:"image_url"`
-	RetiredDate     string   `json:"retired_date"`
-	ArchivedAt      string   `json:"archived_at"`
-	IconKey         string   `json:"icon_key"`
-	PurchaseChannel string   `json:"purchase_channel"`
-	WarrantyEndDate string   `json:"warranty_end_date"`
-	Notes           string   `json:"notes"`
-	Tags            []string `json:"tags"`
-	RequireRestore  bool     `json:"-"`
+	ID                string   `json:"id"`
+	BaseVersion       int64    `json:"base_version"`
+	Deleted           bool     `json:"deleted"`
+	Name              string   `json:"name"`
+	PriceCents        int64    `json:"price_cents"`
+	SalePriceCents    *int64   `json:"sale_price_cents"`
+	SalePriceProvided bool     `json:"-"`
+	PurchaseDate      string   `json:"purchase_date"`
+	Status            string   `json:"status"`
+	ImageURL          string   `json:"image_url"`
+	RetiredDate       string   `json:"retired_date"`
+	ArchivedAt        string   `json:"archived_at"`
+	IconKey           string   `json:"icon_key"`
+	PurchaseChannel   string   `json:"purchase_channel"`
+	WarrantyEndDate   string   `json:"warranty_end_date"`
+	Notes             string   `json:"notes"`
+	Tags              []string `json:"tags"`
+	RequireRestore    bool     `json:"-"`
+}
+
+// Missing is an older writer and preserves the stored value; explicit null clears it.
+func (input *SyncAssetInput) UnmarshalJSON(data []byte) error {
+	type plain SyncAssetInput
+	var value plain
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	_, value.SalePriceProvided = fields["sale_price_cents"]
+	*input = SyncAssetInput(value)
+	return nil
 }
 
 type SyncExpiryInput struct {
@@ -120,7 +139,7 @@ func (s *SyncService) Apply(ownerID string, input SyncBatchInput) (domain.SyncBa
 }
 
 func validateSyncAsset(item SyncAssetInput, today time.Time) error {
-	if item.ID == "" || item.BaseVersion < 0 || item.PriceCents < 0 {
+	if item.ID == "" || item.BaseVersion < 0 || item.PriceCents < 0 || (item.SalePriceCents != nil && *item.SalePriceCents < 0) {
 		return ErrInvalidSyncRequest
 	}
 	if item.Deleted {

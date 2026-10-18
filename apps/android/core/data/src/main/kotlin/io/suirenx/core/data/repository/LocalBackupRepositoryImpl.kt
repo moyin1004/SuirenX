@@ -55,6 +55,7 @@ private data class BackupAsset(
     val id: String,
     val name: String,
     val priceCents: Long,
+    val salePriceCents: Long? = null,
     val purchaseDate: String,
     val status: String = "ACTIVE",
     val retiredDate: String? = null,
@@ -99,7 +100,7 @@ class LocalBackupRepositoryImpl @Inject constructor(
     override suspend fun export(): Result<String> = attempt {
         val assets = local.allForBackup().map { asset ->
             BackupAsset(
-                id = asset.id, name = asset.name, priceCents = asset.priceCents,
+                id = asset.id, name = asset.name, priceCents = asset.priceCents, salePriceCents = asset.salePriceCents,
                 purchaseDate = asset.purchaseDate.toString(), status = asset.status.name,
                 retiredDate = asset.retiredDate?.toString(), archivedAt = asset.archivedAt?.toString(),
                 iconKey = asset.iconKey, purchaseChannel = asset.purchaseChannel,
@@ -142,7 +143,7 @@ class LocalBackupRepositoryImpl @Inject constructor(
         val ids = HashSet<String>()
         backup.assets.forEach { asset ->
             require(asset.id.isNotBlank() && ids.add(asset.id)) { "备份包含重复或空的资产编号" }
-            require(asset.name.isNotBlank() && asset.priceCents >= 0) { "备份包含无效资产资料" }
+            require(asset.name.isNotBlank() && asset.priceCents >= 0 && (asset.salePriceCents == null || asset.salePriceCents >= 0)) { "备份包含无效资产资料" }
             val purchase = LocalDate.parse(asset.purchaseDate)
             val status = assetStatus(asset.status)
             val retired = asset.retiredDate?.let(LocalDate::parse)
@@ -176,7 +177,7 @@ class LocalBackupRepositoryImpl @Inject constructor(
         val retired = asset.retiredDate?.let(LocalDate::parse)
         val status = assetStatus(asset.status)
         return Asset(
-            id = asset.id, name = asset.name, priceCents = asset.priceCents, purchaseDate = purchase,
+            id = asset.id, name = asset.name, priceCents = asset.priceCents, salePriceCents = asset.salePriceCents, purchaseDate = purchase,
             status = status, imageUrl = "", heldDays = 1, dailyCostCents = asset.priceCents,
             retiredDate = retired, archivedAt = asset.archivedAt?.let(Instant::parse), iconKey = asset.iconKey,
             purchaseChannel = asset.purchaseChannel, warrantyEndDate = asset.warrantyEndDate?.let(LocalDate::parse),

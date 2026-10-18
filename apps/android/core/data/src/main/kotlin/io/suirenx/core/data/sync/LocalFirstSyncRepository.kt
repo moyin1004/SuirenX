@@ -92,6 +92,10 @@ class LocalFirstSyncRepository @Inject constructor(
                 while (true) {
                     check(target == "${apiProvider.currentUrl()}|${tokens.username(apiProvider.currentUrl())}" && tokens.tokenFor(url) == token && modes.mode.value == io.suirenx.core.model.StorageMode.Remote) { "同步配置已改变，本次已停止" }
                     val batch = claim(pulled) ?: break
+                    if (batch.request.changes.any { !it.deleted && it.salePriceCents != null }) {
+                        check(api.capabilities().assetSalePrice) { "服务器尚不支持卖出价格，请先升级服务器；本机数据和批次已保留" }
+                        check(target == "${apiProvider.currentUrl()}|${tokens.username(apiProvider.currentUrl())}" && tokens.tokenFor(url) == token) { "同步配置已改变，本次已停止" }
+                    }
                     val response = api.sync(batch.request, "Bearer $token")
                     check(target == "${apiProvider.currentUrl()}|${tokens.username(apiProvider.currentUrl())}" && tokens.tokenFor(url) == token) { "账号已改变，响应未应用；待同步批次已保留" }
                     apply(batch, response)
@@ -189,6 +193,11 @@ class LocalFirstSyncRepository @Inject constructor(
     }
 
     private suspend fun apply(batch: FrozenBatch, response: SyncResponse) = database.withTransaction {
+        for (sent in batch.request.changes.filter { !it.deleted && it.salePriceCents != null }) {
+            response.applied.firstOrNull { it.asset.id == sent.id }?.let { ack ->
+                check(ack.asset.salePriceCents == sent.salePriceCents) { "服务器未保留卖出价格，请先升级服务器；本机数据和批次已保留" }
+            }
+        }
         val accounted = response.applied.map { "asset/${it.asset.id}" } + response.conflicts.map { "asset/${it.id}" } +
             response.appliedExpiry.map { "expiry/${it.item.id}" } + response.expiryConflicts.map { "expiry/${it.id}" }
         check(batch.revisions.keys.all { it in accounted }) { "服务器响应缺少确认，批次已保留" }

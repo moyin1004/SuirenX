@@ -71,7 +71,10 @@ repository boundaries.
   is needed.
 - Archive is reversible and independent of lifecycle status. Archived assets
   are excluded from default lists and totals, remain readable, and must be
-  restored before editing. Never auto-delete archived records.
+  restored before editing, except the optional sale price which may be set,
+  changed or cleared while archived. Store it as nullable integer cents, preserve
+  it on restore, and show it on asset cards only when present (including zero).
+  Sale price does not alter purchase totals or daily cost. Never auto-delete archived records.
 - Runtime databases under `services/api/data` are local artifacts and must not
   be committed.
 - Android assets and expiry items always use the local Room database as the

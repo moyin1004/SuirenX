@@ -28,6 +28,16 @@ class LocalAssetRepository @Inject constructor(
 ) : AssetRepository {
     private val dao: AssetDao = database.assetDao()
 
+    override suspend fun updateAssetSalePrice(id: String, salePriceCents: Long?): Result<Asset> = attempt {
+        require(salePriceCents == null || salePriceCents >= 0) { "卖出价格不能为负数" }
+        val current = requireAsset(id)
+        check(current.isArchived) { "仅归档资产可填写卖出价格" }
+        val updated = current.copy(salePriceCents = salePriceCents, updatedAt = Instant.now(clock))
+        dao.update(updated.toEntity())
+        journal.asset(updated)
+        updated
+    }
+
     override suspend fun deleteAsset(id: String): Result<Unit> = attempt {
         dao.getById(id)?.let { journal.asset(toDomain(it), deleted = true) }
         dao.delete(id)
@@ -112,7 +122,7 @@ class LocalAssetRepository @Inject constructor(
         val retiredDate = entity.retiredDate?.let(LocalDate::parse)
         val heldDays = calculateHeldDays(entity.purchaseDate.toDate(), status, retiredDate, today())
         return Asset(
-            id = entity.id, name = entity.name, priceCents = entity.priceCents,
+            id = entity.id, name = entity.name, priceCents = entity.priceCents, salePriceCents = entity.salePriceCents,
             purchaseDate = entity.purchaseDate.toDate(), status = status, imageUrl = "",
             heldDays = heldDays, dailyCostCents = calculateDailyCostCents(entity.priceCents, heldDays),
             retiredDate = retiredDate, archivedAt = entity.archivedAt?.let(Instant::parse), iconKey = entity.iconKey,
@@ -125,7 +135,7 @@ class LocalAssetRepository @Inject constructor(
     private fun today(): LocalDate = LocalDate.now(clock.withZone(ZoneId.systemDefault()))
 
     internal fun Asset.toEntity(): AssetEntity = AssetEntity(
-        id = id, name = name, priceCents = priceCents, purchaseDate = purchaseDate.toString(),
+        id = id, name = name, priceCents = priceCents, salePriceCents = salePriceCents, purchaseDate = purchaseDate.toString(),
         status = status.name, retiredDate = retiredDate?.toString(), archivedAt = archivedAt?.toString(),
         iconKey = iconKey, purchaseChannel = purchaseChannel, warrantyEndDate = warrantyEndDate?.toString(),
         notes = notes, tagsJson = json.encodeToString(tags),

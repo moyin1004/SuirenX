@@ -45,6 +45,25 @@ class AssetsScreenTest {
     @get:Rule
     val composeRule = createComposeRule()
 
+    @Test fun salePricesOnlyRenderWhenPresentIncludingZero() {
+        setScreen(AssetsUiState(isLoading = false, selectedFilter = AssetFilter.All, assets = listOf(
+            asset("sold", "已售设备").copy(archivedAt = java.time.Instant.now(), salePriceCents = 80050),
+            asset("free", "零元转让").copy(archivedAt = java.time.Instant.now(), salePriceCents = 0),
+            asset("empty", "未填写卖出价"),
+        )), modifier = Modifier.width(360.dp))
+        composeRule.onNodeWithText("卖出 ¥800.50").assertIsDisplayed()
+        composeRule.onNodeWithText("卖出 ¥0.00").assertIsDisplayed()
+        composeRule.onAllNodesWithText("卖出 ¥", substring = true).assertCountEquals(2)
+        fun cardHeight(name: String): Float {
+            var node = composeRule.onNodeWithText(name).fetchSemanticsNode()
+            while (node.parent != null && !node.config.contains(SemanticsActions.OnClick)) node = node.parent!!
+            return node.boundsInRoot.height
+        }
+        assertEquals(cardHeight("未填写卖出价"), cardHeight("已售设备"), 1f)
+        assertEquals(cardHeight("未填写卖出价"), cardHeight("零元转让"), 1f)
+        captureDisplay("asset-sale-card.png")
+    }
+
     @Test
     fun allFilterIncludesArchivedAssetsInListAndSummary() {
         setScreen(

@@ -5,7 +5,13 @@ import kotlinx.serialization.Serializable
 import retrofit2.http.Body
 import retrofit2.http.POST
 
+@Serializable
+data class SyncCapabilities(@SerialName("asset_sale_price") val assetSalePrice: Boolean = false)
+
 interface SyncApi {
+    @retrofit2.http.GET("healthz")
+    suspend fun capabilities(): SyncCapabilities
+
     @POST("api/v1/sync/assets")
     suspend fun sync(@Body request: SyncRequest, @retrofit2.http.Header("Authorization") authorization: String? = null): SyncResponse
 }
@@ -26,6 +32,7 @@ data class SyncAssetPayload(
     val deleted: Boolean = false,
     val name: String = "",
     @SerialName("price_cents") val priceCents: Long = 0,
+    @SerialName("sale_price_cents") val salePriceCents: Long? = null,
     @SerialName("purchase_date") val purchaseDate: String = "",
     val status: String = "ACTIVE",
     @SerialName("image_url") val imageUrl: String = "",

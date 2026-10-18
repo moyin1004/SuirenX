@@ -88,9 +88,18 @@ private struct AssetCard: View {
             HStack(alignment: .top) { AssetImage(key: asset.iconKey, size: 36); Spacer(minLength: 4)
                 Text(asset.archivedAt != nil ? "已归档" : asset.status == .active ? "服役中" : "已退役").font(.caption2).foregroundStyle(.secondary).fixedSize() }
             MarqueeName(text: asset.name).frame(height: nameHeight)
-            Text("持有 \(asset.heldDays()) 天").font(.caption).foregroundStyle(.secondary)
+            Text("¥\(Money.text(asset.priceCents)) · 持有 \(asset.heldDays()) 天")
+                .font(.caption2).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.5)
             Spacer(minLength: 0)
-            Text("¥\(Money.text(asset.priceCents))").font(.system(.subheadline, design: .monospaced)).lineLimit(1).minimumScaleFactor(0.5)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(asset.salePriceCents.map { "卖出 ¥\(Money.text($0))" } ?? "")
+                    .font(.caption2).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.4).frame(height: 14)
+                    .accessibilityHidden(asset.salePriceCents == nil)
+                HStack(alignment: .firstTextBaseline, spacing: 0) {
+                    Text("¥\(Money.text(asset.dailyCostCents()))").font(.system(.subheadline, design: .monospaced))
+                    Text("/天").font(.caption2).foregroundStyle(.secondary)
+                }.lineLimit(1).minimumScaleFactor(0.5)
+            }
         }.frame(maxWidth: .infinity, minHeight: 170, alignment: .leading).sxCard(padding: 14)
     }
 }
@@ -127,7 +136,7 @@ struct AssetDetailView: View {
                 ScrollView {
                     VStack(spacing: 18) {
                         VStack(spacing: 12) { AssetImage(key: asset.iconKey, size: 66); Text(asset.name).font(.title.weight(.semibold)).multilineTextAlignment(.center).textSelection(.enabled)
-                            Text(asset.archivedAt != nil ? "已归档 · 恢复后可编辑" : asset.status == .active ? "服役中" : "已退役").font(.caption).padding(8).background(Palette.accent.opacity(0.5), in: Capsule())
+                            Text(asset.archivedAt != nil ? "已归档" : asset.status == .active ? "服役中" : "已退役").font(.caption).padding(8).background(Palette.accent.opacity(0.5), in: Capsule())
                             Text("¥\(Money.text(asset.priceCents))").font(.system(.largeTitle, design: .monospaced)).lineLimit(1).minimumScaleFactor(0.4)
                         }.frame(maxWidth: .infinity).padding(.vertical, 12)
                         HStack { detailMetric("持有天数", "\(asset.heldDays()) 天"); Spacer(); detailMetric("日均成本", "¥\(Money.text(asset.dailyCostCents()))"); Spacer(); detailMetric("保修状态", asset.warrantyEndDate.map { $0 < .today ? "已过期" : "保修中" } ?? "未填写") }.sxCard()
@@ -142,6 +151,7 @@ struct AssetDetailView: View {
                             if let archived = asset.archivedAt { InfoRow(label: "归档时间", value: archived) }
                         }.sxCard()
                         VStack(alignment: .leading, spacing: 8) { Text("备注").font(.caption).foregroundStyle(.secondary); Text(asset.notes.isEmpty ? "未填写" : asset.notes).font(.subheadline).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }.sxCard()
+                        if asset.archivedAt != nil { SalePriceEditor(asset: asset).id(asset.id) }
                         if asset.archivedAt == nil {
                             Button("编辑资产") { editing = true }.buttonStyle(PrimaryButtonStyle()).accessibilityIdentifier("asset.edit")
                             Button(asset.status == .active ? "退役" : "重新启用") {
@@ -164,6 +174,43 @@ struct AssetDetailView: View {
             } message: { Text("将移除本机记录，并在开启同步后同步删除。若需可恢复，请使用归档。") }
     }
     private func detailMetric(_ label: String, _ value: String) -> some View { VStack(spacing: 6) { Text(value).font(.subheadline.weight(.semibold)).minimumScaleFactor(0.5).lineLimit(1); Text(label).font(.caption2).foregroundStyle(.secondary) } }
+}
+
+private struct SalePriceEditor: View {
+    @EnvironmentObject private var model: AppModel
+    let asset: Asset
+    @State private var input: String
+    @State private var saving = false
+    @State private var error: String?
+    @State private var dirty = false
+    @FocusState private var priceFocused: Bool
+    init(asset: Asset) { self.asset = asset; _input = State(initialValue: asset.salePriceCents.map(Money.text) ?? "") }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("卖出价格（可选）").font(.subheadline.weight(.semibold))
+            TextField("留空表示未填写", text: Binding(get: { input }, set: { input = $0; dirty = true })).keyboardType(.decimalPad).textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("asset.salePrice").disabled(saving).focused($priceFocused)
+                .onChange(of: asset.salePriceCents) { _, value in if !dirty { input = value.map(Money.text) ?? "" } }
+            Text(error ?? "支持 0 和两位小数；留空保存可清除。其它资料请恢复后编辑。")
+                .font(.caption).foregroundStyle(error == nil ? Color.secondary : Color.red)
+            Button(saving ? "保存中…" : "保存卖出价格") {
+                do {
+                    let raw = input.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let cents = raw.isEmpty ? nil : try Money.parse(raw)
+                    error = nil; saving = true; priceFocused = false
+                    Task {
+                        if await model.mutate({ try await model.store.updateAssetSalePrice(id: asset.id, cents: cents) }) { dirty = false }
+                        saving = false
+                    }
+                } catch { self.error = error.localizedDescription }
+            }.buttonStyle(PrimaryButtonStyle()).disabled(saving).accessibilityIdentifier("asset.saveSalePrice")
+        }.sxCard()
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    if priceFocused { Spacer(); Button("完成") { priceFocused = false }.accessibilityIdentifier("asset.salePrice.done") }
+                }
+            }
+    }
 }
 
 private struct RetirementSheet: View {

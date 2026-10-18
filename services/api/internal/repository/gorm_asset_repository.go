@@ -14,6 +14,7 @@ type AssetRecord struct {
 	OwnerID         string `gorm:"index"`
 	Name            string `gorm:"not null"`
 	PriceCents      int64  `gorm:"not null"`
+	SalePriceCents  *int64
 	PurchaseDate    time.Time
 	RetiredAt       *time.Time
 	ArchivedAt      *time.Time `gorm:"index"`
@@ -243,6 +244,7 @@ func (r AssetRecord) toDomain() domain.Asset {
 		Version:         r.Version,
 		Name:            r.Name,
 		PriceCents:      r.PriceCents,
+		SalePriceCents:  r.SalePriceCents,
 		PurchaseDate:    r.PurchaseDate,
 		RetiredAt:       r.RetiredAt,
 		ArchivedAt:      r.ArchivedAt,
@@ -263,6 +265,7 @@ func recordFromDomain(asset domain.Asset) AssetRecord {
 		ID:              asset.ID,
 		Name:            asset.Name,
 		PriceCents:      asset.PriceCents,
+		SalePriceCents:  asset.SalePriceCents,
 		PurchaseDate:    asset.PurchaseDate,
 		RetiredAt:       asset.RetiredAt,
 		ArchivedAt:      asset.ArchivedAt,

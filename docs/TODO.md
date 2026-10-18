@@ -1,6 +1,8 @@
 # 当前待办
 
-## v0.1.3：原生 iOS / iPadOS 已实现，待实体设备与发布
+## v0.1.3：发布执行中
+
+2026-10-18：维护者已授权统一 `v0.1.3`，执行 review/提交、最终门禁、真机升级验收、服务端配套部署及 Android 签名发布。GitHub 分发 Android APK；iOS/iPadOS 源码随版本交付，继续本机签名安装，公开 IPA/TestFlight/App Store 不作为本次发布门禁。执行状态见 [发布准备](release-readiness.md#v013-发布范围与门禁)。
 
 2026-10-17：`codex/v0.1.3` 已完成当前 Android 功能的 SwiftUI 原生通用实现：资产、用品期限、统计、45 个稳定图标、筛选搜索排序、主题、独立账号/服务器、Android JSON v1 备份恢复、本地 SQLite 与显式增量同步/冲突处理。iPad 侧栏、横竖屏、真实系统窗口缩窄与草稿保持、最大动态字号已在现有模拟器运行验收。执行证据与限制见 [iOS 实施记录](history/roadmap-execution.md#2026-10-17v013-原生-ios-与-ipad)。
 
@@ -10,10 +12,11 @@
 
 iOS 设置首页整栏点击已修复：7 栏空白与内边距均可导航，iPhone / iPad 模拟器合计 42 次点击与返回回归通过，双端截图已检查。实体设备尚未更新，见 [执行记录](history/roadmap-execution.md#ios-设置首页整栏点击)。
 
+- [ ] 归档卖出价格与卡片统一的实体设备/服务端上线验收：Android/iOS 已支持归档详情填写、修改与清空卖出价，卡片按 Android 突出日均成本并保留原尺寸；本地数据库迁移、备份和隔离同步已验证。实体手机/iPad 尚未更新，服务端 `003_asset_sale_price.sql` 尚未部署；旧服务器会在上传前被能力预检拦截并保留批次。见 [执行记录](history/roadmap-execution.md#归档卖出价格与两端卡片统一)。
 - [ ] 完成实体 iPhone/iPad 运行验收：已使用维护者自己的 Personal Team 完成签名，在实体 iPad 安装并启动 0.1.3（1），实际截图确认总览与侧栏显示；实体完整业务流程、旋转/分屏/大字号及 iPhone 安装仍待覆盖。模拟器与未签名 Release 编译不代替实体设备验收。
 - [ ] 在实体设备观察系统后台多周期、低内存恢复与长期同步；后台间隔只是请求时机，不能保证准点执行。
 - [ ] 实体 Android 手机复验服务器地址新流程：已先更新唯一 OpenDesign 主稿并实现与 iOS 一致的服务器列表、添加弹层、分组详情及删除确认；Debug、15 项设置单测、9 项设置 UI 回归和 360 dp / 1.3 倍字号下 4 项服务器交互通过，浅深色截图已核对。尚未将本轮更新安装到实体手机，见 [执行记录](history/roadmap-execution.md#android-服务器地址对齐-ios)。
-- [ ] 后续获得发布指令后，再执行合并、版本 tag、签名分发与发布门禁；首次正式发布需核验新版 GitHub Actions 构建号、签名产物与升级安装。共享版本及本地自动编号已实现，开发包显示代码 / 打包时间，Release 隐藏，见 [构建版本记录](history/roadmap-execution.md#构建版本与安装包追溯)。iOS 云端签名分发仍未配置。
+- [ ] 按本次授权执行合并、版本 tag、签名分发与发布门禁；首次正式发布需核验新版 GitHub Actions 构建号、签名产物与升级安装。共享版本及本地自动编号已实现，开发包显示代码 / 打包时间，Release 隐藏，见 [构建版本记录](history/roadmap-execution.md#构建版本与安装包追溯)。iOS 云端签名分发仍未配置。
 - [ ] 核对正式应用关于页真机截图，并在获得授权后更新实体 iPad。关于页版本信息与 Android 紧凑方框工具栏已按维护者后续指令覆盖安装到已连接安卓手机，保留数据并确认启动，包版本仍为 0.1.2（3）。两端关于页分别读取实际安装包版本号 / Build 号；同一 OpenDesign 主稿已先更新并实际预览，Android 11 项相关 UI 测试和 iPhone / iPad 关于页浅深色验收通过，见 [执行记录](history/roadmap-execution.md#关于页安装包信息与-android-紧凑方框工具栏)。此前真机部署被自动审批拒绝，后续授权仅覆盖安卓手机，本次未更新 iPad。
 
 **v0.1.2 已于 2026-10-15 发布并完成服务器部署**（Android 版本 0.1.2 / versionCode 3），下载见 [GitHub Release](https://github.com/moyin1004/SuirenX/releases/tag/v0.1.2)。服务器部署按维护者后续指令单独执行；原稿、浏览器、设备及阶段 A 剩余可靠性验收继续追踪。范围见 [版本规划](prd/roadmap.md)，发布与部署证据见 [执行记录](history/roadmap-execution.md)。本文件聚焦剩余事项，保留必要的验收边界。

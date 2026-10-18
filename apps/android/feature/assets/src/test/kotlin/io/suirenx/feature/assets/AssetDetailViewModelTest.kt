@@ -45,6 +45,27 @@ class AssetDetailViewModelTest {
         dailyCostCents = 12_781,
     )
 
+    @Test fun archivedSalePriceCanSaveZeroClearAndRetryWithoutLosingDraft() = runTest(dispatcher) {
+        val repo = FakeRepository().apply { seed(sampleAsset.copy(archivedAt = java.time.Instant.now(), salePriceCents = 8050)) }
+        val vm = AssetDetailViewModel(GetAssetUseCase(repo), AssetChangeNotifier(), UpdateAssetStatusUseCase(repo), UpdateAssetArchiveUseCase(repo),
+            updateAssetSalePrice = io.suirenx.core.domain.UpdateAssetSalePriceUseCase(repo))
+        vm.load(sampleAsset.id); advanceUntilIdle()
+        assertEquals("80.50", vm.uiState.value.salePriceInput)
+        vm.changeSalePrice("-1"); vm.saveSalePrice(); advanceUntilIdle()
+        assertNotNull(vm.uiState.value.salePriceError)
+        repo.fail = true
+        vm.changeSalePrice("123.45"); vm.saveSalePrice(); advanceUntilIdle()
+        assertEquals("123.45", vm.uiState.value.salePriceInput); assertNotNull(vm.uiState.value.salePriceError)
+        repo.fail = false
+        vm.saveSalePrice(); advanceUntilIdle()
+        assertEquals(12345L, vm.uiState.value.asset?.salePriceCents)
+        assertFalse(vm.uiState.value.isSaving)
+        for (raw in listOf("0", "")) {
+            vm.changeSalePrice(raw); vm.saveSalePrice(); advanceUntilIdle()
+            assertEquals(if (raw.isEmpty()) null else 0L, vm.uiState.value.asset?.salePriceCents)
+        }
+    }
+
     @Test fun loadShowsAssetOnSuccess() = runTest(dispatcher) {
         val repo = FakeRepository().apply { seed(sampleAsset) }
         val vm = AssetDetailViewModel(GetAssetUseCase(repo), AssetChangeNotifier(), UpdateAssetStatusUseCase(repo), UpdateAssetArchiveUseCase(repo))

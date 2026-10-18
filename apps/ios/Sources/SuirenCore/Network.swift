@@ -84,6 +84,14 @@ public final class HTTPClient: SyncTransport, @unchecked Sendable {
         _ = try? await request(base: credential.serverURL, path: "api/v1/auth/logout", body: Data("{}".utf8), token: credential.token, timeout: 3)
     }
     public func exchange(_ request: SyncRequest, credential: Credential) async throws -> SyncResponse {
+        if request.changes.contains(where: { !$0.deleted && $0.sale_price_cents != nil }) {
+            let health = try await self.request(base: credential.serverURL, path: "healthz", timeout: 10)
+            let capabilities = try JSONSerialization.jsonObject(with: health) as? [String: Any]
+            guard capabilities?["asset_sale_price"] as? Bool == true else {
+                throw SuirenError("服务器尚不支持卖出价格，请先升级服务器；本机数据和批次已保留")
+            }
+        }
+        try Task.checkCancellation()
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         let data = try await self.request(base: credential.serverURL, path: "api/v1/sync/assets", body: encoder.encode(request), token: credential.token)
         return try JSONDecoder().decode(SyncResponse.self, from: data)

@@ -61,7 +61,7 @@ func TestFreshDatabaseAppliesBaseline(t *testing.T) {
 	conn.Close()
 
 	assertScalar(t, raw, "SELECT count(*) FROM schema_migrations", len(migrations))
-	assertScalar(t, raw, "SELECT count(*) FROM pragma_table_info('asset_records')", 18)
+	assertScalar(t, raw, "SELECT count(*) FROM pragma_table_info('asset_records')", 19)
 	// The TEXT primary key also gets an implicit sqlite_autoindex; assert the
 	// two explicit indexes by name.
 	assertScalar(t, raw, "SELECT count(*) FROM pragma_index_list('asset_records') WHERE name='idx_asset_records_status'", 1)
@@ -142,9 +142,10 @@ func TestUpgradeAppliesPendingMigrations(t *testing.T) {
 func TestWebAdminUpgradeAndFailureRollback(t *testing.T) {
 	raw := openRaw(t, filepath.Join(t.TempDir(), "assets.db"))
 	migrations := bundled(t)
-	if len(migrations) != 2 || migrations[1].name != "002_web_admin.sql" {
+	if len(migrations) < 2 || migrations[1].name != "002_web_admin.sql" {
 		t.Fatalf("expected immutable baseline and one web admin migration, got %+v", migrations)
 	}
+	migrations = migrations[:2]
 	if err := migrate(context.Background(), raw, migrations[:1]); err != nil {
 		t.Fatal(err)
 	}
@@ -315,5 +316,36 @@ func TestBaselineMigrationRemainsFirstAndImmutable(t *testing.T) {
 	migrations := bundled(t)
 	if len(migrations) < 1 || migrations[0].name != "001_init.sql" {
 		t.Fatalf("first migration must remain the immutable baseline: %+v", migrations)
+	}
+}
+
+func TestSalePriceUpgradeAndRollbackPreservesRecords(t *testing.T) {
+	raw := openRaw(t, filepath.Join(t.TempDir(), "sale.db"))
+	all := bundled(t)
+	if err := migrate(context.Background(), raw, all[:2]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.Exec(`INSERT INTO asset_records(id,name,price_cents,status) VALUES ('a','Old',12345,'ACTIVE')`); err != nil {
+		t.Fatal(err)
+	}
+	failed := append(append([]migration{}, all...), testMigration(4, `INSERT INTO missing_table VALUES(1);`))
+	if err := migrate(context.Background(), raw, failed); err == nil {
+		t.Fatal("expected rollback")
+	}
+	assertScalar(t, raw, "SELECT count(*) FROM pragma_table_info('asset_records') WHERE name='sale_price_cents'", 0)
+	assertScalar(t, raw, "SELECT price_cents FROM asset_records WHERE id='a'", 12345)
+	if err := migrate(context.Background(), raw, all); err != nil {
+		t.Fatal(err)
+	}
+	assertScalar(t, raw, "SELECT count(*) FROM asset_records WHERE sale_price_cents IS NULL", 1)
+	if _, err := raw.Exec(`UPDATE asset_records SET sale_price_cents=0 WHERE id='a'`); err != nil {
+		t.Fatal(err)
+	}
+	assertScalar(t, raw, "SELECT sale_price_cents FROM asset_records WHERE id='a'", 0)
+	if _, err := raw.Exec(`UPDATE asset_records SET sale_price_cents=-1 WHERE id='a'`); err == nil {
+		t.Fatal("negative sale price accepted")
+	}
+	if err := migrate(context.Background(), raw, all); err != nil {
+		t.Fatal(err)
 	}
 }

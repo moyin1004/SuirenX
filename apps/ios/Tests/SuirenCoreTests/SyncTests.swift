@@ -93,6 +93,15 @@ final class SyncTests: XCTestCase {
         try await first.saveExpiry(expiry)
         try await sync1.sync(); try await sync2.sync()
         var snap = try await second.snapshot(); XCTAssertEqual(snap.assets.first?.name, "iOS HTTP"); XCTAssertEqual(snap.expiry.first?.location, "")
+        try await first.archive(kind: "asset", id: asset.id, archived: true)
+        for value: Int64? in [80050, 0, nil] {
+            try await first.updateAssetSalePrice(id: asset.id, cents: value)
+            try await sync1.sync(); try await sync2.sync()
+            let sold = try await second.snapshot()
+            XCTAssertEqual(sold.assets[0].salePriceCents, value)
+        }
+        try await first.archive(kind: "asset", id: asset.id, archived: false)
+        try await sync1.sync(); try await sync2.sync()
         var a = snap.assets[0]; a.name = "second version"; try await second.saveAsset(a)
         a.name = "first version"; try await first.saveAsset(a); try await sync1.sync(); try await sync2.sync()
         snap = try await second.snapshot(); XCTAssertEqual(snap.conflicts.count, 1)
