@@ -177,6 +177,7 @@ support before adding another annotation-processing dependency.
 Run the relevant commands before handing off changes:
 
 ```shell
+go test ./...
 cd services/api && go test ./...
 protoc -I api/proto -I "$(go env GOPATH)/pkg/mod/github.com/cloudwego/hertz/cmd/hz@v0.9.7/protobuf/api" \
   --descriptor_set_out=/tmp/suirenx-api.pb api/proto/suirenx/asset/v1/asset.proto
@@ -203,7 +204,11 @@ in the verification command instead of vendoring files from a module cache.
 
 ## Change discipline
 
-- Android/iOS share the product version in root `version.xcconfig`. Use
+- Android/iOS/Web share the product version in root `version.xcconfig`.
+  The root Go metadata module embeds this file; the API module uses its local
+  replacement, so server source archives must retain the repository root metadata
+  files as well as `services/api`. Web renders the compiled product version;
+  never maintain a separate version literal in JavaScript. Use
   `scripts/package.py` for numbered local packages and the existing GitHub
   release workflow for distribution numbers. Ordinary IDE builds do not consume
   numbers. Freeze package identity before compilation; never distribute a dirty

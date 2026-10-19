@@ -1,9 +1,11 @@
 package http
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/moyin1004/suirenx"
 	"github.com/moyin1004/suirenx/services/api/internal/service"
 )
 
@@ -19,6 +21,10 @@ func TestWebClientAssetsAreEmbeddedWithSecurityHeaders(t *testing.T) {
 	}
 	if got := page.Header().Get("Cache-Control"); got != "no-store" {
 		t.Fatalf("cache policy = %q, want no-store", got)
+	}
+	versionMeta := fmt.Sprintf(`<meta name="suirenx-version" content="%s">`, suirenx.ProductVersion())
+	if !strings.Contains(page.Body.String(), versionMeta) || strings.Contains(page.Body.String(), "{{.Version}}") {
+		t.Fatalf("web entry does not expose the compiled product version: %s", page.Body.String())
 	}
 
 	for _, asset := range []struct {

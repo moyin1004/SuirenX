@@ -1,16 +1,21 @@
 package webui
 
 import (
+	"bytes"
 	"context"
 	"embed"
+	"html/template"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/app/server"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
+	"github.com/moyin1004/suirenx"
 )
 
 //go:embed index.html app.css app.js
 var files embed.FS
+
+var indexTemplate = template.Must(template.ParseFS(files, "index.html"))
 
 // Register serves the same-origin Web client from the API binary.
 func Register(h *server.Hertz) {
@@ -25,6 +30,14 @@ func serve(path, contentType string) app.HandlerFunc {
 		if err != nil {
 			c.AbortWithStatus(consts.StatusNotFound)
 			return
+		}
+		if path == "index.html" {
+			var rendered bytes.Buffer
+			if err := indexTemplate.Execute(&rendered, struct{ Version string }{suirenx.ProductVersion()}); err != nil {
+				c.AbortWithStatus(consts.StatusInternalServerError)
+				return
+			}
+			body = rendered.Bytes()
 		}
 		c.Header("Cache-Control", "no-store")
 		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'")

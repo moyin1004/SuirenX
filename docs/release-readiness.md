@@ -16,7 +16,8 @@
 
 ## 版本策略
 
-- Android/iOS 的产品版本统一读取仓库根目录 `version.xcconfig` 的 `MARKETING_VERSION`，当前开发版本为 `0.1.3`；发布时只手动调整这一项。开发版本号变更不代表已发布。
+- Android/iOS/Web 的产品版本统一读取仓库根目录 `version.xcconfig` 的 `MARKETING_VERSION`，当前开发版本为 `0.1.3`；发布时只手动调整这一项。Go 构建通过根元数据模块嵌入该文件，Web 从服务端渲染的 HTML 元数据读取，不在 JavaScript 维护独立版本。开发版本号变更不代表已发布；Web 需重新编译并部署服务后生效。
+- 服务端门禁同时运行根目录 `go test ./...` 和 `services/api` 下的 `go test ./...`。隔离启动构建产物，请求 `/` 核对 `suirenx-version` 元数据与该源码版本一致，再检查已登录页面的 `Web <版本>` 文案；源码归档须保留根元数据模块。
 - 本地开发打包运行 `python3 scripts/package.py android` 或 `python3 scripts/package.py ios`。每次调用在忽略的 `.suirenx-build/package-counter` 中加一，两个平台共用此 checkout 的开发序列（从 4 开始）；文件锁防止并发重复，计数状态独立于编译输出，常规 clean 不会重置编号。失败也占用编号，不回收。不要删除计数文件；新电脑/新 checkout 的本地号不保证唯一，结合 Git 与源码摘要区分。
 - 普通 Android Studio / Xcode Build 复用本地最近分配的编号（首次为 4），不消耗新编号；会重新采集 Git 提交、未提交状态、源码摘要与 UTC 时间。脚本在忽略的 `.suirenx-build/development.xcconfig` 中同步最近编号，避免打包后再用 IDE 编译退回较低构建号。需要新编号和可保留的安装包时使用打包脚本。
 - 正式 Android 包由 GitHub Actions 的现有 Release APK workflow 分配独立编号：`1000000 + (GITHUB_RUN_NUMBER - 1) * 100 + GITHUB_RUN_ATTEMPT`。尝试号仅允许 1–99；为下一次运行保留间隔。开发号限制在 1000000 以下；两个渠道版本号相同，构建号不同。旧运行在已有更新运行时禁止重试，改为新建 workflow run；串行发布构建避免完成顺序反转。编号允许跳号，不要求每次加一。

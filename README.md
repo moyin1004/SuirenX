@@ -176,7 +176,8 @@ Content-Type: application/json
 ## 验证
 
 ```shell
-cd services/api && go test ./... && go vet ./...
+go test ./...
+(cd services/api && go test ./... && go vet ./...)
 ./gradlew :apps:android:app:assembleDebug
 ./gradlew :apps:android:feature:assets:testDebugUnitTest :apps:android:feature:expiry:testDebugUnitTest
 git diff --check

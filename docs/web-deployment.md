@@ -11,7 +11,9 @@
 
 ## 构建与文件布局
 
-在仓库 `services/api` 目录中构建服务和密码轮换工具：
+Android/iOS/Web 共用仓库根目录 `version.xcconfig` 的 `MARKETING_VERSION`。Go 编译将该文件嵌入二进制，Web 页头读取服务端渲染的版本元数据；升级时只改这一处并重新构建部署，不需要手动改 JavaScript。源码必须保留根目录的 `go.mod`、`version.go` 和 `version.xcconfig`，以供 API 模块的本地依赖使用，运行时不需要这些文件。
+
+在完整源码仓库的 `services/api` 目录中构建服务和密码轮换工具：
 
 ```sh
 mkdir -p ./bin
@@ -118,7 +120,7 @@ COPYFILE_DISABLE=1 tar -czf /tmp/suirenx-api-source.tar.gz \
   --exclude='services/api/data' \
   --exclude='._*' --exclude='*/._*' \
   --exclude='.DS_Store' --exclude='*/.DS_Store' \
-  -C /path/to/repository services/api
+  -C /path/to/repository go.mod version.go version.xcconfig services/api
 ```
 
 将源码解压到新的构建目录，并令 `BUILD_ROOT` 指向解压后的 `services/api` 目录；如果必须复用目录，先清理旧的 AppleDouble 文件。编译前检查迁移目录，并确认其中只有预期的编号 SQL 迁移：
@@ -131,7 +133,7 @@ find "$BUILD_ROOT/internal/database/migrations" -maxdepth 1 -type f -print
 
 不要为了跳过无效迁移文件而放宽迁移校验。新二进制首次启动应使用隔离的临时 SQLite 数据库；确认启动与健康检查成功后再升级正式服务。
 
-Web 客户端由 Go `embed` 打包，`app.js`/`app.css` 的改动只有进入归档并重新编译才会生效。打包后、编译前核对归档内容与工作树的 SHA-256，可以发现陈旧归档或打包与本地写入的竞态：
+Web 客户端和统一产品版本由 Go `embed` 打包，`app.js`/`app.css`/根 `version.xcconfig` 的改动只有进入归档并重新编译才会生效。打包后、编译前核对归档内容与工作树的 SHA-256，可以发现陈旧归档或打包与本地写入的竞态：
 
 ```sh
 tar -xzOf /tmp/suirenx-api-source.tar.gz \
@@ -139,7 +141,7 @@ tar -xzOf /tmp/suirenx-api-source.tar.gz \
 sha256sum /path/to/repository/services/api/internal/transport/http/webui/app.js
 ```
 
-两者不一致时必须重新打包，不要继续构建。编译完成后再用新二进制在隔离端口请求一次 `/web/app.js`，比对该哈希，确认二进制提供的确实是本次工作树的资源。
+两者不一致时必须重新打包，不要继续构建。编译完成后再用新二进制在隔离端口请求一次 `/web/app.js`，比对该哈希，并请求 `/` 核对 `<meta name="suirenx-version" content="…">` 与归档的 `MARKETING_VERSION` 一致，确认二进制提供的确实是本次源码的资源和版本。生产上线后重复核对外部 HTTPS 响应。
 
 ## 认证限流与请求体上限
 

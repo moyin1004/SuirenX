@@ -5,12 +5,15 @@ go 1.25.0
 require (
 	github.com/cloudwego/hertz v0.10.6
 	github.com/golang-jwt/jwt/v5 v5.2.2
+	github.com/moyin1004/suirenx v0.0.0
 	golang.org/x/crypto v0.40.0
 	golang.org/x/time v0.15.0
 	google.golang.org/protobuf v1.34.1
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.2
 )
+
+replace github.com/moyin1004/suirenx => ../..
 
 require (
 	github.com/bytedance/gopkg v0.1.4 // indirect

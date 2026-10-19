@@ -2,6 +2,8 @@
 
 ## v0.1.3：已发布，剩余补验
 
+- [ ] 部署 Web 统一版本修复，并从外部 HTTPS 核对页头：2026-10-19 已移除 `Web 0.1.2` 硬编码，Android/iOS/Web 共用根 `version.xcconfig`；本机构建及登录页面已验证 `Web 0.1.3`，隔离源码仅修改共享版本后构建响应自动变为 `0.1.4`。尚未更新生产二进制，不改写已发布的 v0.1.3 tag。见 [修复记录](history/roadmap-execution.md#web-版本文案接入统一来源)。
+
 2026-10-18：已完成 review、最终门禁、实体 Android/iPad 保留数据覆盖安装、服务端配套升级和 [v0.1.3 签名发布](https://github.com/moyin1004/SuirenX/releases/tag/v0.1.3)。Android 正式包为 `0.1.3 / 1000601`，签名、构建追溯、上一正式版升级与发布附件重新下载均已独立核验。iOS/iPadOS 源码随版本交付，继续本机签名安装，未发布公开 IPA/TestFlight/App Store。详见 [发布记录](history/roadmap-execution.md#v013-正式发布与配套部署)。
 
 2026-10-17：`codex/v0.1.3` 已完成当前 Android 功能的 SwiftUI 原生通用实现：资产、用品期限、统计、45 个稳定图标、筛选搜索排序、主题、独立账号/服务器、Android JSON v1 备份恢复、本地 SQLite 与显式增量同步/冲突处理。iPad 侧栏、横竖屏、真实系统窗口缩窄与草稿保持、最大动态字号已在现有模拟器运行验收。执行证据与限制见 [iOS 实施记录](history/roadmap-execution.md#2026-10-17v013-原生-ios-与-ipad)。
