@@ -29,9 +29,9 @@ class LocalAssetRepository @Inject constructor(
     private val dao: AssetDao = database.assetDao()
 
     override suspend fun updateAssetSalePrice(id: String, salePriceCents: Long?): Result<Asset> = attempt {
-        require(salePriceCents == null || salePriceCents >= 0) { "卖出价格不能为负数" }
+        require(salePriceCents == null || salePriceCents >= 0) { "error_sale_price_negative" }
         val current = requireAsset(id)
-        check(current.isArchived) { "仅归档资产可填写卖出价格" }
+        check(current.isArchived) { "error_sale_price_archive_required" }
         val updated = current.copy(salePriceCents = salePriceCents, updatedAt = Instant.now(clock))
         dao.update(updated.toEntity())
         journal.asset(updated)
@@ -56,7 +56,7 @@ class LocalAssetRepository @Inject constructor(
 
     override suspend fun updateAssetStatus(id: String, status: AssetStatus, retiredDate: LocalDate?): Result<Asset> = attempt {
         val current = requireAsset(id)
-        check(!current.isArchived) { "归档资产请先恢复" }
+        check(!current.isArchived) { "error_asset_restore_first" }
         val updated = current.copy(status = status, retiredDate = retiredDate, updatedAt = Instant.now(clock))
         dao.update(updated.toEntity())
         journal.asset(updated)
@@ -80,9 +80,9 @@ class LocalAssetRepository @Inject constructor(
 
     override suspend fun updateAsset(id: String, asset: NewAsset): Result<Asset> = attempt {
         val current = requireAsset(id)
-        check(!current.isArchived) { "归档资产请先恢复" }
+        check(!current.isArchived) { "error_asset_restore_first" }
         check(current.status != AssetStatus.Retired || current.retiredDate == null || asset.purchaseDate <= current.retiredDate) {
-            "购买日期不能晚于退役日期"
+            "error_purchase_after_retirement"
         }
         val updated = current.copy(
             name = asset.name.trim(), priceCents = asset.priceCents, purchaseDate = asset.purchaseDate,
@@ -115,7 +115,7 @@ class LocalAssetRepository @Inject constructor(
     suspend fun allForBackup(): List<Asset> = dao.getAll().map(::toDomain)
 
     private suspend fun requireAsset(id: String): Asset = dao.getById(id)?.let(::toDomain)
-        ?: throw NoSuchElementException("未找到资产")
+        ?: throw NoSuchElementException("error_asset_not_found")
 
     private fun toDomain(entity: AssetEntity): Asset {
         val status = if (entity.status == AssetStatus.Retired.name) AssetStatus.Retired else AssetStatus.Active

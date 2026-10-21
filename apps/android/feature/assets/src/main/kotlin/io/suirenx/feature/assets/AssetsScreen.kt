@@ -1,5 +1,14 @@
 package io.suirenx.feature.assets
 
+import io.suirenx.core.ui.localization.moneyFormat
+import io.suirenx.core.ui.localization.moneyText
+import io.suirenx.core.ui.localization.dateText
+import androidx.compose.ui.platform.LocalDensity
+
+import io.suirenx.core.ui.R as CopyR
+import io.suirenx.core.ui.localization.uiText
+import io.suirenx.core.ui.localization.uiQuantity
+
 import io.suirenx.core.ui.component.SuirenHeader
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -127,6 +136,7 @@ fun AssetsScreen(
     onClearTags: () -> Unit = {},
 ) {
     val listState = rememberLazyListState()
+    val columns = if (LocalDensity.current.fontScale >= 1.3f) 1 else 2
     val overviewIndex = 1
     val compact by remember(listState, overviewIndex) { derivedStateOf { listState.firstVisibleItemIndex > overviewIndex } }
     val visibleAssets = state.visibleAssets.filter { it.name.contains(query, ignoreCase = true) || it.tags.any { tag -> tag.contains(query, ignoreCase = true) } }
@@ -151,8 +161,8 @@ fun AssetsScreen(
                     Surface(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), shape = RoundedCornerShape(16.dp),
                         color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
                         Row(Modifier.padding(14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(NumberFormat.getCurrencyInstance(Locale.CHINA).format(overview.totalPriceCents / 100.0), fontSize = 18.sp, fontFamily = SuirenNumberFont)
-                            Text("筛选购入额 · ${overview.totalCount} 项 · 最长 $longestHeldDays 天", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(moneyText(overview.totalPriceCents), fontSize = 18.sp, fontFamily = SuirenNumberFont)
+                            Text(uiText(CopyR.string.copy_filtered_cost_records_count_longest_held_days_count, overview.totalCount, longestHeldDays), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
@@ -162,19 +172,19 @@ fun AssetsScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         IconButton(onClick = onSearch) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回资产列表")
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = uiText(CopyR.string.copy_back_to_assets))
                         }
                         OutlinedTextField(
                             value = query,
                             onValueChange = onQueryChange,
                             modifier = Modifier.weight(1f),
-                            placeholder = { Text("搜索名称、类型或标签") },
+                            placeholder = { Text(uiText(CopyR.string.copy_search_name_channel_or_tags)) },
                             singleLine = true,
                             shape = RoundedCornerShape(14.dp),
                             trailingIcon = {
                                 if (query.isNotEmpty()) {
                                     IconButton(onClick = { onQueryChange("") }) {
-                                        Icon(Icons.Default.Close, contentDescription = "清除搜索")
+                                        Icon(Icons.Default.Close, contentDescription = uiText(CopyR.string.copy_clear_search))
                                     }
                                 }
                             },
@@ -204,8 +214,8 @@ fun AssetsScreen(
             state.errorMessage != null -> item { ErrorState(state.errorMessage, onRefresh) }
             state.assets.isEmpty() -> item { EmptyState() }
             visibleAssets.isEmpty() -> item { FilteredEmptyState() }
-            else -> items(visibleAssets.chunked(2), key = { row -> row.first().id }) { rowAssets ->
-                AssetRow(rowAssets, onAssetClick)
+            else -> items(visibleAssets.chunked(columns), key = { row -> row.first().id }) { rowAssets ->
+                AssetRow(rowAssets, onAssetClick, fillSingle = columns == 1)
             }
         }
     }
@@ -213,11 +223,11 @@ fun AssetsScreen(
 
 @Composable
 private fun Header(onRefresh: () -> Unit, modifier: Modifier = Modifier) {
-    SuirenHeader(modifier, title = "资产") {
+    SuirenHeader(modifier, title = uiText(CopyR.string.copy_assets)) {
         Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onRefresh, modifier = Modifier.size(44.dp)) {
-                    Icon(Icons.Default.Refresh, contentDescription = "刷新", modifier = Modifier.size(21.dp))
+                    Icon(Icons.Default.Refresh, contentDescription = uiText(CopyR.string.copy_refresh), modifier = Modifier.size(21.dp))
                 }
             }
         }
@@ -248,7 +258,7 @@ private fun FilterChips(selected: AssetFilter, onSelected: (AssetFilter) -> Unit
                     border = BorderStroke(1.dp, if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
                 ) {
                     Box(Modifier.padding(horizontal = 8.dp), contentAlignment = Alignment.Center) {
-                        Text(filter.label, fontSize = 12.sp, maxLines = 1,
+                        Text(uiText(filter.label), fontSize = 12.sp, maxLines = 1,
                             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal)
                     }
                 }
@@ -266,26 +276,27 @@ private fun TagFilterMenu(
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val tagState = if (selectedTags.isEmpty()) uiText(CopyR.string.copy_all_tags) else uiQuantity(CopyR.plurals.copy_count_tags_selected, selectedTags.size)
     Box(modifier) {
         AssetToolbarButton(onClick = { expanded = true }, active = selectedTags.isNotEmpty(), modifier = Modifier
-            .semantics { stateDescription = if (selectedTags.isEmpty()) "全部标签" else "已选 ${selectedTags.size} 个标签" }) {
+            .semantics { stateDescription = tagState }) {
             BadgedBox(badge = { if (selectedTags.isNotEmpty()) Badge { Text("${selectedTags.size}") } }) {
-                Icon(SuirenIcons.Filter, contentDescription = "标签筛选", modifier = Modifier.size(21.dp))
+                Icon(SuirenIcons.Filter, contentDescription = uiText(CopyR.string.copy_filter_tags), modifier = Modifier.size(21.dp))
             }
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.widthIn(max = 280.dp)) {
-            DropdownMenuItem(text = { Text("全部标签") }, onClick = onClear,
+            DropdownMenuItem(text = { Text(uiText(CopyR.string.copy_all_tags)) }, onClick = onClear,
                 leadingIcon = { Checkbox(checked = selectedTags.isEmpty(), onCheckedChange = null) })
             HorizontalDivider()
             val options = (tags + selectedTags).distinct().sorted()
-            if (options.isEmpty()) DropdownMenuItem(text = { Text("暂无标签") }, enabled = false, onClick = {})
+            if (options.isEmpty()) DropdownMenuItem(text = { Text(uiText(CopyR.string.copy_no_tags)) }, enabled = false, onClick = {})
             options.forEach { tag ->
                 DropdownMenuItem(text = { Text(tag, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
                     leadingIcon = { Checkbox(checked = tag in selectedTags, onCheckedChange = null) },
                     modifier = Modifier.semantics { selected = tag in selectedTags }, onClick = { onToggle(tag) })
             }
             HorizontalDivider()
-            DropdownMenuItem(text = { Text("完成") }, onClick = { expanded = false })
+            DropdownMenuItem(text = { Text(uiText(CopyR.string.copy_done)) }, onClick = { expanded = false })
         }
     }
 }
@@ -326,6 +337,8 @@ private fun AssetListToolbar(
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val searchState = if (query.isBlank()) uiText(CopyR.string.copy_search_is_off) else uiText(CopyR.string.copy_search_count, query)
+    val sortState = uiText(sort.label) + ", " + if (descending) uiText(CopyR.string.copy_descending) else uiText(CopyR.string.copy_ascending)
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         FilterChips(selectedFilter, onFilterSelected, modifier = Modifier.weight(1f))
         TagFilterMenu(tags, selectedTags, onTagToggle, onClearTags)
@@ -333,30 +346,30 @@ private fun AssetListToolbar(
             onClick = onSearch,
             active = query.isNotBlank(),
             modifier = Modifier
-                .semantics { stateDescription = if (query.isBlank()) "未启用搜索" else "搜索条件：$query" },
+                .semantics { stateDescription = searchState },
         ) {
-            Icon(Icons.Default.Search, contentDescription = "搜索资产", modifier = Modifier.size(20.dp))
+            Icon(Icons.Default.Search, contentDescription = uiText(CopyR.string.copy_search_assets), modifier = Modifier.size(20.dp))
         }
         Box {
             AssetToolbarButton(
                 onClick = { expanded = true },
                 modifier = Modifier.semantics {
-                    stateDescription = "${sort.label}，${if (descending) "降序" else "升序"}"
+                    stateDescription = sortState
                 },
             ) {
-                Icon(SuirenIcons.Sort, contentDescription = "资产排序", modifier = Modifier.size(21.dp))
+                Icon(SuirenIcons.Sort, contentDescription = uiText(CopyR.string.copy_sort_assets), modifier = Modifier.size(21.dp))
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 AssetSort.entries.forEach { option ->
                     DropdownMenuItem(
-                        text = { Text(option.label) },
+                        text = { Text(uiText(option.label)) },
                         leadingIcon = { if (option == sort) Text("✓") },
                         modifier = Modifier.semantics { selected = option == sort },
                         onClick = { onSortSelected(option); expanded = false },
                     )
                 }
                 HorizontalDivider()
-                listOf(false to "升序", true to "降序").forEach { (targetDescending, label) ->
+                listOf(false to uiText(CopyR.string.copy_ascending), true to uiText(CopyR.string.copy_descending)).forEach { (targetDescending, label) ->
                     DropdownMenuItem(
                         text = { Text(label) },
                         leadingIcon = { if (descending == targetDescending) Text("✓") },
@@ -374,27 +387,27 @@ private fun AssetListToolbar(
 
 @Composable
 private fun AssetOverviewCard(overview: AssetOverview, modifier: Modifier = Modifier, longestHeldDays: Int = 0, totalAssetCount: Int = overview.totalCount) {
-    val currency = NumberFormat.getCurrencyInstance(Locale.CHINA).apply { minimumFractionDigits = 0 }
+    val currency = moneyFormat(minimumFractionDigits = 0)
     Surface(modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                     Box(Modifier.size(6.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondary))
-                    Text("资产概览", fontSize = 12.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold)
+                    Text(uiText(CopyR.string.copy_asset_overview_asset_overview), fontSize = 12.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold)
                 }
                 Text("${overview.totalCount}/$totalAssetCount", color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp, lineHeight = 18.sp, fontFamily = SuirenNumberFont, fontWeight = FontWeight.Medium)
             }
             Row(Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 18.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OverviewAmount("总资产金额", currency.format(overview.totalPriceCents / 100.0), Modifier.weight(1f))
-                OverviewAmount("日均成本", currency.format(overview.totalDailyCostCents / 100.0), Modifier.weight(1f), Alignment.End)
+                OverviewAmount(uiText(CopyR.string.copy_total_purchase_cost_total_purchase_cost), currency.format(java.math.BigDecimal.valueOf(overview.totalPriceCents, 2)), Modifier.weight(1f))
+                OverviewAmount(uiText(CopyR.string.copy_cost_per_day), currency.format(java.math.BigDecimal.valueOf(overview.totalDailyCostCents, 2)), Modifier.weight(1f), Alignment.End)
             }
             Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.background) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 11.dp)) {
-                    OverviewCount("服役中", "${overview.activeCount}", Modifier.weight(1f))
-                    OverviewCount("已退役", "${overview.retiredCount}", Modifier.weight(1f))
-                    OverviewCount("最长持有天", "$longestHeldDays", Modifier.weight(1f))
+                    OverviewCount(uiText(CopyR.string.copy_active), "${overview.activeCount}", Modifier.weight(1f))
+                    OverviewCount(uiText(CopyR.string.copy_retired), "${overview.retiredCount}", Modifier.weight(1f))
+                    OverviewCount(uiText(CopyR.string.copy_longest_held), "$longestHeldDays", Modifier.weight(1f))
                 }
             }
         }
@@ -422,19 +435,19 @@ private fun OverviewCount(label: String, value: String, modifier: Modifier = Mod
 }
 
 @Composable
-private fun AssetRow(assets: List<Asset>, onAssetClick: (String) -> Unit, modifier: Modifier = Modifier) {
+private fun AssetRow(assets: List<Asset>, onAssetClick: (String) -> Unit, modifier: Modifier = Modifier, fillSingle: Boolean = false) {
     Row(
         modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         assets.forEach { asset -> AssetCard(asset, { onAssetClick(asset.id) }, Modifier.weight(1f)) }
-        if (assets.size == 1) Spacer(Modifier.weight(1f))
+        if (assets.size == 1 && !fillSingle) Spacer(Modifier.weight(1f))
     }
 }
 
 @Composable
 private fun AssetCard(asset: Asset, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val currency = NumberFormat.getCurrencyInstance(Locale.CHINA)
+    val currency = moneyFormat()
     val active = !asset.isArchived && asset.status == AssetStatus.Active
     Card(
         onClick = onClick,
@@ -454,9 +467,9 @@ private fun AssetCard(asset: Asset, onClick: () -> Unit, modifier: Modifier = Mo
                 Spacer(Modifier.weight(1f))
                 StatusPill(
                     label = when {
-                        asset.isArchived -> "已归档"
-                        active -> "服役中"
-                        else -> "已退役"
+                        asset.isArchived -> uiText(CopyR.string.copy_archived)
+                        active -> uiText(CopyR.string.copy_active)
+                        else -> uiText(CopyR.string.copy_retired)
                     },
                     active = active,
                 )
@@ -471,19 +484,20 @@ private fun AssetCard(asset: Asset, onClick: () -> Unit, modifier: Modifier = Mo
             Text(
                 buildAnnotatedString {
                     withStyle(SpanStyle(fontFamily = SuirenNumberFont, letterSpacing = (-0.2).sp)) {
-                        append(currency.format(asset.priceCents / 100.0))
+                        append(currency.format(java.math.BigDecimal.valueOf(asset.priceCents, 2)))
                     }
-                    append(" · 持有 ${asset.heldDays} 天")
+                    append(uiQuantity(CopyR.plurals.copy_held_for_count_days, asset.heldDays))
                 },
+                modifier = Modifier.fillMaxWidth(),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 10.sp,
                 lineHeight = 15.sp,
-                maxLines = 1,
+                maxLines = 2,
             )
             // Reuse the original 14 dp gap so a sale price never grows the card.
             val salePrice = asset.salePriceCents
             if (salePrice != null) {
-                Text("卖出 ¥${java.math.BigDecimal.valueOf(salePrice, 2).toPlainString()}",
+                Text(uiText(CopyR.string.copy_sold_for_cny_count, moneyText(salePrice)),
                     modifier = Modifier.height(14.dp), fontSize = 11.sp, lineHeight = 14.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
                     softWrap = false, autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 6.sp, maxFontSize = 11.sp))
@@ -491,10 +505,10 @@ private fun AssetCard(asset: Asset, onClick: () -> Unit, modifier: Modifier = Mo
             Text(
                 buildAnnotatedString {
                     withStyle(SpanStyle(fontFamily = SuirenNumberFont, letterSpacing = (-0.28).sp)) {
-                        append(currency.format(asset.dailyCostCents / 100.0))
+                        append(currency.format(java.math.BigDecimal.valueOf(asset.dailyCostCents, 2)))
                     }
                     withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, letterSpacing = 0.sp)) {
-                        append("/天")
+                        append(uiText(CopyR.string.copy_day))
                     }
                 },
                 fontSize = 14.sp,
@@ -531,9 +545,9 @@ private fun LoadingState(modifier: Modifier = Modifier) {
 private fun ErrorState(message: String, onRetry: () -> Unit, modifier: Modifier = Modifier) {
     Surface(modifier.padding(horizontal = 16.dp).fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("无法读取本机数据", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-            Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-            Button(onClick = onRetry) { Text("重试读取") }
+            Text(uiText(CopyR.string.copy_unable_to_load_local_data), fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            Text(uiText(message), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            Button(onClick = onRetry) { Text(uiText(CopyR.string.copy_retry_loading)) }
         }
     }
 }
@@ -545,8 +559,8 @@ private fun EmptyState(modifier: Modifier = Modifier) {
             Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
                 MaterialSymbol(glyph = "\uE326", contentDescription = null, modifier = Modifier.padding(18.dp), size = 38.dp)
             }
-            Text("还没有资产", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-            Text("把每天正在使用的东西记下来，燧人会帮你算清持有成本。", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            Text(uiText(CopyR.string.copy_no_assets_yet), fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            Text(uiText(CopyR.string.copy_record_the_things_you_use_and_understand_their_cost_per), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
         }
     }
 }
@@ -554,7 +568,7 @@ private fun EmptyState(modifier: Modifier = Modifier) {
 @Composable
 private fun FilteredEmptyState(modifier: Modifier = Modifier) {
     Surface(modifier.padding(horizontal = 16.dp).fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface) {
-        Text("这个筛选下暂时没有资产", modifier = Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+        Text(uiText(CopyR.string.copy_no_assets_match_this_filter), modifier = Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
     }
 }
 
@@ -567,7 +581,7 @@ private fun AssetsScreenPreview() {
                 isLoading = false,
                 assets = listOf(
                     Asset("1", "MacBook Pro", 1_699_900, LocalDate.now(), AssetStatus.Active, "", 133, 12_781),
-                    Asset("2", "荣耀 Magic8 Pro", 659_900, LocalDate.now(), AssetStatus.Active, "", 176, 3_749),
+                    Asset("2", uiText(CopyR.string.copy_honor_magic8_pro), 659_900, LocalDate.now(), AssetStatus.Active, "", 176, 3_749),
                     Asset("3", "Kindle", 49_900, LocalDate.now(), AssetStatus.Retired, "", 420, 119),
                 ),
             ),

@@ -1,5 +1,13 @@
 package io.suirenx.feature.expiry
 
+import io.suirenx.core.ui.localization.moneyFormat
+import io.suirenx.core.ui.localization.moneyText
+import io.suirenx.core.ui.localization.dateText
+
+import io.suirenx.core.ui.R as CopyR
+import io.suirenx.core.ui.localization.uiText
+import io.suirenx.core.ui.localization.uiQuantity
+
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
@@ -97,10 +105,10 @@ fun ExpiryRoute(
     if (showDiscard) {
         AlertDialog(
             onDismissRequest = { showDiscard = false },
-            title = { Text("放弃未保存修改？") },
-            text = { Text("当前用品表单还有未保存内容，离开后这些修改会丢失。") },
-            confirmButton = { TextButton(onClick = { showDiscard = false; viewModel.closeEditor() }) { Text("放弃修改") } },
-            dismissButton = { TextButton(onClick = { showDiscard = false }) { Text("继续编辑") } },
+            title = { Text(uiText(CopyR.string.copy_discard_unsaved_changes)) },
+            text = { Text(uiText(CopyR.string.copy_this_item_has_unsaved_changes_leaving_discards_them)) },
+            confirmButton = { TextButton(onClick = { showDiscard = false; viewModel.closeEditor() }) { Text(uiText(CopyR.string.copy_discard_changes)) } },
+            dismissButton = { TextButton(onClick = { showDiscard = false }) { Text(uiText(CopyR.string.copy_keep_editing)) } },
         )
     }
     ExpiryScreen(
@@ -134,9 +142,9 @@ fun ExpirySummaryBanner(onClick: () -> Unit, modifier: Modifier = Modifier) {
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
         ) {
             Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Warning, contentDescription = "过期提醒", tint = MaterialTheme.colorScheme.error)
+                Icon(Icons.Default.Warning, contentDescription = uiText(CopyR.string.copy_expiry_reminder), tint = MaterialTheme.colorScheme.error)
                 Spacer(Modifier.padding(6.dp))
-                Text("有 ${state.expiredCount} 件用品已过期", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                Text(uiQuantity(CopyR.plurals.copy_count_items_have_expired, state.expiredCount), color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -173,19 +181,20 @@ fun ExpiryScreen(
     onConfirmDelete: () -> Unit = {},
     onDismissDelete: () -> Unit = {},
 ) {
+    val groupTitles = listOf(uiText(CopyR.string.copy_archived), uiText(CopyR.string.copy_needs_attention), uiText(CopyR.string.copy_upcoming), uiText(CopyR.string.copy_handled))
     state.editor?.let { editor ->
         ExpiryEditorDialog(editor, state.busy, onCloseEditor, onSaveEditor, onEditorName, onEditorCategory, onEditorPackageExpiry, onEditorOpenedDate, onEditorOpenedDays, onEditorLocation, onEditorNotes)
     }
     if (state.deleteConfirmation) {
         AlertDialog(
             onDismissRequest = { if (!state.busy) onDismissDelete() },
-            title = { Text("删除用品？") },
+            title = { Text(uiText(CopyR.string.copy_delete_this_item)) },
             text = { Column {
-                Text("删除“${state.detail?.name.orEmpty()}”后无法在列表中恢复。已同步的数据将在下次同步时通知其他设备。")
-                state.deleteError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                Text(uiText(CopyR.string.copy_count_cannot_be_restored_from_the_list_after_deletion_synced, state.detail?.name.orEmpty()))
+                state.deleteError?.let { Text(uiText(it), color = MaterialTheme.colorScheme.error) }
             } },
-            confirmButton = { TextButton(onClick = onConfirmDelete, enabled = !state.busy) { Text("删除", color = MaterialTheme.colorScheme.error) } },
-            dismissButton = { TextButton(onClick = onDismissDelete, enabled = !state.busy) { Text("取消") } },
+            confirmButton = { TextButton(onClick = onConfirmDelete, enabled = !state.busy) { Text(uiText(CopyR.string.copy_delete), color = MaterialTheme.colorScheme.error) } },
+            dismissButton = { TextButton(onClick = onDismissDelete, enabled = !state.busy) { Text(uiText(CopyR.string.copy_cancel)) } },
         )
     }
     state.detail?.takeUnless { state.deleteConfirmation }?.let { item ->
@@ -199,19 +208,19 @@ fun ExpiryScreen(
         item {
             Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = onBack, contentPadding = PaddingValues(0.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回工具", modifier = Modifier.size(18.dp))
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = uiText(CopyR.string.copy_back_to_tools), modifier = Modifier.size(18.dp))
                     Spacer(Modifier.size(6.dp))
-                    Text("工具", fontSize = 13.sp)
+                    Text(uiText(CopyR.string.copy_tools), fontSize = 13.sp)
                 }
                 Spacer(Modifier.weight(1f))
-                Text("工具详情", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(uiText(CopyR.string.copy_tool_details), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("用品 / 保质期", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("用品期限，提前掌握", fontSize = 29.sp, lineHeight = 36.sp, fontWeight = FontWeight.SemiBold)
-                Text("记录用品期限，在应用内查看临期与已过期项目。", fontSize = 11.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(uiText(CopyR.string.copy_expiry_items), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(uiText(CopyR.string.copy_stay_ahead_of_expiry_dates), fontSize = 29.sp, lineHeight = 36.sp, fontWeight = FontWeight.SemiBold)
+                Text(uiText(CopyR.string.copy_track_expiry_dates_and_view_upcoming_or_expired_items_in), fontSize = 11.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         item {
@@ -224,17 +233,17 @@ fun ExpiryScreen(
                 Column(Modifier.fillMaxWidth().padding(15.dp)) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("状态概览", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(if (available) "${currentItems.size} 项记录" else "— 项记录", fontFamily = SuirenNumberFont, fontSize = 24.sp, lineHeight = 29.sp, fontWeight = FontWeight.Medium, letterSpacing = (-0.72).sp)
-                            Text(if (available) "${expired + soon} 项需要关注" else "正在读取状态", fontSize = 10.sp, lineHeight = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(uiText(CopyR.string.copy_status_overview), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(if (available) uiQuantity(CopyR.plurals.copy_count_records, currentItems.size) else uiText(CopyR.string.copy_records), fontFamily = SuirenNumberFont, fontSize = 24.sp, lineHeight = 29.sp, fontWeight = FontWeight.Medium, letterSpacing = (-0.72).sp)
+                            Text(if (available) uiQuantity(CopyR.plurals.copy_count_need_attention_count_need_attention, expired + soon) else uiText(CopyR.string.copy_loading_status), fontSize = 10.sp, lineHeight = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceVariant) {
-                            Text("本机数据", modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp), fontSize = 10.sp, lineHeight = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(uiText(CopyR.string.copy_local_data), modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp), fontSize = 10.sp, lineHeight = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                     HorizontalDivider(Modifier.padding(top = 14.dp), color = MaterialTheme.colorScheme.outlineVariant)
                     Row(Modifier.fillMaxWidth().padding(top = 12.dp).height(IntrinsicSize.Min)) {
-                        listOf("已过期" to expired, "临期" to soon, "正常" to normal).forEachIndexed { index, (label, count) ->
+                        listOf(uiText(CopyR.string.copy_expired) to expired, uiText(CopyR.string.copy_expiring_soon) to soon, uiText(CopyR.string.copy_normal) to normal).forEachIndexed { index, (label, count) ->
                             if (index > 0) VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                             Column(Modifier.weight(1f).padding(start = if (index > 0) 10.dp else 0.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                 Text(if (available) "$count" else "—", fontFamily = SuirenNumberFont, fontWeight = FontWeight.Medium, fontSize = 16.sp, lineHeight = 20.sp)
@@ -249,59 +258,59 @@ fun ExpiryScreen(
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 if (searching) {
                     IconButton(onClick = onSearch) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回用品列表")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = uiText(CopyR.string.copy_back_to_items))
                     }
                     OutlinedTextField(
                         value = state.query,
                         onValueChange = onQueryChanged,
                         modifier = Modifier.weight(1f),
-                        placeholder = { Text("搜索名称、分类或位置") },
+                        placeholder = { Text(uiText(CopyR.string.copy_search_name_category_or_location)) },
                         singleLine = true,
                         shape = RoundedCornerShape(14.dp),
                         trailingIcon = {
                             if (state.query.isNotEmpty()) {
                                 IconButton(onClick = { onQueryChanged("") }) {
-                                    Icon(Icons.Default.Close, contentDescription = "清除搜索")
+                                    Icon(Icons.Default.Close, contentDescription = uiText(CopyR.string.copy_clear_search))
                                 }
                             }
                         },
                     )
                 } else {
-                    Text("提醒列表", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                    IconButton(onClick = onSearch) { Icon(Icons.Default.Search, contentDescription = "搜索用品", modifier = Modifier.size(20.dp)) }
-                    IconButton(onClick = onRefresh) { Icon(Icons.Default.Refresh, contentDescription = "刷新用品列表", modifier = Modifier.size(20.dp)) }
-                    IconButton(onClick = onAdd) { Icon(Icons.Default.Add, contentDescription = "新增用品", modifier = Modifier.size(20.dp)) }
+                    Text(uiText(CopyR.string.copy_reminders), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    IconButton(onClick = onSearch) { Icon(Icons.Default.Search, contentDescription = uiText(CopyR.string.copy_search_items), modifier = Modifier.size(20.dp)) }
+                    IconButton(onClick = onRefresh) { Icon(Icons.Default.Refresh, contentDescription = uiText(CopyR.string.copy_refresh_items), modifier = Modifier.size(20.dp)) }
+                    IconButton(onClick = onAdd) { Icon(Icons.Default.Add, contentDescription = uiText(CopyR.string.copy_add_item), modifier = Modifier.size(20.dp)) }
                 }
             }
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(null to "全部", ExpiryBucket.Expired to "已过期", ExpiryBucket.ExpiringSoon to "临期", ExpiryBucket.Normal to "正常").forEach { (bucket, label) ->
+                listOf(null to uiText(CopyR.string.copy_all), ExpiryBucket.Expired to uiText(CopyR.string.copy_expired), ExpiryBucket.ExpiringSoon to uiText(CopyR.string.copy_expiring_soon), ExpiryBucket.Normal to uiText(CopyR.string.copy_normal)).forEach { (bucket, label) ->
                     FilterChip(selected = !state.isArchivedFilter && state.filter == bucket, onClick = { onFilter(bucket) }, label = { Text(label, fontSize = 11.sp) }, shape = RoundedCornerShape(50))
                 }
-                FilterChip(selected = state.isArchivedFilter, onClick = onArchived, label = { Text("已归档", fontSize = 11.sp) }, shape = RoundedCornerShape(50))
+                FilterChip(selected = state.isArchivedFilter, onClick = onArchived, label = { Text(uiText(CopyR.string.copy_archived), fontSize = 11.sp) }, shape = RoundedCornerShape(50))
             }
         }
         when {
             state.loading -> item { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
-            state.error != null -> item { Column { Text(state.error, color = MaterialTheme.colorScheme.error, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }); TextButton(onClick = onRetry) { Text("重试") } } }
+            state.error != null -> item { Column { Text(uiText(state.error), color = MaterialTheme.colorScheme.error, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }); TextButton(onClick = onRetry) { Text(uiText(CopyR.string.copy_retry)) } } }
             state.visibleItems.isEmpty() -> item {
-                Text(if (state.isArchivedFilter) "暂无已归档用品" else "暂无符合条件的用品，点击 + 添加。", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(if (state.isArchivedFilter) uiText(CopyR.string.copy_no_archived_items) else uiText(CopyR.string.copy_no_matching_items_tap_to_add_one), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             else -> {
                 val sorted = state.visibleItems.sortedBy { it.actualExpiryDate }
                 val (needsAttention, later) = sorted.partition {
                     it.bucket(java.time.LocalDate.now(), state.soonDays) in setOf(ExpiryBucket.Expired, ExpiryBucket.DueToday, ExpiryBucket.ExpiringSoon)
                 }
-                val groups = if (state.isArchivedFilter) listOf("已归档" to sorted) else listOf(
-                    "需要处理" to needsAttention,
-                    "后续提醒" to later.filter { it.status == ExpiryItemStatus.InUse },
-                    "已处理" to later.filter { it.status != ExpiryItemStatus.InUse },
+                val groups = if (state.isArchivedFilter) listOf(groupTitles[0] to sorted) else listOf(
+                    groupTitles[1] to needsAttention,
+                    groupTitles[2] to later.filter { it.status == ExpiryItemStatus.InUse },
+                    groupTitles[3] to later.filter { it.status != ExpiryItemStatus.InUse },
                 )
                 groups.forEach { (title, entries) ->
                     if (entries.isNotEmpty()) {
                         item(key = "group-$title") {
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                                 Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                                Text("${entries.size} 项", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(uiQuantity(CopyR.plurals.copy_count_items, entries.size), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                         items(entries, key = { it.id }) { item -> ExpiryItemCard(item, state.soonDays, onOpen) }
@@ -328,21 +337,22 @@ private fun ExpiryItemCard(item: ExpiryItem, soonDays: Int, onOpen: (ExpiryItem)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(item.name, fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold)
                 val days = java.time.temporal.ChronoUnit.DAYS.between(java.time.LocalDate.now(), item.actualExpiryDate)
-                val reminder = if (bucket == ExpiryBucket.Normal || bucket == ExpiryBucket.ExpiringSoon) "$days 天后到期" else bucketLabel(bucket, item.actualExpiryDate)
+                val reminder = if (bucket == ExpiryBucket.Normal || bucket == ExpiryBucket.ExpiringSoon) uiQuantity(CopyR.plurals.copy_expires_in_count_days, days) else bucketLabel(bucket, item.actualExpiryDate)
                 Text(listOf(reminder, item.category).filter { it.isNotBlank() }.joinToString(" · "), fontSize = 10.sp, lineHeight = 16.sp, color = if (urgent) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text(item.actualExpiryDate.format(java.time.format.DateTimeFormatter.ofPattern("MM.dd")), fontSize = 11.sp, fontFamily = SuirenNumberFont, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (item.archivedAt != null) Icon(Icons.Default.Info, contentDescription = "已归档", modifier = Modifier.size(16.dp))
+            Text(dateText(item.actualExpiryDate), fontSize = 11.sp, fontFamily = SuirenNumberFont, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (item.archivedAt != null) Icon(Icons.Default.Info, contentDescription = uiText(CopyR.string.copy_archived), modifier = Modifier.size(16.dp))
         }
     }
 }
 
+@Composable
 private fun bucketLabel(bucket: ExpiryBucket, date: java.time.LocalDate): String = when (bucket) {
-    ExpiryBucket.Expired -> "已过期 ${java.time.temporal.ChronoUnit.DAYS.between(date, java.time.LocalDate.now())} 天"
-    ExpiryBucket.DueToday -> "今日到期"
-    ExpiryBucket.ExpiringSoon -> "临期"
-    ExpiryBucket.Normal -> "正常"
-    ExpiryBucket.Inactive -> "已处理"
+    ExpiryBucket.Expired -> uiQuantity(CopyR.plurals.copy_expired_count_days_ago, java.time.temporal.ChronoUnit.DAYS.between(date, java.time.LocalDate.now()))
+    ExpiryBucket.DueToday -> uiText(CopyR.string.copy_expires_today)
+    ExpiryBucket.ExpiringSoon -> uiText(CopyR.string.copy_expiring_soon)
+    ExpiryBucket.Normal -> uiText(CopyR.string.copy_normal)
+    ExpiryBucket.Inactive -> uiText(CopyR.string.copy_handled)
 }
 
 @Composable
@@ -357,30 +367,30 @@ private fun ExpiryEditorDialog(editor: ExpiryEditorState, busy: Boolean, onClose
                     Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(onClick = onClose, enabled = !busy) { Icon(Icons.Default.Close, contentDescription = "关闭") }
-                    Text(if (editor.id == null) "新增用品" else "编辑用品", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                    TextButton(onClick = onSave, enabled = !busy) { Text(if (busy) "保存中…" else "保存") }
+                    IconButton(onClick = onClose, enabled = !busy) { Icon(Icons.Default.Close, contentDescription = uiText(CopyR.string.copy_close)) }
+                    Text(if (editor.id == null) uiText(CopyR.string.copy_add_item) else uiText(CopyR.string.copy_edit_item), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    TextButton(onClick = onSave, enabled = !busy) { Text(if (busy) uiText(CopyR.string.copy_saving) else uiText(CopyR.string.copy_save)) }
                 }
                 Column(
                     Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    ExpiryFormSection("用品信息") {
-                        OutlinedTextField(editor.name, onName, label = { Text("名称") }, singleLine = true, modifier = Modifier.fillMaxWidth(), enabled = !busy)
-                        OutlinedTextField(editor.category, onCategory, label = { Text("分类") }, singleLine = true, modifier = Modifier.fillMaxWidth(), enabled = !busy)
-                        OutlinedTextField(editor.location, onLocation, label = { Text("存放位置（选填）") }, singleLine = true, modifier = Modifier.fillMaxWidth(), enabled = !busy)
+                    ExpiryFormSection(uiText(CopyR.string.copy_item_details)) {
+                        OutlinedTextField(editor.name, onName, label = { Text(uiText(CopyR.string.copy_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth(), enabled = !busy)
+                        OutlinedTextField(editor.category, onCategory, label = { Text(uiText(CopyR.string.copy_category)) }, singleLine = true, modifier = Modifier.fillMaxWidth(), enabled = !busy)
+                        OutlinedTextField(editor.location, onLocation, label = { Text(uiText(CopyR.string.copy_location_optional)) }, singleLine = true, modifier = Modifier.fillMaxWidth(), enabled = !busy)
                     }
-                    ExpiryFormSection("期限日期") {
-                        ExpiryDateInputField(editor.packageExpiryDate, onPackage, "包装到期日", busy)
-                        ExpiryDateInputField(editor.openedDate, onOpened, "开封日（选填）", busy, allowEmpty = true)
-                        OutlinedTextField(editor.openedValidityDays, onDays, label = { Text("开封后有效天数（选填）") }, singleLine = true, modifier = Modifier.fillMaxWidth(), enabled = !busy)
-                        Text("开封日与有效天数需要成对填写；日期会在保存时校验。", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    ExpiryFormSection(uiText(CopyR.string.copy_expiry_dates)) {
+                        ExpiryDateInputField(editor.packageExpiryDate, onPackage, uiText(CopyR.string.copy_package_expiry_date_package_expiry_date), busy)
+                        ExpiryDateInputField(editor.openedDate, onOpened, uiText(CopyR.string.copy_opened_date_optional), busy, allowEmpty = true)
+                        OutlinedTextField(editor.openedValidityDays, onDays, label = { Text(uiText(CopyR.string.copy_days_valid_after_opening_optional)) }, singleLine = true, modifier = Modifier.fillMaxWidth(), enabled = !busy)
+                        Text(uiText(CopyR.string.copy_provide_both_the_opened_date_and_validity_period_or_leave), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    ExpiryFormSection("备注") {
-                        OutlinedTextField(editor.notes, onNotes, label = { Text("备注（选填）") }, minLines = 3, modifier = Modifier.fillMaxWidth(), enabled = !busy)
+                    ExpiryFormSection(uiText(CopyR.string.copy_notes)) {
+                        OutlinedTextField(editor.notes, onNotes, label = { Text(uiText(CopyR.string.copy_notes_optional)) }, minLines = 3, modifier = Modifier.fillMaxWidth(), enabled = !busy)
                     }
-                    editor.error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
-                    Button(onClick = onSave, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text(if (busy) "保存中…" else "保存用品") }
+                    editor.error?.let { Text(uiText(it), color = MaterialTheme.colorScheme.error, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
+                    Button(onClick = onSave, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text(if (busy) uiText(CopyR.string.copy_saving) else uiText(CopyR.string.copy_save_item)) }
                     Spacer(Modifier.height(24.dp))
                 }
             }
@@ -416,12 +426,12 @@ private fun ExpiryDateInputField(
         onValueChange = onValueChange,
         modifier = Modifier.fillMaxWidth(),
         label = { Text(label) },
-        supportingText = { Text(if (allowEmpty) "YYYY-MM-DD，可留空" else "YYYY-MM-DD") },
+        supportingText = { Text(if (allowEmpty) uiText(CopyR.string.copy_yyyy_mm_dd_optional) else "YYYY-MM-DD") },
         singleLine = true,
         enabled = !busy,
         trailingIcon = {
             IconButton(onClick = { showPicker = true }, enabled = !busy) {
-                Icon(Icons.Default.DateRange, contentDescription = "选择日期")
+                Icon(Icons.Default.DateRange, contentDescription = uiText(CopyR.string.copy_choose_date))
             }
         },
     )
@@ -436,9 +446,9 @@ private fun ExpiryDateInputField(
                         showPicker = false
                     },
                     enabled = pickerState.selectedDateMillis != null,
-                ) { Text("确定") }
+                ) { Text(uiText(CopyR.string.copy_ok)) }
             },
-            dismissButton = { TextButton(onClick = { showPicker = false }) { Text("取消") } },
+            dismissButton = { TextButton(onClick = { showPicker = false }) { Text(uiText(CopyR.string.copy_cancel)) } },
         ) { DatePicker(state = pickerState) }
     }
 }
@@ -452,5 +462,5 @@ private fun Long.toLocalDateUtc(): LocalDate = Instant.ofEpochMilli(this).atZone
 @Composable
 private fun ExpiryDetailDialog(item: ExpiryItem, soonDays: Int, busy: Boolean, onClose: () -> Unit, onEdit: () -> Unit, onStatus: (ExpiryItemStatus) -> Unit, onArchive: () -> Unit, onDelete: () -> Unit) {
     val bucket = item.bucket(java.time.LocalDate.now(), soonDays)
-    AlertDialog(onDismissRequest = { if (!busy) onClose() }, title = { Text(item.name) }, text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("分类：${item.category}"); Text("包装到期日：${item.packageExpiryDate}"); item.openedDate?.let { Text("开封日：$it · ${item.openedValidityDays} 天") }; Text("实际到期日：${item.actualExpiryDate}"); Text(bucketLabel(bucket, item.actualExpiryDate)); if (item.location.isNotBlank()) Text("位置：${item.location}"); if (item.notes.isNotBlank()) Text(item.notes); TextButton(onClick = onDelete, enabled = !busy) { Text("删除用品", color = MaterialTheme.colorScheme.error) } } }, confirmButton = { TextButton(onClick = onEdit, enabled = !busy && item.archivedAt == null) { Text("编辑") } }, dismissButton = { Row { if (item.status == ExpiryItemStatus.InUse && item.archivedAt == null) { TextButton(onClick = { onStatus(ExpiryItemStatus.UsedUp) }, enabled = !busy) { Text("用完") }; TextButton(onClick = { onStatus(ExpiryItemStatus.Discarded) }, enabled = !busy) { Text("丢弃") } }; TextButton(onClick = onArchive, enabled = !busy) { Text(if (item.archivedAt == null) "归档" else "恢复") }; TextButton(onClick = onClose) { Text("关闭") } } })
+    AlertDialog(onDismissRequest = { if (!busy) onClose() }, title = { Text(item.name) }, text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { Text(uiText(CopyR.string.copy_category_count, item.category)); Text(uiText(CopyR.string.copy_package_expiry_count, dateText(item.packageExpiryDate))); item.openedDate?.let { Text(uiText(CopyR.string.copy_opened_count_validity_days_count, dateText(it), item.openedValidityDays)) }; Text(uiText(CopyR.string.copy_effective_expiry_count, dateText(item.actualExpiryDate))); Text(bucketLabel(bucket, item.actualExpiryDate)); if (item.location.isNotBlank()) Text(uiText(CopyR.string.copy_location_count, item.location)); if (item.notes.isNotBlank()) Text(item.notes); TextButton(onClick = onDelete, enabled = !busy) { Text(uiText(CopyR.string.copy_delete_item), color = MaterialTheme.colorScheme.error) } } }, confirmButton = { TextButton(onClick = onEdit, enabled = !busy && item.archivedAt == null) { Text(uiText(CopyR.string.copy_edit)) } }, dismissButton = { Row { if (item.status == ExpiryItemStatus.InUse && item.archivedAt == null) { TextButton(onClick = { onStatus(ExpiryItemStatus.UsedUp) }, enabled = !busy) { Text(uiText(CopyR.string.copy_use_up)) }; TextButton(onClick = { onStatus(ExpiryItemStatus.Discarded) }, enabled = !busy) { Text(uiText(CopyR.string.copy_discard)) } }; TextButton(onClick = onArchive, enabled = !busy) { Text(if (item.archivedAt == null) uiText(CopyR.string.copy_archive) else uiText(CopyR.string.copy_unarchive)) }; TextButton(onClick = onClose) { Text(uiText(CopyR.string.copy_close)) } } })
 }

@@ -9,14 +9,14 @@ class UpdateAssetStatusUseCase @Inject constructor(
     private val repository: AssetRepository,
 ) {
     suspend operator fun invoke(asset: Asset, status: AssetStatus, retiredDate: LocalDate?): Result<Asset> {
-        if (asset.id.isBlank()) return Result.failure(IllegalArgumentException("缺少资产编号"))
+        if (asset.id.isBlank()) return Result.failure(IllegalArgumentException("error_asset_id_required"))
         if (status == AssetStatus.Retired &&
             (retiredDate == null || retiredDate < asset.purchaseDate || retiredDate > LocalDate.now())
         ) {
-            return Result.failure(IllegalArgumentException("退役日期须在购买日期与今天之间"))
+            return Result.failure(IllegalArgumentException("error_retirement_date_invalid"))
         }
         if (status == AssetStatus.Active && retiredDate != null) {
-            return Result.failure(IllegalArgumentException("恢复服役时须清除退役日期"))
+            return Result.failure(IllegalArgumentException("error_reactivation_retirement_date"))
         }
         return repository.updateAssetStatus(asset.id, status, retiredDate)
     }

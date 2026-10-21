@@ -8,7 +8,7 @@ class GetAssetUseCase @Inject constructor(
 ) {
     suspend operator fun invoke(id: String): Result<Asset> =
         if (id.isBlank()) {
-            Result.failure(IllegalArgumentException("Missing asset id"))
+            Result.failure(IllegalArgumentException("error_asset_id_required"))
         } else {
             repository.getAsset(id)
         }

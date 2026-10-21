@@ -172,12 +172,37 @@ support before adding another annotation-processing dependency.
 - Add service unit tests for business rules and transport integration tests for
   each new endpoint.
 
+## Localization rules
+
+- Android, iOS/iPadOS and Web maintain their own native language resources with
+  stable semantic keys. Keep Simplified Chinese and English complete, including
+  errors, accessibility labels, icon names and plural forms. Do not translate
+  rendered DOM text or introduce a shared translation runtime across platforms.
+- Language is a device/browser display preference, separate from accounts,
+  business backups and synchronization. Use Android's app-language APIs with
+  low-version compatibility and iOS's system App language settings. Follow the
+  full preference list; preserve Chinese script distinctions and fall back to
+  Simplified Chinese when no supported language matches.
+- Translate display copy only. User names, notes, tags, locations and config
+  bodies remain verbatim; API keys/enums, backup fields and date wire formats
+  remain stable. Currency stays CNY and money remains integer cents regardless
+  of display language. Date-only formatting must not shift calendar days.
+- Propagate stable error identities and parameters to the presentation layer;
+  do not compare translated messages or display arbitrary server prose, file
+  paths or exception diagnostics. Unknown failures use localized generic copy
+  and a bounded diagnostic code when available.
+- Language changes and native Activity recreation must preserve navigation,
+  filters and in-memory form drafts. Never persist password drafts in saved
+  instance state or backups. Test both languages and use stable accessibility
+  identifiers for navigation where appropriate.
+
 ## Verification
 
 Run the relevant commands before handing off changes:
 
 ```shell
 go test ./...
+python3 scripts/check_android_localizations.py
 cd services/api && go test ./...
 protoc -I api/proto -I "$(go env GOPATH)/pkg/mod/github.com/cloudwego/hertz/cmd/hz@v0.9.7/protobuf/api" \
   --descriptor_set_out=/tmp/suirenx-api.pb api/proto/suirenx/asset/v1/asset.proto

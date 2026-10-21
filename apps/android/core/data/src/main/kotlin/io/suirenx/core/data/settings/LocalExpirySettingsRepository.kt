@@ -22,8 +22,8 @@ class LocalExpirySettingsRepository @Inject constructor(
     }
 
     override suspend fun selectSoonDays(days: Int): Result<Unit> {
-        if (days !in MIN_SOON_DAYS..MAX_SOON_DAYS) return Result.failure(IllegalArgumentException("临期天数需在 $MIN_SOON_DAYS-$MAX_SOON_DAYS 天之间"))
-        if (!preferences.edit().putInt(KEY_SOON_DAYS, days).commit()) return Result.failure(IllegalStateException("无法保存临期设置"))
+        if (days !in MIN_SOON_DAYS..MAX_SOON_DAYS) return Result.failure(IllegalArgumentException("error_expiry_soon_range"))
+        if (!preferences.edit().putInt(KEY_SOON_DAYS, days).commit()) return Result.failure(IllegalStateException("error_expiry_settings_save_failed"))
         mutableSoonDays.value = days
         return Result.success(Unit)
     }

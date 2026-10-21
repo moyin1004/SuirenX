@@ -36,6 +36,7 @@ android {
         applicationId = "io.suirenx.app"
         versionCode = (packageInfo["build_number"] as Number).toInt()
         versionName = packageInfo["version"] as String
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 }
 
@@ -61,6 +62,11 @@ dependencies {
 
     val composeBom = platform(libs.androidx.compose.bom)
     implementation(composeBom)
+    androidTestImplementation(composeBom)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.junit)
+    androidTestImplementation(libs.junit4)
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     implementation(libs.androidx.compose.ui.tooling.preview)
     debugImplementation(libs.androidx.compose.ui.tooling)
     implementation(libs.androidx.compose.material3)

@@ -50,7 +50,7 @@ class AccountFlowTest {
         assertEquals("tester", auth.state.value.username)
         assertEquals("test-only", tokens.tokenFor("https://one.test/"))
         assertNull(tokens.tokenFor("https://two.test/"))
-        assertEquals("当前已有登录账号，请先退出后再登录", auth.loginAt("https://two.test/", "second", "password").exceptionOrNull()?.message)
+        assertEquals("error_auth_logout_first", auth.loginAt("https://two.test/", "second", "password").exceptionOrNull()?.message)
         auth.logout().getOrThrow()
         assertFalse(auth.state.value.authenticated)
         val raced = repo { chain ->
@@ -66,7 +66,7 @@ class AccountFlowTest {
         var requests = 0
         val auth = repo { chain -> requests++; reply(chain, 200, """{"access_token":"other-token","token_type":"Bearer","expires_at":"2030-01-01T00:00:00Z","status":"ok"}""") }
         auth.initialize()
-        assertEquals("当前已有登录账号，请先退出后再登录", auth.loginAt("https://two.test/", "other", "password").exceptionOrNull()?.message)
+        assertEquals("error_auth_logout_first", auth.loginAt("https://two.test/", "other", "password").exceptionOrNull()?.message)
         assertEquals(0, requests)
         assertEquals("current", auth.state.value.username)
         assertEquals(1, auth.accounts.value.size)
@@ -104,6 +104,6 @@ class AccountFlowTest {
         assertTrue(auth.register("tester", "short").isFailure)
         assertTrue(auth.register("tester", "a".repeat(73)).isFailure)
         assertEquals(0, requests)
-        assertEquals("该账号已注册，请切换到登录", auth.register("tester", "password").exceptionOrNull()?.message)
+        assertEquals("error_auth_username_registered", auth.register("tester", "password").exceptionOrNull()?.message)
     }
 }

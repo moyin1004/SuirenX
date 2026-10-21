@@ -1,5 +1,6 @@
 package io.suirenx.feature.expiry
 
+import io.suirenx.core.model.UserFacingErrors
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -50,31 +51,31 @@ private fun ExpiryEditorState.draft() = ExpiryEditorDraft(
 )
 
 internal fun ExpiryEditorState.toNewExpiryItem(): NewExpiryItem {
-    require(name.isNotBlank()) { "请输入用品名称" }
+    require(name.isNotBlank()) { "error_expiry_name_required" }
 
-    fun parseDate(value: String, label: String): LocalDate {
+    fun parseDate(value: String, errorCode: String): LocalDate {
         require(value.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
-            "${label}请输入有效日期，格式为 YYYY-MM-DD"
+            errorCode
         }
         return runCatching { LocalDate.parse(value) }.getOrElse {
-            throw IllegalArgumentException("${label}请输入有效日期，格式为 YYYY-MM-DD")
+            throw IllegalArgumentException(errorCode)
         }
     }
 
-    val packageDate = parseDate(packageExpiryDate, "包装到期日")
+    val packageDate = parseDate(packageExpiryDate, "error_expiry_package_date")
     val openedDate = openedDate.trim().takeIf(String::isNotEmpty)?.let {
-        parseDate(it, "开封日")
+        parseDate(it, "error_expiry_opened_date")
     }
     val openedDays = openedValidityDays.trim().takeIf(String::isNotEmpty)?.let {
         runCatching { it.toInt() }.getOrElse {
-            throw IllegalArgumentException("开封后有效天数请输入正整数")
-        }.also { days -> require(days > 0) { "开封后有效天数请输入正整数" } }
+            throw IllegalArgumentException("error_expiry_opened_days")
+        }.also { days -> require(days > 0) { "error_expiry_opened_days" } }
     }
 
-    require((openedDate == null) == (openedDays == null)) { "开封日与开封后有效天数需要成对填写" }
-    require(openedDate == null || !openedDate.isAfter(LocalDate.now())) { "开封日不能在未来" }
-    require(openedDate == null || !openedDate.isAfter(packageDate)) { "开封日不能晚于包装到期日" }
-    require(notes.length <= 2000) { "备注不能超过 2000 个字符" }
+    require((openedDate == null) == (openedDays == null)) { "error_expiry_opened_pair" }
+    require(openedDate == null || !openedDate.isAfter(LocalDate.now())) { "error_expiry_opened_future" }
+    require(openedDate == null || !openedDate.isAfter(packageDate)) { "error_expiry_opened_after_expiry" }
+    require(notes.length <= 2000) { "error_notes_too_long" }
 
     return NewExpiryItem(name.trim(), category.trim(), packageDate, openedDate, openedDays, location.trim(), notes.trim())
 }
@@ -146,7 +147,7 @@ class ExpiryViewModel @Inject constructor(
             }
             repository.list(includeArchived = true).fold(
                 onSuccess = { items -> uiState.update { it.copy(items = items, loading = false, refreshing = false, hasLoaded = true) } },
-                onFailure = { error -> uiState.update { it.copy(loading = false, refreshing = false, error = error.message ?: "无法读取用品") } },
+                onFailure = { error -> uiState.update { it.copy(loading = false, refreshing = false, error = UserFacingErrors.codeOrFallback(error.message, "error_expiry_load_failed")) } },
             )
             remoteSync.refreshStatus()
         }
@@ -179,7 +180,7 @@ class ExpiryViewModel @Inject constructor(
         val draft = try {
             editor.toNewExpiryItem()
         } catch (error: IllegalArgumentException) {
-            uiState.update { it.copy(editor = editor.copy(error = error.message ?: "请检查名称、日期和开封期限")) }
+            uiState.update { it.copy(editor = editor.copy(error = UserFacingErrors.codeOrFallback(error.message, "error_expiry_form_invalid"))) }
             return
         }
         uiState.update { it.copy(busy = true) }
@@ -187,7 +188,7 @@ class ExpiryViewModel @Inject constructor(
             val result = editor.id?.let { repository.update(it, draft) } ?: repository.create(draft)
             result.fold(
                 onSuccess = { uiState.update { it.copy(editor = null, busy = false) }; changes.notifyChanged(); refresh() },
-                onFailure = { error -> uiState.update { it.copy(busy = false, editor = editor.copy(error = error.message ?: "保存失败")) } },
+                onFailure = { error -> uiState.update { it.copy(busy = false, editor = editor.copy(error = UserFacingErrors.codeOrFallback(error.message, "error_save_failed"))) } },
             )
         }
     }
@@ -213,7 +214,7 @@ class ExpiryViewModel @Inject constructor(
                     },
                     onFailure = { error ->
                         if (error is kotlinx.coroutines.CancellationException) throw error
-                        uiState.update { it.copy(deleteError = error.message ?: "删除失败，请重试") }
+                        uiState.update { it.copy(deleteError = UserFacingErrors.codeOrFallback(error.message, "error_delete_failed")) }
                     },
                 )
             } finally { uiState.update { it.copy(busy = false) } }
@@ -232,7 +233,7 @@ class ExpiryViewModel @Inject constructor(
         viewModelScope.launch {
             action(item).fold(
                 onSuccess = { uiState.update { it.copy(detail = null, busy = false) }; changes.notifyChanged(); refresh() },
-                onFailure = { error -> uiState.update { it.copy(busy = false, error = error.message ?: "操作失败") } },
+                onFailure = { error -> uiState.update { it.copy(busy = false, error = UserFacingErrors.codeOrFallback(error.message, "error_operation_failed")) } },
             )
         }
     }

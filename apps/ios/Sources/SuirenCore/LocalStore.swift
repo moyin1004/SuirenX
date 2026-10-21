@@ -27,13 +27,13 @@ public struct LocalBackup: Codable, Sendable {
         expiryItems = try c.decodeIfPresent([ExpiryItem].self, forKey: .expiryItems) ?? []
     }
     public static func inspect(_ data: Data) throws -> Self {
-        guard data.count <= 64 * 1024 * 1024 else { throw SuirenError("备份文件过大") }
+        guard data.count <= 64 * 1024 * 1024 else { throw SuirenError(.backup_file_is_too_large) }
         let backup = try JSONDecoder().decode(Self.self, from: data)
-        guard backup.format == "suirenx-local-backup", backup.version == 1 else { throw SuirenError("不支持的备份格式或版本") }
+        guard backup.format == "suirenx-local-backup", backup.version == 1 else { throw SuirenError(.unsupported_backup_format_or_version) }
         guard Set(backup.assets.map(\.id)).count == backup.assets.count,
               Set(backup.expiryItems.map(\.id)).count == backup.expiryItems.count,
               backup.assets.allSatisfy({ !$0.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }),
-              backup.expiryItems.allSatisfy({ !$0.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else { throw SuirenError("备份包含重复或空编号") }
+              backup.expiryItems.allSatisfy({ !$0.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else { throw SuirenError(.the_backup_contains_duplicate_or_empty_ids) }
         for asset in backup.assets { try asset.validate(importing: true) }
         for item in backup.expiryItems { try item.validate() }
         return backup
@@ -66,17 +66,17 @@ public actor LocalStore {
         try asset.validate()
         try transaction { state in
             if let old = state.assets[asset.id] {
-                guard old.archivedAt == nil else { throw SuirenError("归档资产请先恢复") }
+                guard old.archivedAt == nil else { throw SuirenError(.restore_archived_assets_first) }
                 asset.createdAt = old.createdAt
             } else if asset.createdAt.isEmpty { asset.createdAt = timestamp() }
             asset.updatedAt = timestamp(); state.assets[asset.id] = asset; journal(.asset(AssetPayload(asset)), in: &state)
         }
     }
     public func updateAssetSalePrice(id: String, cents: Int64?) throws {
-        guard cents == nil || cents! >= 0 else { throw SuirenError("卖出价格不能为负数") }
+        guard cents == nil || cents! >= 0 else { throw SuirenError(.sale_price_cannot_be_negative) }
         try transaction { state in
-            guard var asset = state.assets[id] else { throw SuirenError("记录不存在") }
-            guard asset.archivedAt != nil else { throw SuirenError("仅归档资产可填写卖出价格") }
+            guard var asset = state.assets[id] else { throw SuirenError(.record_not_found) }
+            guard asset.archivedAt != nil else { throw SuirenError(.sale_prices_can_only_be_set_for_archived_assets) }
             asset.salePriceCents = cents; asset.updatedAt = timestamp()
             state.assets[id] = asset; journal(.asset(AssetPayload(asset)), in: &state)
         }
@@ -85,10 +85,10 @@ public actor LocalStore {
         var item = input; item.name = item.name.trimmingCharacters(in: .whitespacesAndNewlines)
         item.category = item.category.trimmingCharacters(in: .whitespacesAndNewlines); item.location = item.location.trimmingCharacters(in: .whitespacesAndNewlines)
         try item.validate()
-        guard item.openedDate == nil || (item.openedDate! <= .today && item.openedDate! <= item.packageExpiryDate) else { throw SuirenError("开封日不能晚于今天或包装到期日") }
+        guard item.openedDate == nil || (item.openedDate! <= .today && item.openedDate! <= item.packageExpiryDate) else { throw SuirenError(.the_opened_date_cannot_be_after_today_or_the_package) }
         try transaction { state in
             if let old = state.expiry[item.id] {
-                guard old.archivedAt == nil else { throw SuirenError("归档用品请先恢复") }; item.createdAt = old.createdAt
+                guard old.archivedAt == nil else { throw SuirenError(.restore_archived_supplies_first) }; item.createdAt = old.createdAt
             } else if item.createdAt.isEmpty { item.createdAt = timestamp() }
             item.updatedAt = timestamp(); state.expiry[item.id] = item; journal(.expiry(ExpiryPayload(item)), in: &state)
         }
@@ -101,7 +101,7 @@ public actor LocalStore {
             } else if kind == "expiry", var e = state.expiry[id] {
                 e.archivedAt = archived ? (e.archivedAt ?? timestamp()) : nil; e.updatedAt = timestamp()
                 state.expiry[id] = e; journal(.expiry(ExpiryPayload(e)), in: &state)
-            } else { throw SuirenError("记录不存在") }
+            } else { throw SuirenError(.record_not_found) }
         }
     }
     public func delete(kind: String, id: String) throws {
@@ -112,7 +112,7 @@ public actor LocalStore {
     }
     public func updateSettings(_ settings: AppSettings) throws {
         guard ["system", "light", "dark"].contains(settings.theme), (1...30).contains(settings.soonDays),
-              [15, 60, 360, 1440].contains(settings.intervalMinutes) else { throw SuirenError("设置值无效") }
+              [15, 60, 360, 1440].contains(settings.intervalMinutes) else { throw SuirenError(.invalid_settings) }
         try transaction { state in
             var next = settings
             if next.activeURL != state.settings.activeURL { next.syncEnabled = false }
@@ -175,7 +175,7 @@ public actor LocalStore {
     }
     public func freezeBatch(alreadyPulled: Bool) throws -> FrozenBatch? {
         try transaction { state in
-            guard var session = state.session, state.settings.syncEnabled else { throw SuirenError("请先开启同步") }
+            guard var session = state.session, state.settings.syncEnabled else { throw SuirenError(.enable_sync_first) }
             if let batch = session.batch { return batch }
             let pending = state.journal.values.filter { $0.dirty && $0.remoteVersion == nil }.sorted { $0.id < $1.id }.prefix(100)
             if pending.isEmpty && alreadyPulled { return nil }
@@ -202,14 +202,14 @@ public actor LocalStore {
     }
     public func apply(_ response: SyncResponse, batch: FrozenBatch, target: String) throws {
         try transaction { state in
-            guard var session = state.session, session.target == target, session.batch == batch else { throw SuirenError("同步目标已改变，未应用迟到响应") }
+            guard var session = state.session, session.target == target, session.batch == batch else { throw SuirenError(.the_sync_target_changed_the_late_response_was_not_applied) }
             for sent in batch.request.changes where !sent.deleted && sent.sale_price_cents != nil {
                 if let ack = response.applied.first(where: { $0.asset.id == sent.id }), ack.asset.sale_price_cents != sent.sale_price_cents {
-                    throw SuirenError("服务器未保留卖出价格，请先升级服务器；本机数据和批次已保留")
+                    throw SuirenError(.the_server_did_not_preserve_sale_prices_upgrade_the_server)
                 }
             }
             let accounted = Set(response.applied.map { "asset/\($0.asset.id)" } + response.applied_expiry.map { "expiry/\($0.item.id)" } + response.conflicts.map { "asset/\($0.id)" } + response.expiry_conflicts.map { "expiry/\($0.id)" })
-            guard batch.revisions.keys.allSatisfy(accounted.contains) else { throw SuirenError("服务器响应缺少确认，原批次已保留") }
+            guard batch.revisions.keys.allSatisfy(accounted.contains) else { throw SuirenError(.the_server_response_is_missing_acknowledgements_the_original_batch_was) }
             func accept(_ payload: RecordPayload, version: Int64) throws {
                 guard var current = state.journal[payload.key] else { return }
                 if current.revision == batch.revisions[payload.key] {
@@ -233,20 +233,20 @@ public actor LocalStore {
     }
     public func markSynced(target: String) throws {
         try transaction { state in
-            guard state.session?.target == target else { throw SuirenError("同步目标已改变") }; state.session?.lastSyncedAt = timestamp()
+            guard state.session?.target == target else { throw SuirenError(.the_sync_target_changed) }; state.session?.lastSyncedAt = timestamp()
         }
     }
     public func resolve(key: String, resolution: ConflictResolution) throws {
         try transaction { state in
-            guard state.session?.batch == nil else { throw SuirenError("请先重试未确认批次") }
-            guard var row = state.journal[key], let version = row.remoteVersion else { throw SuirenError("该冲突已处理") }
+            guard state.session?.batch == nil else { throw SuirenError(.retry_the_unacknowledged_batch_first) }
+            guard var row = state.journal[key], let version = row.remoteVersion else { throw SuirenError(.this_conflict_has_already_been_resolved) }
             if resolution == .local {
                 row.version = version; row.dirty = true; row.revision = UUID().uuidString
             } else {
-                guard let remote = row.remote else { throw SuirenError("另一端快照不可用，请检查账号归属") }
+                guard let remote = row.remote else { throw SuirenError(.remote_snapshot_unavailable_check_account_ownership) }
                 if resolution == .both {
                     let source = row.payload.deleted ? remote : row.payload
-                    guard !source.deleted else { throw SuirenError("双方均已删除，没有可另存内容") }
+                    guard !source.deleted else { throw SuirenError(.both_copies_are_deleted_there_is_nothing_to_save) }
                     let copy = source.copy(id: UUID().uuidString); try write(copy, in: &state); journal(copy, in: &state)
                 }
                 if resolution == .both && row.payload.deleted {

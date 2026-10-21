@@ -124,7 +124,7 @@ class AssetFormViewModelTest {
         vm.save()
         advanceUntilIdle()
 
-        assertEquals("请输入资产名称", vm.uiState.value.errorMessage)
+        assertEquals("error_asset_name_required", vm.uiState.value.errorMessage)
         assertEquals(0, repo.createCalls)
         assertFalse(vm.uiState.value.isSaving)
     }
@@ -158,7 +158,7 @@ class AssetFormViewModelTest {
         assertEquals("Kindle", failed.name)
         assertEquals("899.50", failed.price)
         assertEquals("book", failed.iconKey)
-        assertEquals("保存失败，请检查网络和服务后重试", failed.errorMessage)
+        assertEquals("error_asset_save_failed", failed.errorMessage)
         assertEquals(1, repo.createCalls)
         assertEquals(0, savedEvents.size)
 

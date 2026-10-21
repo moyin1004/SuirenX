@@ -1,0 +1,10 @@
+<resources>
+    <string name="create_asset_title">Add asset</string>
+    <string name="edit_asset_title">Edit asset</string>
+    <string name="asset_name_label">Asset name</string>
+    <string name="asset_price_label">Purchase price (CNY)</string>
+    <string name="asset_purchase_date_label">Purchase date</string>
+    <string name="asset_save">Save</string>
+    <string name="asset_saving">Saving…</string>
+    <string name="asset_cancel">Cancel</string>
+</resources>

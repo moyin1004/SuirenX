@@ -51,9 +51,9 @@ class LocalFirstSyncRepository @Inject constructor(
     override suspend fun refreshStatus(): Result<Unit> = attempt { publish() }
 
     override suspend fun retry(): Result<Unit> = attempt {
-        check(modes.mode.value == io.suirenx.core.model.StorageMode.Remote) { "请先开启同步" }
-        check(auth.state.value.authenticated) { "请先登录同步账号" }
-        check(mutex.tryLock()) { "同步正在进行" }
+        check(modes.mode.value == io.suirenx.core.model.StorageMode.Remote) { "error_sync_enable_first" }
+        check(auth.state.value.authenticated) { "error_sync_sign_in_first" }
+        check(mutex.tryLock()) { "error_sync_busy" }
         mutableStatus.value = mutableStatus.value.copy(syncing = true, error = null, waitingForNetwork = false, needsLogin = false)
         activeJob = kotlinx.coroutines.currentCoroutineContext()[kotlinx.coroutines.Job]
         try {
@@ -65,7 +65,7 @@ class LocalFirstSyncRepository @Inject constructor(
             if (existing == null || existing.target != target) {
                 backups.createSafetyBackup().getOrThrow()
                 database.withTransaction {
-                    check(database.syncDao().session() == existing) { "同步配置已改变，请重试" }
+                    check(database.syncDao().session() == existing) { "error_sync_configuration_changed" }
                     if (existing != null) {
                         // Version/cursor/idempotency are target-specific. Keep local rows
                         // and tombstones; archive old conflict snapshots in the safety backup.
@@ -90,14 +90,14 @@ class LocalFirstSyncRepository @Inject constructor(
             val completed = withTimeoutOrNull(60_000) {
                 var pulled = false
                 while (true) {
-                    check(target == "${apiProvider.currentUrl()}|${tokens.username(apiProvider.currentUrl())}" && tokens.tokenFor(url) == token && modes.mode.value == io.suirenx.core.model.StorageMode.Remote) { "同步配置已改变，本次已停止" }
+                    check(target == "${apiProvider.currentUrl()}|${tokens.username(apiProvider.currentUrl())}" && tokens.tokenFor(url) == token && modes.mode.value == io.suirenx.core.model.StorageMode.Remote) { "error_sync_configuration_stopped" }
                     val batch = claim(pulled) ?: break
                     if (batch.request.changes.any { !it.deleted && it.salePriceCents != null }) {
-                        check(api.capabilities().assetSalePrice) { "服务器尚不支持卖出价格，请先升级服务器；本机数据和批次已保留" }
-                        check(target == "${apiProvider.currentUrl()}|${tokens.username(apiProvider.currentUrl())}" && tokens.tokenFor(url) == token) { "同步配置已改变，本次已停止" }
+                        check(api.capabilities().assetSalePrice) { "error_sync_sale_price_unsupported" }
+                        check(target == "${apiProvider.currentUrl()}|${tokens.username(apiProvider.currentUrl())}" && tokens.tokenFor(url) == token) { "error_sync_configuration_stopped" }
                     }
                     val response = api.sync(batch.request, "Bearer $token")
-                    check(target == "${apiProvider.currentUrl()}|${tokens.username(apiProvider.currentUrl())}" && tokens.tokenFor(url) == token) { "账号已改变，响应未应用；待同步批次已保留" }
+                    check(target == "${apiProvider.currentUrl()}|${tokens.username(apiProvider.currentUrl())}" && tokens.tokenFor(url) == token) { "error_sync_account_changed" }
                     apply(batch, response)
                     pulled = true
                     changes.notifyChanged()
@@ -109,7 +109,7 @@ class LocalFirstSyncRepository @Inject constructor(
                 }
                 true
             } ?: false
-            if (!completed) throw IOException("同步超时，数据和待发送批次已保留")
+            if (!completed) throw IOException("error_sync_timeout")
         } catch (error: Exception) {
             if (error is CancellationException) throw error
             val message = syncFailureMessage(error)
@@ -195,12 +195,12 @@ class LocalFirstSyncRepository @Inject constructor(
     private suspend fun apply(batch: FrozenBatch, response: SyncResponse) = database.withTransaction {
         for (sent in batch.request.changes.filter { !it.deleted && it.salePriceCents != null }) {
             response.applied.firstOrNull { it.asset.id == sent.id }?.let { ack ->
-                check(ack.asset.salePriceCents == sent.salePriceCents) { "服务器未保留卖出价格，请先升级服务器；本机数据和批次已保留" }
+                check(ack.asset.salePriceCents == sent.salePriceCents) { "error_sync_sale_price_missing" }
             }
         }
         val accounted = response.applied.map { "asset/${it.asset.id}" } + response.conflicts.map { "asset/${it.id}" } +
             response.appliedExpiry.map { "expiry/${it.item.id}" } + response.expiryConflicts.map { "expiry/${it.id}" }
-        check(batch.revisions.keys.all { it in accounted }) { "服务器响应缺少确认，批次已保留" }
+        check(batch.revisions.keys.all { it in accounted }) { "error_sync_ack_missing" }
         for (change in response.applied) accept("asset", change.asset.id, change.version, json.encodeToString(change.asset.copy(deleted = change.asset.deleted || change.deletedAt.isNotBlank())), batch)
         for (change in response.appliedExpiry) accept("expiry", change.item.id, change.version, json.encodeToString(change.item.copy(deleted = change.item.deleted || change.deletedAt.isNotBlank())), batch)
         for (conflict in response.conflicts) conflict("asset", conflict.id, conflict.remoteVersion, conflict.remote?.let(json::encodeToString).orEmpty())
@@ -259,30 +259,30 @@ class LocalFirstSyncRepository @Inject constructor(
     override suspend fun resolveExpiryConflict(expiryId: String, resolution: SyncConflictResolution): Result<Unit> = resolve("expiry", expiryId, resolution)
 
     private suspend fun resolve(kind: String, id: String, resolution: SyncConflictResolution): Result<Unit> = attempt {
-        check(mutex.tryLock()) { "同步正在进行，请稍后处理冲突" }
+        check(mutex.tryLock()) { "error_sync_busy_conflict" }
         try {
             database.withTransaction {
                 val dao = database.syncDao()
-                check(dao.session()?.batch == null) { "请先重试上次未确认的同步" }
-                val current = dao.get(kind, id) ?: error("未找到记录")
-                val remoteVersion = current.remoteVersion ?: error("该冲突已处理")
+                check(dao.session()?.batch == null) { "error_sync_retry_pending" }
+                val current = dao.get(kind, id) ?: error("error_record_not_found")
+                val remoteVersion = current.remoteVersion ?: error("error_conflict_resolved")
                 when (resolution) {
                     SyncConflictResolution.KeepLocal -> dao.save(current.copy(version = remoteVersion, revision = UUID.randomUUID().toString(), dirty = true, remotePayload = null, remoteVersion = null))
                     SyncConflictResolution.KeepRemote, SyncConflictResolution.KeepBoth -> {
-                        check(!current.remotePayload.isNullOrBlank()) { "无法读取另一端快照，请检查账号归属" }
+                        check(!current.remotePayload.isNullOrBlank()) { "error_conflict_snapshot_unreadable" }
                         val localDeleted = if (kind == "asset") json.decodeFromString<SyncAssetPayload>(current.payload).deleted else json.decodeFromString<SyncExpiryPayload>(current.payload).deleted
                         if (resolution == SyncConflictResolution.KeepBoth) {
                             val copyPayload = if (localDeleted) current.remotePayload!! else current.payload
                             val newId = UUID.randomUUID().toString()
                             if (kind == "asset") {
                                 val wire = json.decodeFromString<SyncAssetPayload>(copyPayload)
-                                check(!wire.deleted) { "本机已删除，无法另存；可选择保留另一端" }
+                                check(!wire.deleted) { "error_conflict_local_deleted" }
                                 val duplicate = with(codec) { wire.copy(id = newId, name = wire.name + "（副本）").toAsset(0, "") }
                                 database.assetDao().upsert(with(assets) { duplicate.toEntity() })
                                 journal.asset(duplicate)
                             } else {
                                 val wire = json.decodeFromString<SyncExpiryPayload>(copyPayload)
-                                check(!wire.deleted) { "本机已删除，无法另存；可选择保留另一端" }
+                                check(!wire.deleted) { "error_conflict_local_deleted" }
                                 val duplicate = with(codec) { wire.copy(id = newId, name = wire.name + "（副本）").toExpiryItem(0) }
                                 database.expiryDao().upsert(with(expiry) { duplicate.toEntity() })
                                 journal.expiry(duplicate)
@@ -330,4 +330,4 @@ class LocalFirstSyncRepository @Inject constructor(
     catch (error: Exception) { Result.failure(error) }
 }
 
-private class LoginRequiredException : IllegalStateException("当前服务器无法验证已登录账号，请先注销账号，再登录后重试")
+private class LoginRequiredException : IllegalStateException("error_sync_login_required")

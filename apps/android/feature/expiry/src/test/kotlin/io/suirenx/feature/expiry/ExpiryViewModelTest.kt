@@ -70,7 +70,7 @@ class ExpiryViewModelTest {
         advanceUntilIdle()
 
         assertEquals(listOf(item), viewModel.uiState.value.items)
-        assertEquals("本机用品读取失败", viewModel.uiState.value.error)
+        assertEquals("error_expiry_load_failed", viewModel.uiState.value.error)
         assertFalse(viewModel.uiState.value.loading)
 
         repository.failList = false

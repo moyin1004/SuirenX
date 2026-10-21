@@ -1,7 +1,7 @@
 import Foundation
 
-public enum AssetFilter: String, CaseIterable { case all = "全部", active = "服役中", retired = "已退役", archived = "已归档" }
-public enum AssetSort: String, CaseIterable { case purchase = "购买日期", price = "购买金额", daily = "日均成本", held = "持有天数" }
+public enum AssetFilter: String, CaseIterable { case all, active, retired, archived }
+public enum AssetSort: String, CaseIterable { case purchase, price, daily, held }
 public struct AssetQuery {
     public var filter: AssetFilter = .active
     public var sort: AssetSort = .purchase

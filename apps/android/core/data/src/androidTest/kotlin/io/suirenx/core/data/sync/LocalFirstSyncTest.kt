@@ -189,7 +189,7 @@ class LocalFirstSyncTest {
         backendSettings.value = BackendSettings(listOf(BackendServer("https://new.test/", "New")), "https://new.test/")
         assertTrue(sync.retry().isFailure)
         assertTrue(sync.status.value.needsLogin)
-        assertTrue(sync.status.value.error.orEmpty().contains("先注销账号，再登录"))
+        assertEquals("error_sync_login_required", sync.status.value.error)
         assertTrue(keys.isEmpty())
         assertNull(db.syncDao().session())
     }
@@ -412,7 +412,7 @@ class LocalFirstSyncTest {
         val result = backup.inspect("{invalid json")
 
         assertTrue(result.isFailure)
-        assertEquals("备份文件格式无效或内容损坏", result.exceptionOrNull()?.message)
+        assertEquals("error_backup_invalid", result.exceptionOrNull()?.message)
         assertEquals("Unchanged", assets.getAssets().getOrThrow().single().name)
     }
 

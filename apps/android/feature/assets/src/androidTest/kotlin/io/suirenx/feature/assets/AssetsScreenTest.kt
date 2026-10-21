@@ -213,8 +213,14 @@ class AssetsScreenTest {
         assertTrue(abs(sort.fetchSemanticsNode().boundsInRoot.center.y - rowCenter) < 2f)
         assertTrue(abs(tags.fetchSemanticsNode().boundsInRoot.center.y - rowCenter) < 2f)
         AssetFilter.entries.forEach { filter ->
+            val label = InstrumentationRegistry.getInstrumentation().targetContext.getString(when (filter) {
+                AssetFilter.All -> io.suirenx.core.ui.R.string.copy_all
+                AssetFilter.Active -> io.suirenx.core.ui.R.string.copy_active
+                AssetFilter.Retired -> io.suirenx.core.ui.R.string.copy_retired
+                AssetFilter.Archived -> io.suirenx.core.ui.R.string.copy_archived
+            })
             val chip = composeRule.onNode(
-                hasText(filter.label) and SemanticsMatcher.keyIsDefined(SemanticsProperties.Selected),
+                hasText(label) and SemanticsMatcher.keyIsDefined(SemanticsProperties.Selected),
             ).performScrollTo().assertIsDisplayed()
             assertTrue("${filter.label} must share the controls row", abs(chip.fetchSemanticsNode().boundsInRoot.center.y - rowCenter) < 2f)
         }

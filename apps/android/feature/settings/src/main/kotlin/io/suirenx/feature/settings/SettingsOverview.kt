@@ -1,5 +1,13 @@
 package io.suirenx.feature.settings
 
+import io.suirenx.core.ui.localization.moneyFormat
+import io.suirenx.core.ui.localization.moneyText
+import io.suirenx.core.ui.localization.dateText
+
+import io.suirenx.core.ui.R as CopyR
+import io.suirenx.core.ui.localization.uiText
+import io.suirenx.core.ui.localization.uiQuantity
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -75,7 +83,7 @@ internal fun GroupTitle(title: String) { Text(title, fontSize = 14.sp, fontWeigh
 internal fun Caption(text: String) { Text(text, fontSize = 12.sp, lineHeight = 19.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
 
 @Composable
-internal fun ErrorNote(text: String) { Text(text, color = MaterialTheme.colorScheme.error, fontSize = 13.sp, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
+internal fun ErrorNote(text: String) { Text(uiText(text), color = MaterialTheme.colorScheme.error, fontSize = 13.sp, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
 
 @Composable
 internal fun SettingsLink(
@@ -125,55 +133,60 @@ internal fun ChoiceAction(title: String, description: String, enabled: Boolean, 
     Column { SecondaryAction(title, enabled, onClick); Caption(description) }
 }
 
-internal fun themeLabel(mode: ThemeMode) = when(mode) { ThemeMode.System -> "跟随系统"; ThemeMode.Light -> "浅色"; ThemeMode.Dark -> "深色" }
+@Composable
+internal fun themeLabel(mode: ThemeMode) = when(mode) { ThemeMode.System -> uiText(CopyR.string.copy_follow_system); ThemeMode.Light -> uiText(CopyR.string.copy_light); ThemeMode.Dark -> uiText(CopyR.string.copy_dark) }
+@Composable
 internal fun conflictDescription(localDeleted: Boolean, remoteDeleted: Boolean, unavailable: Boolean) = when {
-    unavailable -> "无法读取另一端 · 检查账号归属"
-    localDeleted || remoteDeleted -> "一端删除，另一端修改"
-    else -> "双方都修改了记录 · 查看差异"
+    unavailable -> uiText(CopyR.string.copy_remote_snapshot_unavailable_check_account)
+    localDeleted || remoteDeleted -> uiText(CopyR.string.copy_deleted_on_one_side_edited_on_the_other)
+    else -> uiText(CopyR.string.copy_both_versions_changed_compare)
 }
 
+@Composable
 private fun assetFields(a: Asset) = linkedMapOf(
-    "名称" to a.name, "购买金额" to "¥${BigDecimal.valueOf(a.priceCents, 2).toPlainString()}",
-    "购买日期" to a.purchaseDate.toString(), "状态" to if(a.status == AssetStatus.Active) "服役中" else "已退役",
-    "退役日期" to (a.retiredDate?.toString() ?: "—"), "归档" to if(a.isArchived) "已归档" else "未归档",
-    "购买渠道" to a.purchaseChannel.orEmpty(), "保修截止" to (a.warrantyEndDate?.toString() ?: "—"),
-    "图标" to a.iconKey, "标签" to a.tags.joinToString("、"), "备注" to a.notes,
+    uiText(CopyR.string.copy_name) to a.name, uiText(CopyR.string.copy_purchase_price) to moneyText(a.priceCents),
+    uiText(CopyR.string.copy_purchase_date) to dateText(a.purchaseDate), uiText(CopyR.string.copy_status) to if(a.status == AssetStatus.Active) uiText(CopyR.string.copy_active) else uiText(CopyR.string.copy_retired),
+    uiText(CopyR.string.copy_retirement_date) to (a.retiredDate?.let { dateText(it) } ?: "—"), uiText(CopyR.string.copy_archive) to if(a.isArchived) uiText(CopyR.string.copy_archived) else uiText(CopyR.string.copy_unarchived),
+    uiText(CopyR.string.copy_purchase_channel) to a.purchaseChannel.orEmpty(), uiText(CopyR.string.copy_warranty_end_date) to (a.warrantyEndDate?.let { dateText(it) } ?: "—"),
+    uiText(CopyR.string.copy_icon) to a.iconKey, uiText(CopyR.string.copy_tags) to a.tags.joinToString("、"), uiText(CopyR.string.copy_notes) to a.notes,
 )
+@Composable
 private fun expiryFields(e: ExpiryItem) = linkedMapOf(
-    "名称" to e.name, "分类" to e.category, "包装到期" to e.packageExpiryDate.toString(),
-    "开封日期" to (e.openedDate?.toString() ?: "—"), "开封有效天数" to (e.openedValidityDays?.toString() ?: "—"),
-    "位置" to e.location, "状态" to when(e.status) { ExpiryItemStatus.InUse -> "使用中"; ExpiryItemStatus.UsedUp -> "已用完"; ExpiryItemStatus.Discarded -> "已丢弃" },
-    "归档" to if(e.archivedAt == null) "未归档" else "已归档", "备注" to e.notes,
+    uiText(CopyR.string.copy_name) to e.name, uiText(CopyR.string.copy_category) to e.category, uiText(CopyR.string.copy_package_expiry_date) to dateText(e.packageExpiryDate),
+    uiText(CopyR.string.copy_opened_date) to (e.openedDate?.let { dateText(it) } ?: "—"), uiText(CopyR.string.copy_days_valid_after_opening) to (e.openedValidityDays?.toString() ?: "—"),
+    uiText(CopyR.string.copy_location) to e.location, uiText(CopyR.string.copy_status) to when(e.status) { ExpiryItemStatus.InUse -> uiText(CopyR.string.copy_in_use); ExpiryItemStatus.UsedUp -> uiText(CopyR.string.copy_used_up); ExpiryItemStatus.Discarded -> uiText(CopyR.string.copy_discarded) },
+    uiText(CopyR.string.copy_archive) to if(e.archivedAt == null) uiText(CopyR.string.copy_unarchived) else uiText(CopyR.string.copy_archived), uiText(CopyR.string.copy_notes) to e.notes,
 )
 
 @Composable
 internal fun ConflictVersions(asset: AssetSyncConflict?, expiry: ExpirySyncConflict?) {
-    val local = asset?.local?.let(::assetFields) ?: expiry?.local?.let(::expiryFields) ?: mapOf("名称" to expiry?.localName.orEmpty())
-    val remote = asset?.remote?.let(::assetFields) ?: expiry?.remote?.let(::expiryFields) ?: emptyMap()
+    val local = asset?.local?.let { assetFields(it) } ?: expiry?.local?.let { expiryFields(it) } ?: mapOf(uiText(CopyR.string.copy_name) to expiry?.localName.orEmpty())
+    val remote = asset?.remote?.let { assetFields(it) } ?: expiry?.remote?.let { expiryFields(it) } ?: emptyMap()
     val localDeleted = asset?.localDeleted ?: expiry?.localDeleted ?: false
     val remoteDeleted = asset?.remoteDeleted ?: expiry?.remoteDeleted ?: false
     // Stack versions on narrow screens so long notes and dates remain readable.
-    listOf(Triple("本机版本", local, localDeleted), Triple("另一端版本", remote, remoteDeleted)).forEach { (title, fields, deleted) ->
+    listOf(Triple(uiText(CopyR.string.copy_local_version), local, localDeleted), Triple(uiText(CopyR.string.copy_remote_version), remote, remoteDeleted)).forEach { (title, fields, deleted) ->
         SettingsCard {
             Text(title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-            if(deleted) Text("此端已删除记录", color = MaterialTheme.colorScheme.error)
+            if(deleted) Text(uiText(CopyR.string.copy_this_version_is_deleted), color = MaterialTheme.colorScheme.error)
             fields.forEach { (label, value) ->
                 val different = local[label] != remote[label]
-                Fact(if(different) "$label · 不同" else label, value.ifBlank { "未填写" })
+                Fact(if(different) uiText(CopyR.string.copy_count_different, label) else label, value.ifBlank { uiText(CopyR.string.copy_not_provided) })
             }
         }
     }
 }
 
+@Composable
 internal fun lastSyncLabel(status: io.suirenx.core.domain.RemoteSyncStatus): String =
     status.lastSyncedAt?.atZone(java.time.ZoneId.systemDefault())
-        ?.format(java.time.format.DateTimeFormatter.ofPattern("MM-dd HH:mm")) ?: "尚未同步"
+        ?.format(java.time.format.DateTimeFormatter.ofPattern("MM-dd HH:mm")) ?: uiText(CopyR.string.copy_never_synced)
 
 @Composable
 internal fun SyncStatistics(status: io.suirenx.core.domain.RemoteSyncStatus) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        listOf(lastSyncLabel(status) to "上次成功", "${status.pendingOperations} 项" to "待发送",
-            "${status.conflicts.size + status.expiryConflicts.size} 项" to "待处理冲突").forEach { (value, label) ->
+        listOf(lastSyncLabel(status) to uiText(CopyR.string.copy_last_success), uiQuantity(CopyR.plurals.copy_count_items, status.pendingOperations) to uiText(CopyR.string.copy_pending),
+            uiQuantity(CopyR.plurals.copy_count_items, status.conflicts.size + status.expiryConflicts.size) to uiText(CopyR.string.copy_conflicts)).forEach { (value, label) ->
             Surface(Modifier.weight(1f), shape = RoundedCornerShape(13.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text(value, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
@@ -187,5 +200,5 @@ internal fun SyncStatistics(status: io.suirenx.core.domain.RemoteSyncStatus) {
 @Composable
 internal fun ConnectionTestResult(state: BackendUiState) {
     if (state.testingConnection) LinearProgressIndicator(Modifier.fillMaxWidth())
-    state.connectionTest?.let { if (state.connectionTestFailed) ErrorNote(it) else Caption(it) }
+    state.connectionTest?.let { if (state.connectionTestFailed) ErrorNote(it) else Caption(uiText(it)) }
 }

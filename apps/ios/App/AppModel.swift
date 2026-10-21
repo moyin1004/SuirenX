@@ -21,21 +21,21 @@ actor KeychainCredentials: CredentialStore {
         var q = query; q[kSecReturnData as String] = true; q[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: CFTypeRef?; let status = SecItemCopyMatching(q as CFDictionary, &result)
         if status == errSecItemNotFound { return nil }
-        guard status == errSecSuccess, let data = result as? Data else { throw SuirenError("无法读取安全凭据（\(status)），请解锁设备后重试") }
+        guard status == errSecSuccess, let data = result as? Data else { throw AppPresentationError("ui.cannot_read_secure_credentials_unlock_your_device_and_retry" , String(describing: status)) }
         return try JSONDecoder().decode(Credential.self, from: data)
     }
     func write(_ credential: Credential?) throws {
         guard let credential else {
             let status = SecItemDelete(query as CFDictionary)
-            guard status == errSecSuccess || status == errSecItemNotFound else { throw SuirenError("无法清除安全凭据") }; return
+            guard status == errSecSuccess || status == errSecItemNotFound else { throw AppPresentationError("ui.cannot_clear_secure_credentials") }; return
         }
         let attributes: [String: Any] = [kSecValueData as String: try JSONEncoder().encode(credential),
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly]
         let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
         if status == errSecItemNotFound {
             var entry = query; attributes.forEach { entry[$0.key] = $0.value }
-            guard SecItemAdd(entry as CFDictionary, nil) == errSecSuccess else { throw SuirenError("保存安全凭据失败") }
-        } else if status != errSecSuccess { throw SuirenError("更新安全凭据失败") }
+            guard SecItemAdd(entry as CFDictionary, nil) == errSecSuccess else { throw AppPresentationError("ui.could_not_save_secure_credentials") }
+        } else if status != errSecSuccess { throw AppPresentationError("ui.could_not_update_secure_credentials") }
     }
 }
 
@@ -60,12 +60,12 @@ actor KeychainCredentials: CredentialStore {
     var settings: AppSettings { snapshot?.settings ?? AppSettings() }
     var pendingExpiry: Int { expiry.filter { [.expired, .today, .soon].contains($0.bucket(soonDays: settings.soonDays)) }.count }
     var syncLabel: String {
-        if syncing { return "同步中" }
-        if !settings.syncEnabled { return "同步未开启，数据保存在本机" }
-        if credential == nil { return "请先登录同步账号" }
+        if syncing { return L10n.text("ui.syncing") }
+        if !settings.syncEnabled { return L10n.text("ui.sync_is_off_data_is_stored_locally") }
+        if credential == nil { return L10n.text("ui.sign_in_to_a_sync_account_first") }
         if let syncMessage { return syncMessage }
-        if !(snapshot?.conflicts.isEmpty ?? true) { return "有记录待处理" }
-        return (snapshot?.pendingCount ?? 0) > 0 ? "等待同步" : "已同步"
+        if !(snapshot?.conflicts.isEmpty ?? true) { return L10n.text("ui.records_need_attention") }
+        return (snapshot?.pendingCount ?? 0) > 0 ? L10n.text("ui.waiting_to_sync") : L10n.text("ui.synced")
     }
     init(store: LocalStore) {
         self.store = store; coordinator = SyncCoordinator(store: store, credentials: credentials, transport: http)
@@ -78,12 +78,12 @@ actor KeychainCredentials: CredentialStore {
             let account = try await credentials.read()
             guard generation == refreshGeneration else { return }; credential = account
         }
-        catch { self.error = error.localizedDescription }
+        catch { self.error = L10n.error(error) }
     }
     @discardableResult func perform(_ action: () async throws -> Void) async -> Bool {
         do { try await action(); await refresh(); return true }
         catch is CancellationError { return false }
-        catch { self.error = error.localizedDescription; await refresh(); return false }
+        catch { self.error = L10n.error(error); await refresh(); return false }
     }
     @discardableResult func mutate(_ action: () async throws -> Void) async -> Bool {
         let success = await perform(action)
@@ -94,11 +94,11 @@ actor KeychainCredentials: CredentialStore {
         _ = await perform { try await store.updateSettings(value) }; scheduleBackground(); startForegroundTimer()
     }
     func login(username: String, password: String, confirmation: String?) async throws {
-        guard try await credentials.read() == nil else { throw SuirenError("请先显式退出当前账号") }
-        guard let url = settings.activeURL else { throw SuirenError("请先在服务器地址设置中选择服务器") }
+        guard try await credentials.read() == nil else { throw AppPresentationError("ui.explicitly_sign_out_of_the_current_account_first") }
+        guard let url = settings.activeURL else { throw AppPresentationError("ui.select_a_server_in_server_addresses_first") }
         let generation = accountGeneration
         let result = try await http.authenticate(serverURL: url, username: username, password: password, confirmation: confirmation)
-        guard generation == accountGeneration, settings.activeURL == url, try await credentials.read() == nil else { throw SuirenError("账号或连接已改变，请重新登录") }
+        guard generation == accountGeneration, settings.activeURL == url, try await credentials.read() == nil else { throw AppPresentationError("ui.account_or_connection_changed_sign_in_again") }
         try await credentials.write(result)
         var next = settings; next.syncEnabled = false; try await store.updateSettings(next); await refresh()
     }
@@ -111,7 +111,7 @@ actor KeychainCredentials: CredentialStore {
         scheduleBackground()
     }
     func enableSync() async {
-        guard let c = credential, settings.activeURL == c.serverURL else { error = "当前服务器无法验证账号，请先显式退出账号，再重新登录"; return }
+        guard let c = credential, settings.activeURL == c.serverURL else { error = L10n.text("ui.the_current_server_cannot_verify_this_account_explicitly_sign_out"); return }
         let success = await perform { try await store.enableSync(target: c.target) }
         if success { syncNow(); scheduleBackground(); startForegroundTimer() }
     }
@@ -124,8 +124,8 @@ actor KeychainCredentials: CredentialStore {
         let request = Task { try await coordinator.sync() }; networkTask = request
         defer { syncing = false; networkTask = nil }
         do { try await withTaskCancellationHandler(operation: { try await request.value }, onCancel: { request.cancel() }) }
-        catch is CancellationError { syncMessage = "同步已停止，待发送批次已保留" }
-        catch { syncMessage = error.localizedDescription }
+        catch is CancellationError { syncMessage = L10n.text("ui.sync_stopped_the_pending_batch_was_kept") }
+        catch { syncMessage = L10n.error(error) }
         await refresh()
     }
     func cancelSync() { changeTask?.cancel(); syncTask?.cancel(); networkTask?.cancel() }

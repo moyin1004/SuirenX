@@ -9,10 +9,10 @@ class UpdateAssetUseCase @Inject constructor(
 ) {
     suspend operator fun invoke(id: String, asset: NewAsset): Result<Asset> {
         if (id.isBlank()) {
-            return Result.failure(IllegalArgumentException("Missing asset id"))
+            return Result.failure(IllegalArgumentException("error_asset_id_required"))
         }
         if (asset.name.isBlank() || asset.priceCents < 0) {
-            return Result.failure(IllegalArgumentException("Invalid asset name or price"))
+            return Result.failure(IllegalArgumentException("error_asset_invalid"))
         }
         return repository.updateAsset(id, asset.copy(name = asset.name.trim()))
     }

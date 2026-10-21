@@ -50,7 +50,7 @@ class AssetsViewModelTest {
         }
         val vm = AssetsViewModel(GetAssetsUseCase(repo), FakeBackends(), AssetChangeNotifier(), remoteSync = sync)
         advanceUntilIdle()
-        assertEquals("无法读取本机数据，请重试", vm.uiState.value.errorMessage)
+        assertEquals("error_local_read_failed", vm.uiState.value.errorMessage)
         assertFalse(vm.uiState.value.isLoading)
         assertEquals(1, vm.uiState.value.syncStatus.conflicts.size)
 

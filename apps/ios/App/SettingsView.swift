@@ -3,7 +3,7 @@ import UniformTypeIdentifiers
 import SuirenCore
 
 enum SettingsDestination: Hashable {
-    case account, sync, backup, appearance, expiryPreferences, servers, schedule, conflicts, about, license
+    case account, sync, backup, appearance, language, expiryPreferences, servers, schedule, conflicts, about, license
     case server(String)
 }
 struct SettingsDestinationView: View {
@@ -15,6 +15,7 @@ struct SettingsDestinationView: View {
         case .sync: SyncSettingsView()
         case .backup: BackupView()
         case .appearance: AppearanceView()
+        case .language: LanguageView()
         case .expiryPreferences: ExpiryPreferencesView()
         case .servers: ServersView()
         case .schedule: SyncScheduleView()
@@ -22,12 +23,12 @@ struct SettingsDestinationView: View {
         case .about: AboutView()
         case .server(let url):
             if let server = model.settings.servers.first(where: { $0.url == url }) { ServerEditor(server: server) }
-            else { EmptyState(title: "地址已删除") }
+            else { EmptyState(title: L10n.text("ui.address_removed")) }
         case .license:
             ScrollView {
                 Text(Bundle.main.url(forResource: "FluentEmoji-MIT", withExtension: "txt").flatMap { try? String(contentsOf: $0) } ?? "MIT License")
                     .font(.caption).textSelection(.enabled).padding()
-            }.navigationTitle("开源许可")
+            }.navigationTitle(L10n.text("ui.open_source_licenses"))
         }
     }
 }
@@ -37,24 +38,26 @@ struct SettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                Text("数据始终保存在本机，同步由你决定。")
+                Text(L10n.text("ui.your_data_stays_on_this_device_you_decide_whether_to"))
                     .font(.subheadline).foregroundStyle(.secondary).padding(.vertical, 12)
                 VStack(spacing: 0) {
-                    NavigationLink(value: SettingsDestination.account) { settingsRow("账号", subtitle: model.credential?.username ?? "未登录", icon: "person.crop.circle") }.accessibilityIdentifier("settings.row.账号")
+                    NavigationLink(value: SettingsDestination.account) { settingsRow(L10n.text("ui.account"), subtitle: model.credential?.username ?? L10n.text("ui.not_signed_in"), icon: "person.crop.circle") }.accessibilityIdentifier("settings.row.账号")
                     Divider()
-                    NavigationLink(value: SettingsDestination.sync) { settingsRow("同步设置", subtitle: model.syncLabel, icon: "arrow.triangle.2.circlepath") }.accessibilityIdentifier("settings.row.同步设置")
+                    NavigationLink(value: SettingsDestination.sync) { settingsRow(L10n.text("ui.sync_settings"), subtitle: model.syncLabel, icon: "arrow.triangle.2.circlepath") }.accessibilityIdentifier("settings.row.同步设置")
                 }.sxCard(padding: 0)
                 VStack(spacing: 0) {
-                    NavigationLink(value: SettingsDestination.backup) { settingsRow("备份与恢复", subtitle: "导出、预览和安全恢复本机数据", icon: "externaldrive") }.accessibilityIdentifier("settings.row.备份与恢复")
+                    NavigationLink(value: SettingsDestination.backup) { settingsRow(L10n.text("ui.backup_and_restore"), subtitle: L10n.text("ui.export_preview_and_safely_restore_local_data"), icon: "externaldrive") }.accessibilityIdentifier("settings.row.备份与恢复")
                     Divider()
-                    NavigationLink(value: SettingsDestination.appearance) { settingsRow("外观", subtitle: model.settings.theme == "system" ? "跟随系统" : model.settings.theme == "dark" ? "深色" : "浅色", icon: "circle.lefthalf.filled") }.accessibilityIdentifier("settings.row.外观")
+                    NavigationLink(value: SettingsDestination.appearance) { settingsRow(L10n.text("ui.appearance"), subtitle: model.settings.theme == "system" ? L10n.text("ui.follow_system") : model.settings.theme == "dark" ? L10n.text("ui.dark") : L10n.text("ui.light"), icon: "circle.lefthalf.filled") }.accessibilityIdentifier("settings.row.外观")
                     Divider()
-                    NavigationLink(value: SettingsDestination.expiryPreferences) { settingsRow("用品临期提醒", subtitle: "提前 \(model.settings.soonDays) 天标记临期", icon: "calendar.badge.clock") }.accessibilityIdentifier("settings.row.用品临期提醒")
+                    NavigationLink(value: SettingsDestination.language) { settingsRow(L10n.text("settings.language"), subtitle: LanguageView.currentLanguage, icon: "globe") }.accessibilityIdentifier("settings.row.language")
+                    Divider()
+                    NavigationLink(value: SettingsDestination.expiryPreferences) { settingsRow(L10n.text("ui.expiry_reminders"), subtitle: L10n.count("ui.mark_as_due_soon_days_in_advance", model.settings.soonDays), icon: "calendar.badge.clock") }.accessibilityIdentifier("settings.row.用品临期提醒")
                 }.sxCard(padding: 0)
                 VStack(spacing: 0) {
-                    NavigationLink(value: SettingsDestination.servers) { settingsRow("服务器地址", subtitle: model.settings.activeURL ?? "未选择 · 可选", icon: "network") }.accessibilityIdentifier("settings.row.服务器地址")
+                    NavigationLink(value: SettingsDestination.servers) { settingsRow(L10n.text("ui.server_addresses"), subtitle: model.settings.activeURL ?? L10n.text("ui.none_selected_optional"), icon: "network") }.accessibilityIdentifier("settings.row.服务器地址")
                     Divider()
-                    NavigationLink(value: SettingsDestination.about) { settingsRow("关于", subtitle: "SuirenX \(InstalledAppInfo.version)", icon: "info.circle") }.accessibilityIdentifier("settings.row.关于")
+                    NavigationLink(value: SettingsDestination.about) { settingsRow(L10n.text("ui.about"), subtitle: "SuirenX \(InstalledAppInfo.version)", icon: "info.circle") }.accessibilityIdentifier("settings.row.关于")
                 }.sxCard(padding: 0)
             }.sxPage()
         }.buttonStyle(.plain)
@@ -77,43 +80,43 @@ private struct AccountView: View {
     @State private var confirmLogout = false
     private var invalid: String? {
         do { try AccountValidation.validate(username: username, password: password, confirmation: registering ? confirmation : nil); return nil }
-        catch { return error.localizedDescription }
+        catch { return L10n.error(error) }
     }
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                PageHeading(title: "账号", subtitle: "账号与服务器地址独立管理。登录不会开始上传。")
+                PageHeading(title: L10n.text("ui.account"), subtitle: L10n.text("ui.accounts_and_server_addresses_are_independent_signing_in_does_not"))
                 if let credential = model.credential {
-                    VStack(spacing: 8) { InfoRow(label: "当前账号", value: credential.username); InfoRow(label: "签发服务器", value: credential.serverURL); InfoRow(label: "凭据到期", value: credential.expiresAt) }.sxCard()
-                    Text("切换账号前请先退出。更改或删除地址不会清除账号。退出只清除此设备凭据，已签发令牌仍可在其 30 天有效期内使用。").font(.subheadline).foregroundStyle(.secondary)
-                    Button("退出账号", role: .destructive) { confirmLogout = true }.frame(maxWidth: .infinity, minHeight: 48).disabled(busy)
+                    VStack(spacing: 8) { InfoRow(label: L10n.text("ui.current_account"), value: credential.username); InfoRow(label: L10n.text("ui.issuing_server"), value: credential.serverURL); InfoRow(label: L10n.text("ui.credential_expiry"), value: DisplayFormatting.timestamp(credential.expiresAt)) }.sxCard()
+                    Text(L10n.text("ui.sign_out_before_switching_accounts_changing_or_deleting_an_address")).font(.subheadline).foregroundStyle(.secondary)
+                    Button(L10n.text("ui.sign_out"), role: .destructive) { confirmLogout = true }.frame(maxWidth: .infinity, minHeight: 48).disabled(busy)
                 } else {
                     VStack(alignment: .leading, spacing: 14) {
-                        Text(model.settings.activeURL.map { "登录服务器：\($0)" } ?? "请先在服务器地址设置中添加并选择服务器。").font(.caption).foregroundStyle(.secondary)
-                        Picker("操作", selection: Binding(get: { registering }, set: { value in password = ""; confirmation = ""; error = nil; registering = value })) { Text("登录").tag(false); Text("注册").tag(true) }.pickerStyle(.segmented)
-                        TextField("账号", text: $username).textInputAutocapitalization(.never).autocorrectionDisabled().textContentType(.username).padding(12).background(Palette.inset, in: RoundedRectangle(cornerRadius: 12)).accessibilityIdentifier("account.username")
-                        passwordField("密码", value: $password)
-                        if registering { Text(AccountValidation.passwordHint).font(.caption).foregroundStyle(.secondary); passwordField("确认密码", value: $confirmation) }
+                        Text(model.settings.activeURL.map { L10n.text("ui.sign_in_server" , String(describing: $0)) } ?? L10n.text("ui.add_and_select_a_server_in_server_addresses_first")).font(.caption).foregroundStyle(.secondary)
+                        Picker(L10n.text("ui.action"), selection: Binding(get: { registering }, set: { value in password = ""; confirmation = ""; error = nil; registering = value })) { Text(L10n.text("ui.sign_in")).tag(false); Text(L10n.text("ui.register")).tag(true) }.pickerStyle(.segmented)
+                        TextField(L10n.text("ui.account"), text: $username).textInputAutocapitalization(.never).autocorrectionDisabled().textContentType(.username).padding(12).background(Palette.inset, in: RoundedRectangle(cornerRadius: 12)).accessibilityIdentifier("account.username")
+                        passwordField(L10n.text("ui.password"), value: $password)
+                        if registering { Text(L10n.text("account.password_requirements")).font(.caption).foregroundStyle(.secondary); passwordField(L10n.text("ui.confirm_password"), value: $confirmation) }
                         if let error { Text(error).font(.subheadline).foregroundStyle(.red) }
                         if let invalid { Text(invalid).font(.caption).foregroundStyle(.secondary) }
-                        Button(busy ? "正在提交…" : registering ? "注册并登录" : "登录") { submit() }.buttonStyle(PrimaryButtonStyle()).disabled(busy || invalid != nil || model.settings.activeURL == nil)
+                        Button(busy ? L10n.text("ui.submitting") : registering ? L10n.text("ui.register_and_sign_in") : L10n.text("ui.sign_in")) { submit() }.buttonStyle(PrimaryButtonStyle()).disabled(busy || invalid != nil || model.settings.activeURL == nil)
                     }.sxCard().disabled(busy)
                 }
             }.sxPage()
-        }.navigationTitle("账号").scrollDismissesKeyboard(.interactively)
-            .confirmationDialog("退出当前账号？", isPresented: $confirmLogout, titleVisibility: .visible) { Button("退出账号", role: .destructive) { busy = true; Task { await model.logout(); busy = false } }.accessibilityIdentifier("account.confirmLogout") } message: { Text("本机数据保留，同步停止。此操作不撤销已签发 JWT。") }
+        }.navigationTitle(L10n.text("ui.account")).scrollDismissesKeyboard(.interactively)
+            .confirmationDialog(L10n.text("ui.sign_out_of_this_account"), isPresented: $confirmLogout, titleVisibility: .visible) { Button(L10n.text("ui.sign_out"), role: .destructive) { busy = true; Task { await model.logout(); busy = false } }.accessibilityIdentifier("account.confirmLogout") } message: { Text(L10n.text("ui.local_data_is_kept_and_sync_stops_issued_jwts_are")) }
     }
     private func passwordField(_ title: String, value: Binding<String>) -> some View {
         HStack {
-            PasswordInput(text: value, title: title, secure: !visible, registering: registering, identifier: title == "密码" ? "account.password" : "account.confirmation").id("\(title)-\(registering)").frame(minHeight: 44)
-            Button { visible.toggle() } label: { Image(systemName: visible ? "eye.slash" : "eye").frame(minWidth: 44, minHeight: 44) }.accessibilityLabel(visible ? "隐藏密码" : "显示密码")
+            PasswordInput(text: value, title: title, secure: !visible, registering: registering, identifier: title == L10n.text("ui.password") ? "account.password" : "account.confirmation").id("\(title)-\(registering)").frame(minHeight: 44)
+            Button { visible.toggle() } label: { Image(systemName: visible ? "eye.slash" : "eye").frame(minWidth: 44, minHeight: 44) }.accessibilityLabel(visible ? L10n.text("ui.hide_password") : L10n.text("ui.show_password"))
         }.padding(.leading, 12).background(Palette.inset, in: RoundedRectangle(cornerRadius: 12))
     }
     private func submit() {
         busy = true; error = nil
         Task {
             do { try await model.login(username: username, password: password, confirmation: registering ? confirmation : nil); password = ""; confirmation = "" }
-            catch { self.error = error.localizedDescription }; busy = false
+            catch { self.error = L10n.error(error) }; busy = false
         }
     }
 }
@@ -124,16 +127,16 @@ private struct ServersView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                PageHeading(title: "服务器地址", subtitle: "添加或修改地址前需通过该地址的健康测试。测试不登录，也不上传。")
+                PageHeading(title: L10n.text("ui.server_addresses"), subtitle: L10n.text("ui.adding_or_editing_an_address_requires_a_successful_health_check"))
                 ForEach(model.settings.servers) { server in
                     NavigationLink(value: SettingsDestination.server(server.url)) {
-                        VStack(alignment: .leading, spacing: 7) { HStack { Text(server.name.isEmpty ? "未命名服务器" : server.name).fontWeight(.medium); Spacer(); if model.settings.activeURL == server.url { Text("当前选择").font(.caption).padding(5).background(Palette.accent, in: Capsule()).foregroundStyle(.black) } }; Text(server.url).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }.sxCard()
+                        VStack(alignment: .leading, spacing: 7) { HStack { Text(server.name.isEmpty ? L10n.text("ui.unnamed_server") : server.name).fontWeight(.medium); Spacer(); if model.settings.activeURL == server.url { Text(L10n.text("ui.selected")).font(.caption).padding(5).background(Palette.accent, in: Capsule()).foregroundStyle(.black) } }; Text(server.url).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }.sxCard()
                     }.buttonStyle(.plain)
                 }
-                if model.settings.servers.isEmpty { EmptyState(title: "尚无服务器", detail: "离线功能可直接使用。") }
-                Button("添加服务器") { adding = true }.buttonStyle(PrimaryButtonStyle())
+                if model.settings.servers.isEmpty { EmptyState(title: L10n.text("ui.no_servers_yet"), detail: L10n.text("ui.offline_features_are_ready_to_use")) }
+                Button(L10n.text("ui.add_server")) { adding = true }.buttonStyle(PrimaryButtonStyle())
             }.sxPage()
-        }.navigationTitle("服务器地址").sheet(isPresented: $adding) { NavigationStack { ServerEditor(server: nil) } }
+        }.navigationTitle(L10n.text("ui.server_addresses")).sheet(isPresented: $adding) { NavigationStack { ServerEditor(server: nil) } }
     }
 }
 
@@ -157,45 +160,45 @@ private struct ServerEditor: View {
     }
     var body: some View {
         Form {
-            Section("地址信息") { TextField("名称（可选）", text: $name); TextField("域名或 IP 地址", text: $address).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled().onChange(of: address) { _, _ in testedURL = nil; message = nil } }
+            Section(L10n.text("ui.address_details")) { TextField(L10n.text("ui.name_optional"), text: $name); TextField(L10n.text("ui.domain_or_ip_address"), text: $address).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled().onChange(of: address) { _, _ in testedURL = nil; message = nil } }
             Section {
-                Button(busy ? "测试中…" : "测试连接") { test() }.disabled(busy)
+                Button(busy ? L10n.text("ui.testing") : L10n.text("ui.test_connection")) { test() }.disabled(busy)
                 if let message { Text(message).font(.caption).foregroundStyle(testedURL != nil ? .secondary : Color.red) }
-                Text("测试成功仅表示此健康接口可达，不代表账号或同步已验证。").font(.caption).foregroundStyle(.secondary)
+                Text(L10n.text("ui.a_successful_test_only_confirms_that_the_health_endpoint_is")).font(.caption).foregroundStyle(.secondary)
             }
-            Section { Button("保存") { save() }.disabled(busy || !canSave) }
+            Section { Button(L10n.text("ui.save")) { save() }.disabled(busy || !canSave) }
             if let server {
                 Section {
-                    Button(model.settings.activeURL == server.url ? "已选择此服务器" : "选择此服务器") { Task { var s = model.settings; s.activeURL = server.url; await model.updateSettings(s) } }.disabled(busy || model.settings.activeURL == server.url)
-                    Text("选择地址会暂停同步，不会清除账号或自动上传。").font(.caption).foregroundStyle(.secondary)
+                    Button(model.settings.activeURL == server.url ? L10n.text("ui.this_server_is_selected") : L10n.text("ui.select_this_server")) { Task { var s = model.settings; s.activeURL = server.url; await model.updateSettings(s) } }.disabled(busy || model.settings.activeURL == server.url)
+                    Text(L10n.text("ui.selecting_an_address_pauses_sync_it_does_not_clear_the")).font(.caption).foregroundStyle(.secondary)
                 }
-                Section { Button("删除地址", role: .destructive) { deleteConfirmation = true }.disabled(busy) }
+                Section { Button(L10n.text("ui.delete_address"), role: .destructive) { deleteConfirmation = true }.disabled(busy) }
             }
-        }.frame(maxWidth: 640).frame(maxWidth: .infinity).sxNavigationBackground().navigationTitle(server == nil ? "添加服务器" : "服务器详情")
-            .toolbar { if server == nil { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(busy) } } }
-            .confirmationDialog("删除此地址？", isPresented: $deleteConfirmation, titleVisibility: .visible) { Button("确认删除地址", role: .destructive) { remove() } } message: { Text("仅删除连接配置。账号、本机业务数据和同步记录保留；删除当前地址将暂停同步且不自动选择其他地址。") }
+        }.frame(maxWidth: 640).frame(maxWidth: .infinity).sxNavigationBackground().navigationTitle(server == nil ? L10n.text("ui.add_server") : L10n.text("ui.server_details"))
+            .toolbar { if server == nil { ToolbarItem(placement: .cancellationAction) { Button(L10n.text("ui.cancel")) { dismiss() }.disabled(busy) } } }
+            .confirmationDialog(L10n.text("ui.delete_this_address"), isPresented: $deleteConfirmation, titleVisibility: .visible) { Button(L10n.text("ui.confirm_address_deletion"), role: .destructive) { remove() } } message: { Text(L10n.text("ui.only_the_connection_settings_are_deleted_account_local_data_and")) }
     }
     private var canSave: Bool { guard let url = try? normalized() else { return false }; return testedURL == url || (server?.url == url && server?.name != name) }
     private func test() {
         do {
             let url = try normalized(); testedURL = nil; busy = true
             Task {
-                do { try await model.http.health(serverURL: url); if (try? normalized()) == url { testedURL = url; message = "连接成功，尚未保存或开启同步。" } }
-                catch { message = error.localizedDescription }; busy = false
+                do { try await model.http.health(serverURL: url); if (try? normalized()) == url { testedURL = url; message = L10n.text("ui.connected_settings_have_not_been_saved_and_sync_is_still") } }
+                catch { message = L10n.error(error) }; busy = false
             }
-        } catch { message = error.localizedDescription }
+        } catch { message = L10n.error(error) }
     }
     private func save() {
         do {
-            let url = try normalized(); guard canSave else { throw SuirenError("请先测试完全相同的地址") }
+            let url = try normalized(); guard canSave else { throw AppPresentationError("ui.test_the_exact_same_address_first") }
             var settings = model.settings
-            guard !settings.servers.contains(where: { $0.url == url && $0.url != server?.url }) else { throw SuirenError("地址已存在，请编辑现有条目") }
+            guard !settings.servers.contains(where: { $0.url == url && $0.url != server?.url }) else { throw AppPresentationError("ui.this_address_already_exists_edit_the_existing_entry") }
             let saved = ServerAddress(url: url, name: name.trimmingCharacters(in: .whitespacesAndNewlines))
             if let server, let index = settings.servers.firstIndex(where: { $0.url == server.url }) {
                 settings.servers[index] = saved; if settings.activeURL == server.url { settings.activeURL = url }
             } else { settings.servers.append(saved) }
             busy = true; Task { await model.updateSettings(settings); busy = false; if model.error == nil { dismiss() } }
-        } catch { message = error.localizedDescription }
+        } catch { message = L10n.error(error) }
     }
     private func remove() {
         guard let server else { return }; var s = model.settings; s.servers.removeAll { $0.url == server.url }
@@ -210,32 +213,32 @@ private struct SyncSettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                PageHeading(title: "同步设置", subtitle: "本机数据始终可用，登录或选择地址本身不会上传。")
+                PageHeading(title: L10n.text("ui.sync_settings"), subtitle: L10n.text("ui.local_data_is_always_available_signing_in_or_selecting_an"))
                 VStack(alignment: .leading, spacing: 12) {
                     Text(model.syncLabel).font(.headline)
                     if model.syncing { ProgressView() }
-                    InfoRow(label: "上次成功", value: model.snapshot?.session?.lastSyncedAt ?? "尚未同步")
-                    InfoRow(label: "待发送", value: "\(model.snapshot?.pendingCount ?? 0) 项")
-                    InfoRow(label: "待处理冲突", value: "\(model.snapshot?.conflicts.count ?? 0) 项")
+                    InfoRow(label: L10n.text("ui.last_successful_sync"), value: model.snapshot?.session?.lastSyncedAt.map { DisplayFormatting.timestamp($0) } ?? L10n.text("ui.never_synced"))
+                    InfoRow(label: L10n.text("ui.pending_uploads"), value: L10n.count("ui.items", model.snapshot?.pendingCount ?? 0))
+                    InfoRow(label: L10n.text("ui.unresolved_conflicts"), value: L10n.count("ui.items", model.snapshot?.conflicts.count ?? 0))
                     if model.settings.syncEnabled {
-                        Button(model.syncing ? "停止本次同步" : "立即同步") { if model.syncing { model.cancelSync() } else { model.syncNow() } }.buttonStyle(PrimaryButtonStyle())
-                        Button("暂停同步") { Task { var s = model.settings; s.syncEnabled = false; await model.updateSettings(s) } }.frame(maxWidth: .infinity, minHeight: 44)
-                    } else { Button("预览并开启同步") { preview = true }.buttonStyle(PrimaryButtonStyle()).disabled(model.credential == nil || model.settings.activeURL == nil) }
+                        Button(model.syncing ? L10n.text("ui.stop_this_sync") : L10n.text("ui.sync_now")) { if model.syncing { model.cancelSync() } else { model.syncNow() } }.buttonStyle(PrimaryButtonStyle())
+                        Button(L10n.text("ui.pause_sync")) { Task { var s = model.settings; s.syncEnabled = false; await model.updateSettings(s) } }.frame(maxWidth: .infinity, minHeight: 44)
+                    } else { Button(L10n.text("ui.preview_and_enable_sync")) { preview = true }.buttonStyle(PrimaryButtonStyle()).disabled(model.credential == nil || model.settings.activeURL == nil) }
                 }.sxCard()
-                NavigationLink(value: SettingsDestination.schedule) { Label("同步方式与频率", systemImage: "clock").frame(maxWidth: .infinity, alignment: .leading).sxCard() }.buttonStyle(.plain)
-                NavigationLink(value: SettingsDestination.conflicts) { Label("冲突处理（\(model.snapshot?.conflicts.count ?? 0)）", systemImage: "arrow.triangle.branch").frame(maxWidth: .infinity, alignment: .leading).sxCard() }.buttonStyle(.plain)
-                Text("iOS 与 iPadOS 由系统决定后台执行时机，频率为期望值；省电、网络和后台刷新设置可能延迟同步。可随时使用立即同步。").font(.caption).foregroundStyle(.secondary)
+                NavigationLink(value: SettingsDestination.schedule) { Label(L10n.text("ui.sync_method_and_frequency"), systemImage: "clock").frame(maxWidth: .infinity, alignment: .leading).sxCard() }.buttonStyle(.plain)
+                NavigationLink(value: SettingsDestination.conflicts) { Label(L10n.text("ui.resolve_conflicts" , String(describing: model.snapshot?.conflicts.count ?? 0)), systemImage: "arrow.triangle.branch").frame(maxWidth: .infinity, alignment: .leading).sxCard() }.buttonStyle(.plain)
+                Text(L10n.text("ui.ios_and_ipados_decide_when_background_tasks_run_the_frequency")).font(.caption).foregroundStyle(.secondary)
             }.sxPage()
-        }.navigationTitle("同步设置").sheet(isPresented: $preview) {
+        }.navigationTitle(L10n.text("ui.sync_settings")).sheet(isPresented: $preview) {
             NavigationStack {
                 VStack(alignment: .leading, spacing: 18) {
-                    PageHeading(title: "开启同步前确认", subtitle: "将先自动创建含旧同步恢复记录的本机安全备份。")
-                    InfoRow(label: "资产", value: "\(model.assets.count) 项（含归档）"); InfoRow(label: "用品", value: "\(model.expiry.count) 项（含归档）")
-                    InfoRow(label: "服务器", value: model.settings.activeURL ?? "未选择"); InfoRow(label: "账号", value: model.credential?.username ?? "未登录")
-                    Text("相同编号的数据差异将进入显式冲突处理。切换同步目标会重建目标专属版本与游标，本机记录和删除记录保留。").font(.subheadline).foregroundStyle(.secondary)
-                    Button("确认开启并同步") { preview = false; Task { await model.enableSync() } }.buttonStyle(PrimaryButtonStyle())
+                    PageHeading(title: L10n.text("ui.before_enabling_sync"), subtitle: L10n.text("ui.a_local_safety_backup_including_previous_sync_recovery_records_will"))
+                    InfoRow(label: L10n.text("ui.assets"), value: L10n.count("ui.items_including_archived", model.assets.count)); InfoRow(label: L10n.text("ui.supplies"), value: L10n.count("ui.items_including_archived", model.expiry.count))
+                    InfoRow(label: L10n.text("ui.server"), value: model.settings.activeURL ?? L10n.text("ui.none_selected")); InfoRow(label: L10n.text("ui.account"), value: model.credential?.username ?? L10n.text("ui.not_signed_in"))
+                    Text(L10n.text("ui.records_with_the_same_id_and_different_content_require_explicit")).font(.subheadline).foregroundStyle(.secondary)
+                    Button(L10n.text("ui.enable_and_sync")) { preview = false; Task { await model.enableSync() } }.buttonStyle(PrimaryButtonStyle())
                     Spacer()
-                }.padding(24).frame(maxWidth: 600).frame(maxWidth: .infinity, maxHeight: .infinity).sxNavigationBackground().navigationTitle("同步预览").toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { preview = false } } }
+                }.padding(24).frame(maxWidth: 600).frame(maxWidth: .infinity, maxHeight: .infinity).sxNavigationBackground().navigationTitle(L10n.text("ui.sync_preview")).toolbar { ToolbarItem(placement: .cancellationAction) { Button(L10n.text("ui.cancel")) { preview = false } } }
             }
         }
     }
@@ -245,10 +248,10 @@ private struct SyncScheduleView: View {
     @EnvironmentObject private var model: AppModel
     var body: some View {
         Form {
-            Section("同步方式") { Picker("触发方式", selection: Binding(get: { model.settings.syncAfterChanges }, set: { v in Task { var s = model.settings; s.syncAfterChanges = v; await model.updateSettings(s) } })) { Text("每次修改后同步").tag(true); Text("定时同步").tag(false) } }
-            Section("期望频率") { Picker("约每", selection: Binding(get: { model.settings.intervalMinutes }, set: { v in Task { var s = model.settings; s.intervalMinutes = v; await model.updateSettings(s) } })) { Text("15 分钟").tag(15); Text("1 小时").tag(60); Text("6 小时").tag(360); Text("每天").tag(1440) } }
-            Section { Text("系统决定后台运行时机，无法保证准点。修改后模式会短暂合并连续修改，并申请约 15 分钟后的后台补偿。").font(.caption).foregroundStyle(.secondary) }
-        }.navigationTitle("同步方式与频率")
+            Section(L10n.text("ui.sync_method")) { Picker(L10n.text("ui.trigger"), selection: Binding(get: { model.settings.syncAfterChanges }, set: { v in Task { var s = model.settings; s.syncAfterChanges = v; await model.updateSettings(s) } })) { Text(L10n.text("ui.after_each_change")).tag(true); Text(L10n.text("ui.scheduled_sync")).tag(false) } }
+            Section(L10n.text("ui.preferred_frequency")) { Picker(L10n.text("ui.about_every"), selection: Binding(get: { model.settings.intervalMinutes }, set: { v in Task { var s = model.settings; s.intervalMinutes = v; await model.updateSettings(s) } })) { Text(L10n.text("ui.15_minutes")).tag(15); Text(L10n.text("ui.1_hour")).tag(60); Text(L10n.text("ui.6_hours")).tag(360); Text(L10n.text("ui.daily")).tag(1440) } }
+            Section { Text(L10n.text("ui.the_system_decides_when_background_tasks_run_exact_timing_is")).font(.caption).foregroundStyle(.secondary) }
+        }.navigationTitle(L10n.text("ui.sync_method_and_frequency"))
     }
 }
 
@@ -260,35 +263,35 @@ private struct ConflictsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                PageHeading(title: "冲突处理", subtitle: "仅暂停发生冲突的记录；其他记录继续同步。双方修改时间不可从当前协议核实。")
-                if model.snapshot?.conflicts.isEmpty ?? true { EmptyState(title: "暂无冲突") }
+                PageHeading(title: L10n.text("ui.resolve_conflicts_"), subtitle: L10n.text("ui.only_conflicting_records_pause_other_records_continue_syncing_the_current"))
+                if model.snapshot?.conflicts.isEmpty ?? true { EmptyState(title: L10n.text("ui.no_conflicts")) }
                 ForEach(model.snapshot?.conflicts ?? []) { row in
                     VStack(alignment: .leading, spacing: 12) {
                         Text(row.payload.name.isEmpty ? row.payload.id : row.payload.name).font(.headline)
-                        Text("本机基线 v\(row.version) · 另一端 v\(row.remoteVersion ?? 0)").font(.caption).foregroundStyle(.secondary)
+                        Text(L10n.text("ui.local_base_v_remote_v" , String(describing: row.version), String(describing: row.remoteVersion ?? 0))).font(.caption).foregroundStyle(.secondary)
                         let localFields = fields(row.payload), remoteFields = row.remote.map(fields)
                         ForEach(localFields, id: \.0) { key, value in
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(key).font(.caption2).foregroundStyle(.secondary)
-                                Text("本机：\(value)").font(.caption)
-                                Text("另一端：\(remoteFields?.first { $0.0 == key }?.1 ?? "快照不可用")").font(.caption).foregroundStyle(value == remoteFields?.first { $0.0 == key }?.1 ? Color.secondary : Color.primary)
+                                Text(L10n.text("ui.local" , String(describing: value))).font(.caption)
+                                Text(L10n.text("ui.remote" , String(describing: remoteFields?.first { $0.0 == key }?.1 ?? L10n.text("ui.snapshot_unavailable")))).font(.caption).foregroundStyle(value == remoteFields?.first { $0.0 == key }?.1 ? Color.secondary : Color.primary)
                             }.textSelection(.enabled)
                         }
-                        Button("保留本机") { choose(row, .local) }.buttonStyle(PrimaryButtonStyle())
-                        Button("保留另一端") { choose(row, .remote) }.frame(maxWidth: .infinity, minHeight: 44).disabled(row.remote == nil)
-                        Button("两份都保留") { choose(row, .both) }.frame(maxWidth: .infinity, minHeight: 44).disabled(row.remote == nil)
+                        Button(L10n.text("ui.keep_local")) { choose(row, .local) }.buttonStyle(PrimaryButtonStyle())
+                        Button(L10n.text("ui.keep_remote")) { choose(row, .remote) }.frame(maxWidth: .infinity, minHeight: 44).disabled(row.remote == nil)
+                        Button(L10n.text("ui.keep_both")) { choose(row, .both) }.frame(maxWidth: .infinity, minHeight: 44).disabled(row.remote == nil)
                     }.sxCard().disabled(model.syncing)
                 }
             }.sxPage()
-        }.navigationTitle("冲突处理").confirmationDialog("确认处理此记录？", isPresented: $confirming, titleVisibility: .visible) {
-            Button("确认选择") { if let row = pending { Task { await model.mutate { try await model.store.resolve(key: row.id, resolution: resolution) } } } }
-        } message: { Text(resolution == .local ? "保留本机内容，基于另一端最新版本再次提交。" : resolution == .remote ? "将用另一端版本替换本机内容；若另一端已删除，本机也将删除。" : "将可保留的修改版另存为新编号，原记录按另一端版本或本机删除处理。") }
+        }.navigationTitle(L10n.text("ui.resolve_conflicts_")).confirmationDialog(L10n.text("ui.resolve_this_record"), isPresented: $confirming, titleVisibility: .visible) {
+            Button(L10n.text("ui.confirm_selection")) { if let row = pending { Task { await model.mutate { try await model.store.resolve(key: row.id, resolution: resolution) } } } }
+        } message: { Text(resolution == .local ? L10n.text("ui.keep_local_content_and_resubmit_against_the_latest_remote_version") : resolution == .remote ? L10n.text("ui.replace_local_content_with_the_remote_version_if_the_remote") : L10n.text("ui.save_any_retained_edits_under_a_new_id_the_original")) }
     }
     private func choose(_ row: JournalRecord, _ value: ConflictResolution) { pending = row; resolution = value; confirming = true }
     private func fields(_ payload: RecordPayload) -> [(String, String)] {
         switch payload {
-        case .asset(let a): return [("名称", a.name), ("删除状态", a.deleted ? "已删除" : "保留"), ("金额", Money.text(a.price_cents)), ("购买日期", a.purchase_date), ("状态", a.status), ("退役日期", a.retired_date), ("归档时间", a.archived_at), ("图标", AssetIcon.find(a.icon_key).label), ("购买渠道", a.purchase_channel), ("保修截止", a.warranty_end_date), ("标签", a.tags.joined(separator: "、")), ("备注", a.notes)]
-        case .expiry(let e): return [("名称", e.name), ("删除状态", e.deleted ? "已删除" : "保留"), ("分类", e.category), ("包装到期", e.package_expiry_date), ("开封日", e.opened_date), ("有效天数", String(e.opened_validity_days)), ("位置", e.location), ("状态", e.status), ("归档时间", e.archived_at), ("备注", e.notes)]
+        case .asset(let a): return [(L10n.text("ui.name"), a.name), (L10n.text("ui.deletion_status"), a.deleted ? L10n.text("ui.deleted") : L10n.text("ui.kept")), (L10n.text("ui.amount"), Money.text(a.price_cents)), (L10n.text("ui.purchase_date"), a.purchase_date), (L10n.text("ui.status"), L10n.assetStatus(a.status)), (L10n.text("ui.retirement_date"), a.retired_date), (L10n.text("ui.archived_at"), a.archived_at), (L10n.text("ui.icon"), AssetIcon.find(a.icon_key).label), (L10n.text("ui.purchase_channel"), a.purchase_channel), (L10n.text("ui.warranty_ends"), a.warranty_end_date), (L10n.text("ui.tags"), a.tags.joined(separator: "、")), (L10n.text("ui.notes"), a.notes)]
+        case .expiry(let e): return [(L10n.text("ui.name"), e.name), (L10n.text("ui.deletion_status"), e.deleted ? L10n.text("ui.deleted") : L10n.text("ui.kept")), (L10n.text("ui.category"), e.category), (L10n.text("ui.package_expiry"), e.package_expiry_date), (L10n.text("ui.opened_on"), e.opened_date), (L10n.text("ui.validity_in_days"), String(e.opened_validity_days)), (L10n.text("ui.location"), e.location), (L10n.text("ui.status"), L10n.expiryStatus(e.status)), (L10n.text("ui.archived_at"), e.archived_at), (L10n.text("ui.notes"), e.notes)]
         }
     }
 }
@@ -314,51 +317,51 @@ private struct BackupView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                PageHeading(title: "备份与恢复", subtitle: "包含资产、用品、归档和时间，不包含账号密码或访问令牌。兼容 Android 本地备份 v1。")
-                InfoRow(label: "本机资产", value: "\(model.assets.count) 项"); InfoRow(label: "本机用品", value: "\(model.expiry.count) 项")
-                Button("导出本机 JSON") { Task { busy = true; if await model.perform({ document = JSONDocument(data: try await model.store.exportBackup()); exporting = true }) {} ; busy = false } }.buttonStyle(PrimaryButtonStyle()).disabled(busy)
-                Button("选择备份并预览") { importing = true }.frame(maxWidth: .infinity, minHeight: 48).disabled(busy || model.syncing)
+                PageHeading(title: L10n.text("ui.backup_and_restore"), subtitle: L10n.text("ui.includes_assets_supplies_archived_records_and_timestamps_excludes_passwords_and"))
+                InfoRow(label: L10n.text("ui.local_assets"), value: L10n.count("ui.items", model.assets.count)); InfoRow(label: L10n.text("ui.local_supplies"), value: L10n.count("ui.items", model.expiry.count))
+                Button(L10n.text("ui.export_local_json")) { Task { busy = true; if await model.perform({ document = JSONDocument(data: try await model.store.exportBackup()); exporting = true }) {} ; busy = false } }.buttonStyle(PrimaryButtonStyle()).disabled(busy)
+                Button(L10n.text("ui.choose_backup_and_preview")) { importing = true }.frame(maxWidth: .infinity, minHeight: 48).disabled(busy || model.syncing)
                 if let inspected {
-                    VStack(alignment: .leading, spacing: 12) { Text("恢复预览").font(.headline); Text("资产 \(inspected.assets.count) 项 · 用品 \(inspected.expiryItems.count) 项"); Text("恢复前自动创建安全备份；恢复将替换本机业务记录并暂停同步。").font(.caption).foregroundStyle(.secondary); Button("确认恢复") { confirming = true }.buttonStyle(PrimaryButtonStyle()).disabled(busy || model.syncing) }.sxCard()
+                    VStack(alignment: .leading, spacing: 12) { Text(L10n.text("ui.restore_preview")).font(.headline); Text(L10n.text("backup.preview.counts", L10n.count("ui.items", inspected.assets.count), L10n.count("ui.items", inspected.expiryItems.count))); Text(L10n.text("ui.a_safety_backup_is_created_before_restoring_restoring_replaces_local")).font(.caption).foregroundStyle(.secondary); Button(L10n.text("ui.confirm_restore")) { confirming = true }.buttonStyle(PrimaryButtonStyle()).disabled(busy || model.syncing) }.sxCard()
                 }
                 if let status { Text(status).font(.subheadline).foregroundStyle(.secondary) }
                 if !safety.isEmpty {
-                    Text("自动安全备份").font(.headline)
+                    Text(L10n.text("ui.automatic_safety_backups")).font(.headline)
                     ForEach(safety, id: \.self) { url in
-                        HStack { Text(url.lastPathComponent).font(.caption).lineLimit(2); Spacer(); ShareLink(item: url) { Image(systemName: "square.and.arrow.up").frame(width: 44, height: 44) }.accessibilityLabel("导出此安全备份") }.sxCard()
+                        HStack { Text(url.lastPathComponent).font(.caption).lineLimit(2); Spacer(); ShareLink(item: url) { Image(systemName: "square.and.arrow.up").frame(width: 44, height: 44) }.accessibilityLabel(L10n.text("ui.export_this_safety_backup")) }.sxCard()
                     }
-                    Text("安全备份包含旧目标的同步恢复记录，不包含凭据；恢复时只使用业务数据。").font(.caption).foregroundStyle(.secondary)
+                    Text(L10n.text("ui.safety_backups_include_previous_target_sync_recovery_records_and_exclude")).font(.caption).foregroundStyle(.secondary)
                 }
             }.sxPage()
-        }.navigationTitle("备份与恢复").task { safety = (try? await model.store.safetyBackups()) ?? [] }
+        }.navigationTitle(L10n.text("ui.backup_and_restore")).task { safety = (try? await model.store.safetyBackups()) ?? [] }
             .fileExporter(isPresented: $exporting, document: document, contentType: .json, defaultFilename: "suirenx-\(LocalDay.today.rawValue)") { result in
-                switch result { case .success: status = "备份已导出"; case .failure(let error): model.error = error.localizedDescription }
+                switch result { case .success: status = L10n.text("ui.backup_exported"); case .failure(let error): model.error = L10n.error(error) }
             }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
                 do {
                     let url = try result.get(); let scoped = url.startAccessingSecurityScopedResource(); defer { if scoped { url.stopAccessingSecurityScopedResource() } }
                     let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-                    guard size <= 64 * 1024 * 1024 else { throw SuirenError("备份文件过大") }
+                    guard size <= 64 * 1024 * 1024 else { throw AppPresentationError("ui.backup_file_is_too_large") }
                     let data = try Data(contentsOf: url); inspected = try LocalBackup.inspect(data); imported = data; status = nil
-                } catch { model.error = error.localizedDescription }
+                } catch { model.error = L10n.error(error) }
             }
-            .confirmationDialog("替换本机数据？", isPresented: $confirming, titleVisibility: .visible) {
-                    Button("创建安全备份并恢复", role: .destructive) { guard let imported else { return }; busy = true; Task { model.cancelSync(); if await model.mutate({ try await model.store.restore(imported) }) { status = "恢复完成，同步已暂停"; inspected = nil; self.imported = nil; safety = (try? await model.store.safetyBackups()) ?? []; model.scheduleBackground() }; busy = false } }
-            } message: { Text("会先校验文件并自动备份现有数据，事务失败保留原数据。凭据不会从备份导入。") }
+            .confirmationDialog(L10n.text("ui.replace_local_data"), isPresented: $confirming, titleVisibility: .visible) {
+                    Button(L10n.text("ui.back_up_and_restore"), role: .destructive) { guard let imported else { return }; busy = true; Task { model.cancelSync(); if await model.mutate({ try await model.store.restore(imported) }) { status = L10n.text("ui.restored_sync_is_paused"); inspected = nil; self.imported = nil; safety = (try? await model.store.safetyBackups()) ?? []; model.scheduleBackground() }; busy = false } }
+            } message: { Text(L10n.text("ui.the_file_is_validated_and_current_data_is_backed_up")) }
     }
 }
 
 private struct AppearanceView: View {
     @EnvironmentObject private var model: AppModel
-    var body: some View { Form { Picker("外观", selection: Binding(get: { model.settings.theme }, set: { value in Task { var s = model.settings; s.theme = value; await model.updateSettings(s) } })) { Text("跟随系统").tag("system"); Text("浅色").tag("light"); Text("深色").tag("dark") }.pickerStyle(.inline) }.navigationTitle("外观") }
+    var body: some View { Form { Picker(L10n.text("ui.appearance"), selection: Binding(get: { model.settings.theme }, set: { value in Task { var s = model.settings; s.theme = value; await model.updateSettings(s) } })) { Text(L10n.text("ui.follow_system")).tag("system"); Text(L10n.text("ui.light")).tag("light"); Text(L10n.text("ui.dark")).tag("dark") }.pickerStyle(.inline) }.navigationTitle(L10n.text("ui.appearance")) }
 }
 private struct ExpiryPreferencesView: View {
     @EnvironmentObject private var model: AppModel
-    var body: some View { Form { Section { Stepper("提前 \(model.settings.soonDays) 天", value: Binding(get: { model.settings.soonDays }, set: { value in Task { var s = model.settings; s.soonDays = value; await model.updateSettings(s) } }), in: 1...30) } footer: { Text("用于首页待处理数量与用品临期标记。当前与 Android 一致，尚未提供系统通知推送。") } }.navigationTitle("用品临期提醒") }
+    var body: some View { Form { Section { Stepper(L10n.count("ui.days_in_advance", model.settings.soonDays), value: Binding(get: { model.settings.soonDays }, set: { value in Task { var s = model.settings; s.soonDays = value; await model.updateSettings(s) } }), in: 1...30) } footer: { Text(L10n.text("ui.used_for_the_overview_pending_count_and_due_soon_labels")) } }.navigationTitle(L10n.text("ui.expiry_reminders")) }
 }
 private enum InstalledAppInfo {
-    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "未知"
-    static let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "未知"
+    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? L10n.text("ui.unknown")
+    static let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? L10n.text("ui.unknown")
     static let trace: PackageTrace? = {
         guard let url = Bundle.main.url(forResource: "suirenx-build", withExtension: "json"),
               let data = try? Data(contentsOf: url) else { return nil }
@@ -371,7 +374,7 @@ private enum InstalledAppInfo {
         let built_at: String
         var code: String { String(commit.prefix(7)) + (dirty ? "-dirty" : "") }
         var localTime: String {
-            guard let date = ISO8601DateFormatter().date(from: built_at) else { return "未知" }
+            guard let date = ISO8601DateFormatter().date(from: built_at) else { return L10n.text("ui.unknown") }
             let formatter = DateFormatter()
             formatter.locale = Locale(identifier: "en_US_POSIX")
             formatter.dateFormat = "yyyy-MM-dd HH:mm"
@@ -384,18 +387,36 @@ private struct AboutView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                PageHeading(title: "燧人 · SuirenX", subtitle: "个人工具箱 · 本地优先")
-                InfoRow(label: "版本号", value: InstalledAppInfo.version).accessibilityIdentifier("about.version")
-                InfoRow(label: "Build 号", value: InstalledAppInfo.build).accessibilityIdentifier("about.build")
+                PageHeading(title: L10n.text("ui.suiren_suirenx"), subtitle: L10n.text("ui.personal_toolbox_local_first"))
+                InfoRow(label: L10n.text("ui.version"), value: InstalledAppInfo.version).accessibilityIdentifier("about.version")
+                InfoRow(label: L10n.text("ui.build"), value: InstalledAppInfo.build).accessibilityIdentifier("about.build")
                 #if DEBUG
                 if let trace = InstalledAppInfo.trace, trace.channel == "development" {
-                    InfoRow(label: "代码", value: trace.code).accessibilityIdentifier("about.code")
-                    InfoRow(label: "打包时间", value: trace.localTime).accessibilityIdentifier("about.builtAt")
+                    InfoRow(label: L10n.text("ui.commit"), value: trace.code).accessibilityIdentifier("about.code")
+                    InfoRow(label: L10n.text("ui.built_at"), value: trace.localTime).accessibilityIdentifier("about.builtAt")
                 }
                 #endif
-                Text("原生 iPhone / iPad 应用。资产和用品存于本机，仅在明确开启同步后发送到所选服务器。").font(.subheadline)
-                NavigationLink("Fluent Emoji 开源许可", value: SettingsDestination.license)
+                Text(L10n.text("ui.native_iphone_and_ipad_app_assets_and_supplies_are_stored")).font(.subheadline)
+                NavigationLink(L10n.text("ui.fluent_emoji_licenses"), value: SettingsDestination.license)
             }.sxPage()
-        }.navigationTitle("关于")
+        }.navigationTitle(L10n.text("ui.about"))
+    }
+}
+
+private struct LanguageView: View {
+    @Environment(\.openURL) private var openURL
+    static var currentLanguage: String {
+        let language = Bundle.main.preferredLocalizations.first ?? "zh-Hans"
+        return language.hasPrefix("en") ? "English" : "简体中文"
+    }
+    var body: some View {
+        Form {
+            Section {
+                InfoRow(label: L10n.text("settings.language.current"), value: Self.currentLanguage)
+                Button(L10n.text("settings.language.open")) {
+                    if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                }.accessibilityIdentifier("language.openSettings")
+            } footer: { Text(L10n.text("settings.language.help")) }
+        }.navigationTitle(L10n.text("settings.language"))
     }
 }

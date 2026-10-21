@@ -1,5 +1,9 @@
 package io.suirenx.feature.settings
 
+import io.suirenx.core.ui.R as CopyR
+import io.suirenx.core.ui.localization.uiText
+import io.suirenx.core.ui.localization.uiQuantity
+
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
@@ -43,11 +47,11 @@ fun SettingsRoute(
         if (uri != null && content != null) scope.launch {
             try {
                 withContext(Dispatchers.IO) {
-                    checkNotNull(context.contentResolver.openOutputStream(uri)) { "无法写入备份文件" }.use { it.write(content.toByteArray()) }
+                    checkNotNull(context.contentResolver.openOutputStream(uri)) { "copy_unable_to_write_backup_file" }.use { it.write(content.toByteArray()) }
                 }
-                viewModel.message("备份已导出")
+                viewModel.message("copy_backup_exported")
             } catch (error: CancellationException) { throw error }
-            catch (error: Exception) { viewModel.message(error.message ?: "导出失败，请重试") }
+            catch (error: Exception) { viewModel.message("copy_export_failed_try_again") }
             finally { exportContent = null }
         }
     }
@@ -56,11 +60,11 @@ fun SettingsRoute(
             try {
                 val content = withContext(Dispatchers.IO) {
                     context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-                        ?: error("无法读取备份文件")
+                        ?: error("copy_unable_to_read_backup_file")
                 }
                 viewModel.inspectBackup(content)
             } catch (error: CancellationException) { throw error }
-            catch (error: Exception) { viewModel.message(error.message ?: "读取备份失败") }
+            catch (error: Exception) { viewModel.message("copy_unable_to_read_backup") }
         }
     }
     LaunchedEffect(viewModel, exportLauncher) {
@@ -99,6 +103,7 @@ fun SettingsRoute(
         onSoonDaysChanged = viewModel::onSoonDaysChanged,
         onAuthUsernameChanged = viewModel::onAuthUsernameChanged,
         onAuthPasswordChanged = viewModel::onAuthPasswordChanged,
+        onAuthConfirmationChanged = viewModel::onAuthConfirmationChanged,
         onRegister = viewModel::register,
         onResetAuthForm = viewModel::resetAuthForm,
         onLogin = viewModel::login,

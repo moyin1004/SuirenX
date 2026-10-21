@@ -18,7 +18,7 @@ class AuthFailureMessageTest {
         )
 
         assertEquals(
-            "服务器已关闭新账号注册，请联系管理员",
+            "error_auth_registration_closed",
             authFailureMessage(HttpException(response), json),
         )
     }
@@ -30,7 +30,7 @@ class AuthFailureMessageTest {
         )
 
         assertEquals(
-            "该账号已注册，请切换到登录",
+            "error_auth_username_registered",
             authFailureMessage(HttpException(response), json),
         )
     }

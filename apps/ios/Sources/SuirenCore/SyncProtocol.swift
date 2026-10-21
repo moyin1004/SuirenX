@@ -66,12 +66,12 @@ public struct AssetPayload: Codable, Equatable, Sendable {
         warranty_end_date = asset.warrantyEndDate?.rawValue ?? ""; notes = asset.notes; tags = asset.tags
     }
     public func domain() throws -> Asset {
-        guard let day = LocalDay(rawValue: purchase_date), status == "ACTIVE" || status == "RETIRED" else { throw SuirenError("服务器资产日期或状态无效") }
+        guard let day = LocalDay(rawValue: purchase_date), status == "ACTIVE" || status == "RETIRED" else { throw SuirenError(.invalid_server_asset_date_or_status) }
         var a = Asset(id: id, name: name, priceCents: price_cents, purchaseDate: day)
         a.salePriceCents = sale_price_cents
         a.status = status == "ACTIVE" ? .active : .retired
-        if !retired_date.isEmpty { guard let d = LocalDay(rawValue: retired_date) else { throw SuirenError("服务器退役日期无效") }; a.retiredDate = d }
-        if !warranty_end_date.isEmpty { guard let d = LocalDay(rawValue: warranty_end_date) else { throw SuirenError("服务器保修日期无效") }; a.warrantyEndDate = d }
+        if !retired_date.isEmpty { guard let d = LocalDay(rawValue: retired_date) else { throw SuirenError(.invalid_server_retirement_date) }; a.retiredDate = d }
+        if !warranty_end_date.isEmpty { guard let d = LocalDay(rawValue: warranty_end_date) else { throw SuirenError(.invalid_server_warranty_date) }; a.warrantyEndDate = d }
         a.archivedAt = archived_at.isEmpty ? nil : archived_at; a.iconKey = icon_key
         a.purchaseChannel = purchase_channel.isEmpty ? nil : purchase_channel; a.notes = notes; a.tags = tags
         try a.validate(importing: true); return a
@@ -114,9 +114,9 @@ public struct ExpiryPayload: Codable, Equatable, Sendable {
         status = item.status == .inUse ? "IN_USE" : item.status == .usedUp ? "USED_UP" : "DISCARDED"; archived_at = item.archivedAt ?? ""
     }
     public func domain() throws -> ExpiryItem {
-        guard let day = LocalDay(rawValue: package_expiry_date), ["IN_USE", "USED_UP", "DISCARDED"].contains(status) else { throw SuirenError("服务器用品日期或状态无效") }
+        guard let day = LocalDay(rawValue: package_expiry_date), ["IN_USE", "USED_UP", "DISCARDED"].contains(status) else { throw SuirenError(.invalid_server_supply_date_or_status) }
         var e = ExpiryItem(id: id, name: name, category: category, packageExpiryDate: day)
-        if !opened_date.isEmpty { guard let d = LocalDay(rawValue: opened_date) else { throw SuirenError("服务器开封日期无效") }; e.openedDate = d }
+        if !opened_date.isEmpty { guard let d = LocalDay(rawValue: opened_date) else { throw SuirenError(.invalid_server_opened_date) }; e.openedDate = d }
         e.openedValidityDays = opened_validity_days == 0 ? nil : opened_validity_days
         e.location = location; e.notes = notes; e.status = status == "IN_USE" ? .inUse : status == "USED_UP" ? .usedUp : .discarded
         e.archivedAt = archived_at.isEmpty ? nil : archived_at; try e.validate(); return e

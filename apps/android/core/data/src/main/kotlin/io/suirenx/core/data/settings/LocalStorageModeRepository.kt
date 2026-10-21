@@ -30,7 +30,7 @@ class LocalStorageModeRepository @Inject constructor(
     }
 
     override suspend fun select(mode: StorageMode): Result<Unit> = perform {
-        check(preferences.edit().putString(KEY_MODE, mode.name).commit()) { "无法保存使用模式，请重试" }
+        check(preferences.edit().putString(KEY_MODE, mode.name).commit()) { "error_storage_mode_save_failed" }
         mutableMode.value = mode
     }
 

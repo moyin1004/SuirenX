@@ -8,6 +8,7 @@ android {
 }
 
 dependencies {
+    testImplementation(libs.junit4)
     api(project(":apps:android:core:model"))
     val composeBom = platform(libs.androidx.compose.bom)
     implementation(composeBom)

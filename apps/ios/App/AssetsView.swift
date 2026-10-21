@@ -12,15 +12,22 @@ struct AssetsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                SummaryCard(assets: visible, totalCount: model.assets.count, compact: compact).onTapGesture { withAnimation { compact.toggle() } }.accessibilityAction(named: "展开或压缩总览") { compact.toggle() }
+                SummaryCard(assets: visible, totalCount: model.assets.count, compact: compact).onTapGesture { withAnimation { compact.toggle() } }.accessibilityAction(named: L10n.text("ui.expand_or_collapse_overview")) { compact.toggle() }
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 8) {
+                        filterMenu
+                        HStack { Spacer(minLength: 0); toolbar }
+                    }
+                } else {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 8) { filterMenu; Spacer(minLength: 0); toolbar }
                     VStack(alignment: .leading) { filterMenu; HStack { Spacer(); toolbar } }
                 }
+                }
                 if showSearch {
-                    HStack { Image(systemName: "magnifyingglass"); TextField("搜索名称或标签", text: $query.search).accessibilityIdentifier("asset.search"); if !query.search.isEmpty { Button { query.search = "" } label: { Image(systemName: "xmark.circle.fill") }.accessibilityLabel("清除搜索") } }.padding(12).background(Palette.surface, in: RoundedRectangle(cornerRadius: 12))
-                } else if !query.search.isEmpty { Text("搜索生效：\(query.search)").font(.caption).foregroundStyle(.secondary) }
-                if visible.isEmpty { EmptyState(title: "暂无资产", detail: "添加第一件资产，或调整筛选条件。") }
+                    HStack { Image(systemName: "magnifyingglass"); TextField(L10n.text("ui.search_names_or_tags"), text: $query.search).accessibilityIdentifier("asset.search"); if !query.search.isEmpty { Button { query.search = "" } label: { Image(systemName: "xmark.circle.fill") }.accessibilityLabel(L10n.text("ui.clear_search")) } }.padding(12).background(Palette.surface, in: RoundedRectangle(cornerRadius: 12))
+                } else if !query.search.isEmpty { Text(L10n.text("ui.search_active" , String(describing: query.search))).font(.caption).foregroundStyle(.secondary) }
+                if visible.isEmpty { EmptyState(title: L10n.text("ui.no_assets_yet"), detail: L10n.text("ui.add_your_first_asset_or_adjust_the_filters")) }
                 LazyVGrid(columns: dynamicTypeSize.isAccessibilitySize ? [GridItem(.flexible())] : [GridItem(.adaptive(minimum: 154), spacing: 10)], spacing: 10) {
                     ForEach(visible) { asset in
                         NavigationLink(value: RecordDestination.asset(asset.id)) { AssetCard(asset: asset).contentShape(Rectangle()) }.buttonStyle(.plain).accessibilityIdentifier("asset.\(asset.id)")
@@ -33,28 +40,28 @@ struct AssetsView: View {
     }
     private var filterMenu: some View {
         Menu {
-            Picker("资产状态", selection: $query.filter) { ForEach(AssetFilter.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
-        } label: { HStack(spacing: 5) { Text(query.filter.rawValue); Image(systemName: "chevron.down").font(.caption2) }.font(.subheadline.weight(.medium)).frame(minHeight: 44).padding(.horizontal, 12).background(Palette.surface, in: Capsule()) }.accessibilityIdentifier("asset.filter")
+            Picker(L10n.text("ui.asset_status"), selection: $query.filter) { ForEach(AssetFilter.allCases, id: \.self) { Text($0.title).tag($0) } }
+        } label: { HStack(spacing: 5) { Text(query.filter.title); Image(systemName: "chevron.down").font(dynamicTypeSize.isAccessibilitySize ? .system(size: 12) : .caption2) }.font(.subheadline.weight(.medium)).frame(minHeight: 44).padding(.horizontal, 12).background(Palette.surface, in: Capsule()) }.accessibilityIdentifier("asset.filter")
     }
     private var toolbar: some View {
         HStack(spacing: 8) {
             tagMenu
-            Button { showSearch.toggle() } label: { Image(systemName: "magnifyingglass").frame(width: 44, height: 44).background(Palette.surface, in: RoundedRectangle(cornerRadius: 12)) }.accessibilityLabel(showSearch ? "收起搜索" : "搜索资产")
+            Button { showSearch.toggle() } label: { Image(systemName: "magnifyingglass").font(dynamicTypeSize.isAccessibilitySize ? .system(size: 19) : .body).frame(width: 44, height: 44).background(Palette.surface, in: RoundedRectangle(cornerRadius: 12)) }.accessibilityLabel(showSearch ? L10n.text("ui.hide_search") : L10n.text("ui.search_assets"))
             Menu {
-                Picker("排序字段", selection: $query.sort) { ForEach(AssetSort.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
-                Picker("方向", selection: $query.descending) { Text("升序").tag(false); Text("降序").tag(true) }
-            } label: { Image(systemName: "arrow.up.arrow.down").frame(width: 44, height: 44).background(Palette.surface, in: RoundedRectangle(cornerRadius: 12)) }.accessibilityLabel("排序：\(query.sort.rawValue)，\(query.descending ? "降序" : "升序")")
+                Picker(L10n.text("ui.sort_by"), selection: $query.sort) { ForEach(AssetSort.allCases, id: \.self) { Text($0.title).tag($0) } }
+                Picker(L10n.text("ui.direction"), selection: $query.descending) { Text(L10n.text("ui.ascending")).tag(false); Text(L10n.text("ui.descending")).tag(true) }
+            } label: { Image(systemName: "arrow.up.arrow.down").font(dynamicTypeSize.isAccessibilitySize ? .system(size: 19) : .body).frame(width: 44, height: 44).background(Palette.surface, in: RoundedRectangle(cornerRadius: 12)) }.accessibilityLabel(L10n.text("ui.sort" , String(describing: query.sort.title), String(describing: query.descending ? L10n.text("ui.descending") : L10n.text("ui.ascending"))))
         }.buttonStyle(.plain)
     }
     private var tagMenu: some View {
         let tags = Set(model.assets.flatMap(\.tags)).union(query.tags).sorted()
         return Menu {
             Button { query.tags.removeAll() } label: {
-                if query.tags.isEmpty { Label("全部标签", systemImage: "checkmark") }
-                else { Text("全部标签") }
+                if query.tags.isEmpty { Label(L10n.text("ui.all_tags"), systemImage: "checkmark") }
+                else { Text(L10n.text("ui.all_tags")) }
             }.menuActionDismissBehavior(.disabled).accessibilityIdentifier("asset.tags.clear")
             Divider()
-            if tags.isEmpty { Text("暂无标签") }
+            if tags.isEmpty { Text(L10n.text("ui.no_tags_yet")) }
             ForEach(tags, id: \.self) { tag in
                 Button {
                     if query.tags.contains(tag) { query.tags.remove(tag) } else { query.tags.insert(tag) }
@@ -64,10 +71,10 @@ struct AssetsView: View {
                 }.menuActionDismissBehavior(.disabled).accessibilityIdentifier("asset.tag.\(tag)")
             }
             Divider()
-            Button("完成") {}.accessibilityIdentifier("asset.tags.done")
+            Button(L10n.text("ui.done")) {}.accessibilityIdentifier("asset.tags.done")
         } label: {
             ZStack(alignment: .topTrailing) {
-                Image(systemName: "line.3.horizontal.decrease").frame(width: 44, height: 44)
+                Image(systemName: "line.3.horizontal.decrease").font(dynamicTypeSize.isAccessibilitySize ? .system(size: 19) : .body).frame(width: 44, height: 44)
                     .foregroundStyle(query.tags.isEmpty ? Color.primary : Color.black)
                     .background(query.tags.isEmpty ? Palette.surface : Palette.accent, in: RoundedRectangle(cornerRadius: 12))
                 if !query.tags.isEmpty {
@@ -75,7 +82,7 @@ struct AssetsView: View {
                         .foregroundStyle(.white).background(Color.black, in: Capsule()).offset(x: 3, y: -3)
                 }
             }
-        }.accessibilityLabel("标签筛选").accessibilityValue(query.tags.isEmpty ? "全部标签" : "已选 \(query.tags.count) 个标签")
+        }.accessibilityLabel(L10n.text("ui.filter_tags")).accessibilityValue(query.tags.isEmpty ? L10n.text("ui.all_tags") : L10n.count("ui.selected_tags", query.tags.count))
             .accessibilityIdentifier("asset.tagFilter")
     }
 }
@@ -86,18 +93,18 @@ private struct AssetCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top) { AssetImage(key: asset.iconKey, size: 36); Spacer(minLength: 4)
-                Text(asset.archivedAt != nil ? "已归档" : asset.status == .active ? "服役中" : "已退役").font(.caption2).foregroundStyle(.secondary).fixedSize() }
+                Text(asset.archivedAt != nil ? L10n.text("ui.archived") : asset.status == .active ? L10n.text("ui.active") : L10n.text("ui.retired")).font(.caption2).foregroundStyle(.secondary).fixedSize() }
             MarqueeName(text: asset.name).frame(height: nameHeight)
-            Text("¥\(Money.text(asset.priceCents)) · 持有 \(asset.heldDays()) 天")
+            Text(L10n.text("asset.card.cost_held", currency(Decimal(asset.priceCents)), L10n.count("ui.days", asset.heldDays())))
                 .font(.caption2).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.5)
             Spacer(minLength: 0)
             VStack(alignment: .leading, spacing: 0) {
-                Text(asset.salePriceCents.map { "卖出 ¥\(Money.text($0))" } ?? "")
+                Text(asset.salePriceCents.map { L10n.text("asset.card.sold", currency(Decimal($0))) } ?? "")
                     .font(.caption2).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.4).frame(height: 14)
                     .accessibilityHidden(asset.salePriceCents == nil)
                 HStack(alignment: .firstTextBaseline, spacing: 0) {
-                    Text("¥\(Money.text(asset.dailyCostCents()))").font(.system(.subheadline, design: .monospaced))
-                    Text("/天").font(.caption2).foregroundStyle(.secondary)
+                    Text(currency(Decimal(asset.dailyCostCents()))).font(.system(.subheadline, design: .monospaced))
+                    Text(L10n.text("ui.day")).font(.caption2).foregroundStyle(.secondary)
                 }.lineLimit(1).minimumScaleFactor(0.5)
             }
         }.frame(maxWidth: .infinity, minHeight: 170, alignment: .leading).sxCard(padding: 14)
@@ -136,42 +143,42 @@ struct AssetDetailView: View {
                 ScrollView {
                     VStack(spacing: 18) {
                         VStack(spacing: 12) { AssetImage(key: asset.iconKey, size: 66); Text(asset.name).font(.title.weight(.semibold)).multilineTextAlignment(.center).textSelection(.enabled)
-                            Text(asset.archivedAt != nil ? "已归档" : asset.status == .active ? "服役中" : "已退役").font(.caption).padding(8).background(Palette.accent.opacity(0.5), in: Capsule())
-                            Text("¥\(Money.text(asset.priceCents))").font(.system(.largeTitle, design: .monospaced)).lineLimit(1).minimumScaleFactor(0.4)
+                            Text(asset.archivedAt != nil ? L10n.text("ui.archived") : asset.status == .active ? L10n.text("ui.active") : L10n.text("ui.retired")).font(.caption).padding(8).background(Palette.accent.opacity(0.5), in: Capsule())
+                            Text(currency(Decimal(asset.priceCents))).font(.system(.largeTitle, design: .monospaced)).lineLimit(1).minimumScaleFactor(0.4)
                         }.frame(maxWidth: .infinity).padding(.vertical, 12)
-                        HStack { detailMetric("持有天数", "\(asset.heldDays()) 天"); Spacer(); detailMetric("日均成本", "¥\(Money.text(asset.dailyCostCents()))"); Spacer(); detailMetric("保修状态", asset.warrantyEndDate.map { $0 < .today ? "已过期" : "保修中" } ?? "未填写") }.sxCard()
+                        HStack { detailMetric(L10n.text("ui.days_held"), L10n.count("ui.days", asset.heldDays())); Spacer(); detailMetric(L10n.text("ui.daily_cost"), currency(Decimal(asset.dailyCostCents()))); Spacer(); detailMetric(L10n.text("ui.warranty_status"), asset.warrantyEndDate.map { $0 < .today ? L10n.text("ui.expired") : L10n.text("ui.under_warranty") } ?? L10n.text("ui.not_provided")) }.sxCard()
                         VStack(spacing: 8) {
-                            InfoRow(label: "购买日期", value: asset.purchaseDate.rawValue)
-                            if let date = asset.retiredDate { InfoRow(label: "退役日期", value: date.rawValue) }
-                            InfoRow(label: "购买渠道", value: asset.purchaseChannel ?? "")
-                            InfoRow(label: "保修截止", value: asset.warrantyEndDate?.rawValue ?? "")
-                            InfoRow(label: "标签", value: asset.tags.joined(separator: "、"))
-                            InfoRow(label: "创建时间", value: asset.createdAt)
-                            InfoRow(label: "更新时间", value: asset.updatedAt)
-                            if let archived = asset.archivedAt { InfoRow(label: "归档时间", value: archived) }
+                            InfoRow(label: L10n.text("ui.purchase_date"), value: DisplayFormatting.day(asset.purchaseDate))
+                            if let date = asset.retiredDate { InfoRow(label: L10n.text("ui.retirement_date"), value: DisplayFormatting.day(date)) }
+                            InfoRow(label: L10n.text("ui.purchase_channel"), value: asset.purchaseChannel ?? "")
+                            InfoRow(label: L10n.text("ui.warranty_ends"), value: asset.warrantyEndDate.map { DisplayFormatting.day($0) } ?? "")
+                            InfoRow(label: L10n.text("ui.tags"), value: asset.tags.joined(separator: "、"))
+                            InfoRow(label: L10n.text("ui.created_at"), value: DisplayFormatting.timestamp(asset.createdAt))
+                            InfoRow(label: L10n.text("ui.updated_at"), value: DisplayFormatting.timestamp(asset.updatedAt))
+                            if let archived = asset.archivedAt { InfoRow(label: L10n.text("ui.archived_at"), value: DisplayFormatting.timestamp(archived)) }
                         }.sxCard()
-                        VStack(alignment: .leading, spacing: 8) { Text("备注").font(.caption).foregroundStyle(.secondary); Text(asset.notes.isEmpty ? "未填写" : asset.notes).font(.subheadline).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }.sxCard()
+                        VStack(alignment: .leading, spacing: 8) { Text(L10n.text("ui.notes")).font(.caption).foregroundStyle(.secondary); Text(asset.notes.isEmpty ? L10n.text("ui.not_provided") : asset.notes).font(.subheadline).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }.sxCard()
                         if asset.archivedAt != nil { SalePriceEditor(asset: asset).id(asset.id) }
                         if asset.archivedAt == nil {
-                            Button("编辑资产") { editing = true }.buttonStyle(PrimaryButtonStyle()).accessibilityIdentifier("asset.edit")
-                            Button(asset.status == .active ? "退役" : "重新启用") {
+                            Button(L10n.text("ui.edit_asset")) { editing = true }.buttonStyle(PrimaryButtonStyle()).accessibilityIdentifier("asset.edit")
+                            Button(asset.status == .active ? L10n.text("ui.retire") : L10n.text("ui.reactivate")) {
                                 if asset.status == .active {
-                                    if asset.purchaseDate > .today { model.error = "购买日期在未来，请先编辑购买日期" }
+                                    if asset.purchaseDate > .today { model.error = L10n.text("ui.the_purchase_date_is_in_the_future_edit_it_first") }
                                     else { retiring = true }
                                 }
                                 else { Task { var updated = asset; updated.status = .active; updated.retiredDate = nil; await model.mutate { try await model.store.saveAsset(updated) } } }
                             }.frame(minHeight: 44)
                         }
-                        Button(asset.archivedAt == nil ? "归档记录" : "恢复记录") { Task { await model.mutate { try await model.store.archive(kind: "asset", id: id, archived: asset.archivedAt == nil) } } }.frame(minHeight: 44)
-                        Button("删除资产", role: .destructive) { deleting = true }.frame(minHeight: 44).accessibilityIdentifier("asset.delete")
+                        Button(asset.archivedAt == nil ? L10n.text("ui.archive_record") : L10n.text("ui.restore_record")) { Task { await model.mutate { try await model.store.archive(kind: "asset", id: id, archived: asset.archivedAt == nil) } } }.frame(minHeight: 44)
+                        Button(L10n.text("ui.delete_asset"), role: .destructive) { deleting = true }.frame(minHeight: 44).accessibilityIdentifier("asset.delete")
                     }.sxPage()
                 }.sheet(isPresented: $editing) { AssetEditor(asset: asset) }
                     .sheet(isPresented: $retiring) { RetirementSheet(asset: asset) }
-            } else { EmptyState(title: "记录已删除") }
-        }.navigationTitle("资产详情")
-            .confirmationDialog("删除资产？此操作与归档不同。", isPresented: $deleting, titleVisibility: .visible) {
-                Button("确认删除", role: .destructive) { Task { if await model.mutate({ try await model.store.delete(kind: "asset", id: id) }) { dismiss() } } }
-            } message: { Text("将移除本机记录，并在开启同步后同步删除。若需可恢复，请使用归档。") }
+            } else { EmptyState(title: L10n.text("ui.record_deleted")) }
+        }.navigationTitle(L10n.text("ui.asset_details"))
+            .confirmationDialog(L10n.text("ui.delete_this_asset_this_differs_from_archiving"), isPresented: $deleting, titleVisibility: .visible) {
+                Button(L10n.text("ui.confirm_deletion"), role: .destructive) { Task { if await model.mutate({ try await model.store.delete(kind: "asset", id: id) }) { dismiss() } } }
+            } message: { Text(L10n.text("ui.removes_the_local_record_and_syncs_its_deletion_when_sync")) }
     }
     private func detailMetric(_ label: String, _ value: String) -> some View { VStack(spacing: 6) { Text(value).font(.subheadline.weight(.semibold)).minimumScaleFactor(0.5).lineLimit(1); Text(label).font(.caption2).foregroundStyle(.secondary) } }
 }
@@ -187,13 +194,13 @@ private struct SalePriceEditor: View {
     init(asset: Asset) { self.asset = asset; _input = State(initialValue: asset.salePriceCents.map(Money.text) ?? "") }
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("卖出价格（可选）").font(.subheadline.weight(.semibold))
-            TextField("留空表示未填写", text: Binding(get: { input }, set: { input = $0; dirty = true })).keyboardType(.decimalPad).textFieldStyle(.roundedBorder)
+            Text(L10n.text("ui.sale_price_optional")).font(.subheadline.weight(.semibold))
+            TextField(L10n.text("ui.leave_blank_if_not_provided"), text: Binding(get: { input }, set: { input = $0; dirty = true })).keyboardType(.decimalPad).textFieldStyle(.roundedBorder)
                 .accessibilityIdentifier("asset.salePrice").disabled(saving).focused($priceFocused)
                 .onChange(of: asset.salePriceCents) { _, value in if !dirty { input = value.map(Money.text) ?? "" } }
-            Text(error ?? "支持 0 和两位小数；留空保存可清除。其它资料请恢复后编辑。")
+            Text(error ?? L10n.text("ui.zero_and_two_decimal_places_are_supported_save_a_blank"))
                 .font(.caption).foregroundStyle(error == nil ? Color.secondary : Color.red)
-            Button(saving ? "保存中…" : "保存卖出价格") {
+            Button(saving ? L10n.text("ui.saving") : L10n.text("ui.save_sale_price")) {
                 do {
                     let raw = input.trimmingCharacters(in: .whitespacesAndNewlines)
                     let cents = raw.isEmpty ? nil : try Money.parse(raw)
@@ -202,12 +209,12 @@ private struct SalePriceEditor: View {
                         if await model.mutate({ try await model.store.updateAssetSalePrice(id: asset.id, cents: cents) }) { dirty = false }
                         saving = false
                     }
-                } catch { self.error = error.localizedDescription }
+                } catch { self.error = L10n.error(error) }
             }.buttonStyle(PrimaryButtonStyle()).disabled(saving).accessibilityIdentifier("asset.saveSalePrice")
         }.sxCard()
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
-                    if priceFocused { Spacer(); Button("完成") { priceFocused = false }.accessibilityIdentifier("asset.salePrice.done") }
+                    if priceFocused { Spacer(); Button(L10n.text("ui.done")) { priceFocused = false }.accessibilityIdentifier("asset.salePrice.done") }
                 }
             }
     }
@@ -221,11 +228,11 @@ private struct RetirementSheet: View {
     @State private var saving = false
     var body: some View {
         NavigationStack {
-            Form { Section { DateField(label: "退役日期", value: $date, range: asset.purchaseDate.date...LocalDay.today.date.addingTimeInterval(86399)) } footer: { Text("持有天数包含购买日和退役日。取消不会修改记录。") } }
+            Form { Section { DateField(label: L10n.text("ui.retirement_date"), value: $date, range: asset.purchaseDate.date...LocalDay.today.date.addingTimeInterval(86399)) } footer: { Text(L10n.text("ui.days_held_include_both_the_purchase_and_retirement_dates_canceling")) } }
                 .sxNavigationBackground()
-                .navigationTitle("退役资产").toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(saving) }
-                    ToolbarItem(placement: .confirmationAction) { Button("确定") { saving = true; Task { var a = asset; a.status = .retired; a.retiredDate = date; if await model.mutate({ try await model.store.saveAsset(a) }) { dismiss() }; saving = false } }.disabled(saving) }
+                .navigationTitle(L10n.text("ui.retire_asset")).toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button(L10n.text("ui.cancel")) { dismiss() }.disabled(saving) }
+                    ToolbarItem(placement: .confirmationAction) { Button(L10n.text("ui.confirm")) { saving = true; Task { var a = asset; a.status = .retired; a.retiredDate = date; if await model.mutate({ try await model.store.saveAsset(a) }) { dismiss() }; saving = false } }.disabled(saving) }
                 }
         }.presentationDetents([.medium, .large]).interactiveDismissDisabled(saving)
     }
@@ -252,29 +259,29 @@ struct AssetEditor: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("资产图标") {
-                    Button { showIcons = true } label: { HStack { AssetImage(key: asset.iconKey); Text(AssetIcon.find(asset.iconKey).label); Spacer(); Text("更换").foregroundStyle(.secondary) } }.accessibilityIdentifier("asset.icon")
+                Section(L10n.text("ui.asset_icon")) {
+                    Button { showIcons = true } label: { HStack { AssetImage(key: asset.iconKey); Text(AssetIcon.find(asset.iconKey).label); Spacer(); Text(L10n.text("ui.change")).foregroundStyle(.secondary) } }.accessibilityIdentifier("asset.icon")
                 }
-                Section("基本信息") {
-                    TextField("名称", text: $asset.name).accessibilityIdentifier("asset.name")
-                    TextField("购入金额", text: $price).keyboardType(.decimalPad).accessibilityIdentifier("asset.price")
-                    TextField("购买渠道（可选）", text: Binding(get: { asset.purchaseChannel ?? "" }, set: { asset.purchaseChannel = $0.isEmpty ? nil : $0 }))
+                Section(L10n.text("ui.basic_details")) {
+                    TextField(L10n.text("ui.name"), text: $asset.name).accessibilityIdentifier("asset.name")
+                    TextField(L10n.text("ui.purchase_amount"), text: $price).keyboardType(.decimalPad).accessibilityIdentifier("asset.price")
+                    TextField(L10n.text("ui.purchase_channel_optional"), text: Binding(get: { asset.purchaseChannel ?? "" }, set: { asset.purchaseChannel = $0.isEmpty ? nil : $0 }))
                 }
-                Section("日期与保修") {
-                    DateField(label: "购买日期", value: $asset.purchaseDate, range: Date.distantPast...LocalDay.today.date.addingTimeInterval(86399))
-                    Toggle("填写保修截止日", isOn: $hasWarranty)
-                    if hasWarranty { DateField(label: "保修截止日", value: $warranty) }
+                Section(L10n.text("ui.dates_and_warranty")) {
+                    DateField(label: L10n.text("ui.purchase_date"), value: $asset.purchaseDate, range: Date.distantPast...LocalDay.today.date.addingTimeInterval(86399))
+                    Toggle(L10n.text("ui.set_warranty_end_date"), isOn: $hasWarranty)
+                    if hasWarranty { DateField(label: L10n.text("ui.warranty_end_date"), value: $warranty) }
                 }
-                Section("标签与备注") {
-                    TextField("标签，以逗号分隔", text: $tags).accessibilityIdentifier("asset.tags")
-                    TextField("备注（可选）", text: $asset.notes, axis: .vertical).lineLimit(4...8)
+                Section(L10n.text("ui.tags_and_notes")) {
+                    TextField(L10n.text("ui.tags_separated_by_commas"), text: $tags).accessibilityIdentifier("asset.tags")
+                    TextField(L10n.text("ui.notes_optional"), text: $asset.notes, axis: .vertical).lineLimit(4...8)
                 }
                 if let validation { Section { Text(validation).foregroundStyle(.red).accessibilityAddTraits(.updatesFrequently) } }
             }.scrollDismissesKeyboard(.immediately).frame(maxWidth: 640).frame(maxWidth: .infinity).sxNavigationBackground()
-                .navigationTitle(isNew ? "新增资产" : "编辑资产").navigationBarTitleDisplayMode(.inline)
+                .navigationTitle(isNew ? L10n.text("ui.add_asset") : L10n.text("ui.edit_asset")).navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(saving) }
-                    ToolbarItem(placement: .confirmationAction) { Button(saving ? "保存中" : "保存") { save() }.keyboardShortcut("s", modifiers: .command).disabled(saving).accessibilityIdentifier("asset.save") }
+                    ToolbarItem(placement: .cancellationAction) { Button(L10n.text("ui.cancel")) { dismiss() }.disabled(saving) }
+                    ToolbarItem(placement: .confirmationAction) { Button(saving ? L10n.text("ui.saving_") : L10n.text("ui.save")) { save() }.keyboardShortcut("s", modifiers: .command).disabled(saving).accessibilityIdentifier("asset.save") }
                 }.sheet(isPresented: $showIcons) { IconPicker(selected: $asset.iconKey) }
         }.interactiveDismissDisabled(saving)
     }
@@ -284,7 +291,7 @@ struct AssetEditor: View {
             asset.tags = Array(NSOrderedSet(array: tags.components(separatedBy: CharacterSet(charactersIn: ",，")).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty })) as? [String] ?? []
             try asset.validate(); validation = nil; saving = true
             Task { if await model.mutate({ try await model.store.saveAsset(asset) }) { dismiss() }; saving = false }
-        } catch { validation = error.localizedDescription }
+        } catch { validation = L10n.error(error) }
     }
 }
 
@@ -297,7 +304,7 @@ private struct IconPicker: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 12) {
-                HStack { ForEach([("all", "全部"), ("digital", "数码"), ("life", "生活"), ("travel", "出行")], id: \.0) { key, label in Chip(title: label, selected: key == category) { category = key } } }
+                HStack { ForEach([("all", L10n.text("ui.all")), ("digital", L10n.text("ui.digital")), ("life", L10n.text("ui.home")), ("travel", L10n.text("ui.travel"))], id: \.0) { key, label in Chip(title: label, selected: key == category) { category = key } } }
                 ScrollView {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 5), spacing: 14) {
                         ForEach(AssetIcon.all.filter { category == "all" || $0.category == category }) { icon in
@@ -307,8 +314,8 @@ private struct IconPicker: View {
                         }
                     }.padding(14)
                 }
-            }.padding(.top, 12).frame(maxWidth: 600).frame(maxWidth: .infinity).sxNavigationBackground().navigationTitle("选择资产图标").navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button("确定") { selected = draft; dismiss() } } }
+            }.padding(.top, 12).frame(maxWidth: 600).frame(maxWidth: .infinity).sxNavigationBackground().navigationTitle(L10n.text("ui.choose_asset_icon")).navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L10n.text("ui.cancel")) { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button(L10n.text("ui.confirm")) { selected = draft; dismiss() } } }
         }
     }
 }

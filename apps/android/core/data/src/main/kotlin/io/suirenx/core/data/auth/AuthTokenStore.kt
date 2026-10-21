@@ -24,7 +24,7 @@ class AuthTokenStore @Inject constructor(@ApplicationContext context: Context) {
 
     private fun persist(value: JSONObject) {
         check(preferences.edit().putString("accounts", value.toString())
-            .remove("server_url").remove("username").remove("access_token").commit()) { "无法保存登录状态，请重试" }
+            .remove("server_url").remove("username").remove("access_token").commit()) { "error_auth_save_failed" }
     }
 
     @Synchronized fun tokenFor(requestUrl: String): String? {
@@ -51,7 +51,7 @@ class AuthTokenStore @Inject constructor(@ApplicationContext context: Context) {
 
     @Synchronized fun save(serverUrl: String, username: String, token: String) {
         val stored = accounts()
-        check(stored.length() == 0 || stored.has(serverUrl)) { "当前已有登录账号，请先退出后再登录" }
+        check(stored.length() == 0 || stored.has(serverUrl)) { "error_auth_logout_first" }
         persist(JSONObject().put(serverUrl, JSONObject().put("username", username).put("token", token)))
     }
 

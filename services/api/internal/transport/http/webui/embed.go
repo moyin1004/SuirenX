@@ -12,7 +12,7 @@ import (
 	"github.com/moyin1004/suirenx"
 )
 
-//go:embed index.html app.css app.js
+//go:embed index.html app.css app.js i18n.js zh-Hans.js en.js
 var files embed.FS
 
 var indexTemplate = template.Must(template.ParseFS(files, "index.html"))
@@ -22,6 +22,9 @@ func Register(h *server.Hertz) {
 	h.GET("/", serve("index.html", "text/html; charset=utf-8"))
 	h.GET("/web/app.css", serve("app.css", "text/css; charset=utf-8"))
 	h.GET("/web/app.js", serve("app.js", "text/javascript; charset=utf-8"))
+	for _, resource := range []string{"i18n.js", "zh-Hans.js", "en.js"} {
+		h.GET("/web/"+resource, serve(resource, "text/javascript; charset=utf-8"))
+	}
 }
 
 func serve(path, contentType string) app.HandlerFunc {

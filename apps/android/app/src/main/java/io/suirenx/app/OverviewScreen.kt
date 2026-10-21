@@ -1,5 +1,13 @@
 package io.suirenx.app
 
+import io.suirenx.core.ui.localization.moneyFormat
+import io.suirenx.core.ui.localization.moneyText
+import io.suirenx.core.ui.localization.dateText
+
+import io.suirenx.core.ui.R as CopyR
+import io.suirenx.core.ui.localization.uiText
+import io.suirenx.core.ui.localization.uiQuantity
+
 import io.suirenx.core.ui.component.SuirenHeader
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -61,7 +69,7 @@ private fun OverviewScreen(
     modifier: Modifier = Modifier,
 ) {
     val reminders = expiry.items.filter { it.bucket(LocalDate.now(), expiry.soonDays) in setOf(ExpiryBucket.Expired, ExpiryBucket.DueToday, ExpiryBucket.ExpiringSoon) }
-    val currency = NumberFormat.getCurrencyInstance(Locale.CHINA).apply { minimumFractionDigits = 0 }
+    val currency = moneyFormat(minimumFractionDigits = 0)
     Column(
         modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()
             .verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 120.dp),
@@ -69,42 +77,42 @@ private fun OverviewScreen(
     ) {
         SuirenHeader {
             IconButton(onClick = onRefresh) {
-                Icon(Icons.Default.Refresh, contentDescription = "刷新总览", modifier = Modifier.size(22.dp))
+                Icon(Icons.Default.Refresh, contentDescription = uiText(CopyR.string.copy_refresh_overview), modifier = Modifier.size(22.dp))
             }
         }
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("资产与日常用品，都在这里。", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(uiText(CopyR.string.copy_your_assets_and_everyday_essentials), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             OverviewCard(onClick = onAssets) {
-                OverviewHeading("资产总览", SuirenIcons.AssetBox,
-                    when { assets.isLoading -> "读取中…"; assets.errorMessage != null -> "暂时无法读取"; else -> currency.format(assets.overview.totalPriceCents / 100.0) },
-                    if (assets.isLoading || assets.errorMessage != null) "" else "购入总额")
+                OverviewHeading(uiText(CopyR.string.copy_asset_overview), SuirenIcons.AssetBox,
+                    when { assets.isLoading -> uiText(CopyR.string.copy_loading); assets.errorMessage != null -> uiText(CopyR.string.copy_unable_to_load); else -> currency.format(java.math.BigDecimal.valueOf(assets.overview.totalPriceCents, 2)) },
+                    if (assets.isLoading || assets.errorMessage != null) "" else uiText(CopyR.string.copy_total_purchase_cost))
                 Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SummaryValue("服役中", if (assets.isLoading || assets.errorMessage != null) "—" else "${assets.overview.activeCount}", Modifier.weight(1f))
-                    SummaryValue("服役中日均成本", if (assets.isLoading || assets.errorMessage != null) "—" else currency.format(assets.overview.totalDailyCostCents / 100.0), Modifier.weight(1f))
+                    SummaryValue(uiText(CopyR.string.copy_active), if (assets.isLoading || assets.errorMessage != null) "—" else "${assets.overview.activeCount}", Modifier.weight(1f))
+                    SummaryValue(uiText(CopyR.string.copy_active_assets_cost_per_day), if (assets.isLoading || assets.errorMessage != null) "—" else currency.format(java.math.BigDecimal.valueOf(assets.overview.totalDailyCostCents, 2)), Modifier.weight(1f))
                 }
-                OverviewFooter("查看全部资产", if (assets.isLoading || assets.errorMessage != null) "" else "${assets.overview.totalCount} 项未归档")
+                OverviewFooter(uiText(CopyR.string.copy_view_all_assets), if (assets.isLoading || assets.errorMessage != null) "" else uiQuantity(CopyR.plurals.copy_count_unarchived, assets.overview.totalCount))
             }
             OverviewCard(onClick = onSupplies) {
-                OverviewHeading("用品 / 保质期", Icons.Default.Warning,
-                    when { expiry.loading -> "读取中…"; expiry.error != null -> "暂时无法读取"; else -> "${reminders.size}" },
-                    if (expiry.loading || expiry.error != null) "" else "项待处理")
-                Text("记录用品期限，及时查看到期提醒。", modifier = Modifier.padding(top = 12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp, lineHeight = 17.sp)
-                OverviewFooter("打开用品管理", "1 个工具")
+                OverviewHeading(uiText(CopyR.string.copy_expiry_items), Icons.Default.Warning,
+                    when { expiry.loading -> uiText(CopyR.string.copy_loading); expiry.error != null -> uiText(CopyR.string.copy_unable_to_load); else -> "${reminders.size}" },
+                    if (expiry.loading || expiry.error != null) "" else uiText(CopyR.string.copy_need_attention))
+                Text(uiText(CopyR.string.copy_track_expiry_dates_and_see_what_needs_attention), modifier = Modifier.padding(top = 12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp, lineHeight = 17.sp)
+                OverviewFooter(uiText(CopyR.string.copy_manage_expiry_items), uiText(CopyR.string.copy_1_tool))
             }
         }
         if (assets.errorMessage != null || expiry.error != null) {
-            Text("部分数据未能加载，请点击右上角刷新重试。", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+            Text(uiText(CopyR.string.copy_some_data_could_not_load_use_refresh_to_try_again), color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
         }
         val status = assets.syncStatus
         val conflicts = status.conflicts.size + status.expiryConflicts.size
         val notice = when {
-            conflicts > 0 -> "$conflicts 项冲突待处理 · 处理冲突"
-            status.needsLogin -> "账号需要验证 · 查看同步状态"
-            status.error != null -> "同步未完成 · 查看同步状态"
-            status.waitingForNetwork -> "正在等待网络 · 查看同步状态"
-            status.pendingOperations > 0 -> "${status.pendingOperations} 项修改待发送 · 查看同步状态"
+            conflicts > 0 -> uiQuantity(CopyR.plurals.copy_count_conflicts_resolve, conflicts)
+            status.needsLogin -> uiText(CopyR.string.copy_account_verification_required_view_sync)
+            status.error != null -> uiText(CopyR.string.copy_sync_did_not_finish_view_sync)
+            status.waitingForNetwork -> uiText(CopyR.string.copy_waiting_for_network_view_sync)
+            status.pendingOperations > 0 -> uiQuantity(CopyR.plurals.copy_count_pending_changes_view_sync, status.pendingOperations)
             else -> null
         }
         if (notice != null) {

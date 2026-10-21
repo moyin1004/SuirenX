@@ -1,5 +1,9 @@
 package io.suirenx.core.ui.component
 
+import io.suirenx.core.ui.R as CopyR
+import io.suirenx.core.ui.localization.uiText
+import io.suirenx.core.ui.localization.uiQuantity
+
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,7 +23,7 @@ import io.suirenx.core.ui.theme.SuirenXTheme
 @Composable
 fun SuirenHeader(
     modifier: Modifier = Modifier,
-    title: String = "燧人",
+    title: String = uiText(CopyR.string.copy_suirenx),
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     Row(
