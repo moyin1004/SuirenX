@@ -2,14 +2,14 @@
 
 维护者于 2026-10-03 确认 Android v0.1.0 正式发布验收完成。以下签名、安装、隐私与分发步骤保留为操作参考；范围见 [本版需求](prd/v0.1.0.md)。阶段 A 后台可靠性补验与阶段 C 提醒功能已顺延，不属于 v0.1.0 发布阻塞项。
 
-## v0.1.4 多语言发布前门禁
+## v0.1.4 发布范围与门禁
 
-开发分支已接入三端简体中文/英文，尚未正式发布或部署。实现及验证记录见 [多语言实施记录](history/roadmap-execution.md#2026-10-20v014-多语言支持)，剩余设备验收见 [TODO](TODO.md)。
+本版于 2026-10-21 完成 [v0.1.4 正式发布](https://github.com/moyin1004/SuirenX/releases/tag/v0.1.4)和配套服务端部署。不可变源码为 `690f8bc9537a33d07e8319d11429eab496025f28`，Android 正式包为 `0.1.4 / 1000701`。实体 Android 保留 Debug 签名覆盖升级为 `0.1.4 / 13`；正式 v0.1.3→v0.1.4 同签名升级在隔离设备验证。执行证据见 [发布记录](history/roadmap-execution.md#v014-正式发布与配套部署)，剩余设备验收见 [TODO](TODO.md)。
 
 - `python3 scripts/check_android_localizations.py` 校验 Android 中英文资源键、复数类别与格式参数；运行 Android 相关单测和语言切换/草稿保留回归。
 - Swift 核心测试覆盖目录资源、复数、整数分 CNY、日期及安全错误映射；构建通用目标，分别检查 iPhone/iPad 的标准和辅助字号截图。
 - Web 字典、参数、复数与语言匹配通过内嵌运行时测试；浏览器核对登录及各表单双向切换保留输入、筛选、冲突快照和一次性密钥，切换本身不调用 API。
-- 正式签名包及实体设备升级/业务数据保留仍遵循原有门禁，不因开发版多语言验收而豁免。
+- 本轮正式签名、证书连续性、v2/v3、zipalign、SHA-256、干净源码身份、同签名升级和已发布附件重新下载复核均通过；生产部署前的数据库备份/恢复、旧新二进制克隆库启动、外部 HTTPS 与运行文件身份也已核验。实体 iOS/iPad、低版本 Android 的补验仍如实保留。
 
 ## v0.1.3 发布范围与门禁
 
@@ -25,7 +25,7 @@
 
 ## 版本策略
 
-- Android/iOS/Web 的产品版本统一读取仓库根目录 `version.xcconfig` 的 `MARKETING_VERSION`，当前开发版本为 `0.1.4`；发布时只手动调整这一项。Go 构建通过根元数据模块嵌入该文件，Web 从服务端渲染的 HTML 元数据读取，不在 JavaScript 维护独立版本。开发版本号变更不代表已发布；Web 需重新编译并部署服务后生效。
+- Android/iOS/Web 的产品版本统一读取仓库根目录 `version.xcconfig` 的 `MARKETING_VERSION`，当前产品版本为 `0.1.4`；发布时只手动调整这一项。Go 构建通过根元数据模块嵌入该文件，Web 从服务端渲染的 HTML 元数据读取，不在 JavaScript 维护独立版本。开发版本号变更不代表已发布；Web 需重新编译并部署服务后生效。
 - 服务端门禁同时运行根目录 `go test ./...` 和 `services/api` 下的 `go test ./...`。隔离启动构建产物，请求 `/` 核对 `suirenx-version` 元数据与该源码版本一致，再检查已登录页面的 `Web <版本>` 文案；源码归档须保留根元数据模块。
 - 本地开发打包运行 `python3 scripts/package.py android` 或 `python3 scripts/package.py ios`。每次调用在忽略的 `.suirenx-build/package-counter` 中加一，两个平台共用此 checkout 的开发序列（从 4 开始）；文件锁防止并发重复，计数状态独立于编译输出，常规 clean 不会重置编号。失败也占用编号，不回收。不要删除计数文件；新电脑/新 checkout 的本地号不保证唯一，结合 Git 与源码摘要区分。
 - 普通 Android Studio / Xcode Build 复用本地最近分配的编号（首次为 4），不消耗新编号；会重新采集 Git 提交、未提交状态、源码摘要与 UTC 时间。脚本在忽略的 `.suirenx-build/development.xcconfig` 中同步最近编号，避免打包后再用 IDE 编译退回较低构建号。需要新编号和可保留的安装包时使用打包脚本。

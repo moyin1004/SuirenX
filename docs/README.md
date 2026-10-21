@@ -1,6 +1,6 @@
 # 文档导航
 
-当前开发版本为 **v0.1.4**，已实现 Android、iOS/iPadOS 与 Web 中英文支持，范围见 [版本规划](prd/roadmap.md)，验证边界见 [TODO](TODO.md)。最近正式发布为 **v0.1.3**；新版本尚未发布。Android 提醒及既有实体设备/后台可靠性补验继续追踪。
+当前正式版本为 **[v0.1.4](https://github.com/moyin1004/SuirenX/releases/tag/v0.1.4)**，已发布三端中英文支持并完成配套服务端部署。范围见 [版本规划](prd/roadmap.md)，执行证据见 [发布记录](history/roadmap-execution.md#v014-正式发布与配套部署)，验证边界见 [TODO](TODO.md)。Android 提醒及既有实体设备/后台可靠性补验继续追踪。
 
 ## 当前工作与技术规则
 

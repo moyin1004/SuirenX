@@ -2,12 +2,12 @@
 
 SuirenX（燧人）是一个个人工具箱项目。第一版个人资产管理开始：记录设备和物品、查看服役状态、计算持有天数与日均成本。
 
-最新发布 [v0.1.2](https://github.com/moyin1004/SuirenX/releases/tag/v0.1.2)（源码与 Android 正式签名 APK），此前版本见 [v0.1.1](https://github.com/moyin1004/SuirenX/releases/tag/v0.1.1) 和 [v0.1.0-preview](https://github.com/moyin1004/SuirenX/releases/tag/v0.1.0-preview)。Android 使用本地 Room 保存资产与用品，支持离线使用和 JSON 备份恢复；Go/Hertz 服务提供账号与可选增量同步。v0.1.2 改善资产筛选、排版、离线图标、设置与密码输入，包含 Web 表单修复、审计日志、认证限流与配置大小边界修复。GitHub Release 不自动部署正式服务器；剩余交互验收和到期提醒见 [当前待办](docs/TODO.md)。
+最新发布 [v0.1.4](https://github.com/moyin1004/SuirenX/releases/tag/v0.1.4)（源码与 Android 正式签名 APK），此前版本见 [v0.1.3](https://github.com/moyin1004/SuirenX/releases/tag/v0.1.3) 和 [v0.1.2](https://github.com/moyin1004/SuirenX/releases/tag/v0.1.2)。Android 使用本地 Room 保存资产与用品，支持离线使用和 JSON 备份恢复；Go/Hertz 服务提供账号与可选增量同步。v0.1.4 为 Android、iOS/iPadOS 与 Web 增加简体中文和英文，支持设备/浏览器独立语言偏好，并改善辅助字号布局与错误提示。正式发布、保留数据升级和配套服务端部署记录见 [执行记录](docs/history/roadmap-execution.md#v014-正式发布与配套部署)，剩余验收和到期提醒见 [当前待办](docs/TODO.md)。
 
 ## 技术栈
 
 - Android：Kotlin、Jetpack Compose、Hilt、Retrofit、Room（本地资产与用品）
-- iOS / iPadOS：SwiftUI（iOS 17+）、Swift Concurrency、SQLite、Keychain；v0.1.3 已完成模拟器验收，实体设备与发布边界见 TODO
+- iOS / iPadOS：SwiftUI（iOS 17+）、Swift Concurrency、SQLite、Keychain；已完成中英文与辅助字号模拟器验收，实体设备与发布边界见 TODO
 - API：Go、Hertz、Protobuf IDL
 - 数据库：SQLite、GORM
 - 构建：Gradle 9.6、Version Catalog、Convention Plugins
