@@ -1,5 +1,9 @@
 package io.suirenx.feature.assets
 
+import io.suirenx.core.ui.R as CopyR
+import io.suirenx.core.ui.localization.uiText
+import io.suirenx.core.ui.localization.uiQuantity
+
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -60,51 +64,51 @@ internal data class AssetIconOption(
 // Source: microsoft/fluentui-emoji at 1ffb34c752ecf5d402f04cfb4b392c77f57c54bc.
 // MIT copyright and permission notice is packaged in assets/licenses/FluentEmoji-MIT.txt.
 internal val assetIconOptions = listOf(
-    AssetIconOption("item", "物品", R.drawable.fluent_package_3d, "life"),
-    AssetIconOption("devices", "台式电脑", R.drawable.fluent_desktop_computer_3d, "digital"),
-    AssetIconOption("laptop", "笔记本", R.drawable.fluent_laptop_3d, "digital"),
-    AssetIconOption("phone", "手机", R.drawable.fluent_mobile_phone_3d, "digital"),
-    AssetIconOption("tablet", "平板", R.drawable.suiren_tablet, "digital"),
-    AssetIconOption("headphones", "耳机", R.drawable.fluent_headphone_3d, "digital"),
-    AssetIconOption("watch", "手表", R.drawable.fluent_watch_3d, "digital"),
-    AssetIconOption("camera", "相机", R.drawable.fluent_camera_3d, "digital"),
-    AssetIconOption("gamepad", "游戏设备", R.drawable.fluent_video_game_3d, "digital"),
-    AssetIconOption("keyboard", "键盘", R.drawable.fluent_keyboard_3d, "digital"),
-    AssetIconOption("mouse", "鼠标", R.drawable.fluent_computer_mouse_3d, "digital"),
-    AssetIconOption("printer", "打印机", R.drawable.fluent_printer_3d, "digital"),
-    AssetIconOption("television", "电视", R.drawable.fluent_television_3d, "digital"),
-    AssetIconOption("speaker", "音箱", R.drawable.fluent_speaker_high_volume_3d, "digital"),
-    AssetIconOption("microphone", "麦克风", R.drawable.fluent_microphone_3d, "digital"),
-    AssetIconOption("battery", "电池", R.drawable.fluent_battery_3d, "digital"),
-    AssetIconOption("monitor", "显示器", R.drawable.suiren_monitor, "digital"),
-    AssetIconOption("power_supply", "电源", R.drawable.suiren_power_supply, "digital"),
-    AssetIconOption("hard_drive", "硬盘", R.drawable.suiren_hard_drive, "digital"),
-    AssetIconOption("router", "路由器", R.drawable.suiren_router, "digital"),
-    AssetIconOption("charger", "充电器", R.drawable.suiren_charger, "digital"),
-    AssetIconOption("power_bank", "充电宝", R.drawable.suiren_power_bank, "digital"),
-    AssetIconOption("power_strip", "插线板", R.drawable.suiren_power_strip, "digital"),
-    AssetIconOption("projector", "投影仪", R.drawable.suiren_projector, "digital"),
+    AssetIconOption("item", "copy_item", R.drawable.fluent_package_3d, "life"),
+    AssetIconOption("devices", "copy_desktop_computer", R.drawable.fluent_desktop_computer_3d, "digital"),
+    AssetIconOption("laptop", "copy_laptop", R.drawable.fluent_laptop_3d, "digital"),
+    AssetIconOption("phone", "copy_phone", R.drawable.fluent_mobile_phone_3d, "digital"),
+    AssetIconOption("tablet", "copy_tablet", R.drawable.suiren_tablet, "digital"),
+    AssetIconOption("headphones", "copy_headphones", R.drawable.fluent_headphone_3d, "digital"),
+    AssetIconOption("watch", "copy_watch", R.drawable.fluent_watch_3d, "digital"),
+    AssetIconOption("camera", "copy_camera", R.drawable.fluent_camera_3d, "digital"),
+    AssetIconOption("gamepad", "copy_gaming_device", R.drawable.fluent_video_game_3d, "digital"),
+    AssetIconOption("keyboard", "copy_keyboard", R.drawable.fluent_keyboard_3d, "digital"),
+    AssetIconOption("mouse", "copy_mouse", R.drawable.fluent_computer_mouse_3d, "digital"),
+    AssetIconOption("printer", "copy_printer", R.drawable.fluent_printer_3d, "digital"),
+    AssetIconOption("television", "copy_tv", R.drawable.fluent_television_3d, "digital"),
+    AssetIconOption("speaker", "copy_speaker", R.drawable.fluent_speaker_high_volume_3d, "digital"),
+    AssetIconOption("microphone", "copy_microphone", R.drawable.fluent_microphone_3d, "digital"),
+    AssetIconOption("battery", "copy_battery", R.drawable.fluent_battery_3d, "digital"),
+    AssetIconOption("monitor", "copy_monitor", R.drawable.suiren_monitor, "digital"),
+    AssetIconOption("power_supply", "copy_power_supply", R.drawable.suiren_power_supply, "digital"),
+    AssetIconOption("hard_drive", "copy_hard_drive", R.drawable.suiren_hard_drive, "digital"),
+    AssetIconOption("router", "copy_router", R.drawable.suiren_router, "digital"),
+    AssetIconOption("charger", "copy_charger", R.drawable.suiren_charger, "digital"),
+    AssetIconOption("power_bank", "copy_power_bank", R.drawable.suiren_power_bank, "digital"),
+    AssetIconOption("power_strip", "copy_power_strip", R.drawable.suiren_power_strip, "digital"),
+    AssetIconOption("projector", "copy_projector", R.drawable.suiren_projector, "digital"),
     AssetIconOption("nas", "NAS", R.drawable.suiren_nas, "digital"),
-    AssetIconOption("mini_pc", "迷你主机", R.drawable.suiren_mini_pc, "digital"),
-    AssetIconOption("usb_hub", "扩展坞", R.drawable.suiren_usb_hub, "digital"),
-    AssetIconOption("book", "书籍", R.drawable.fluent_books_3d, "life"),
-    AssetIconOption("home", "房屋", R.drawable.fluent_house_3d, "life"),
-    AssetIconOption("chair", "椅子", R.drawable.fluent_chair_3d, "life"),
-    AssetIconOption("sofa", "沙发", R.drawable.fluent_couch_and_lamp_3d, "life"),
-    AssetIconOption("lamp", "灯泡", R.drawable.fluent_light_bulb_3d, "life"),
-    AssetIconOption("glasses", "眼镜", R.drawable.fluent_glasses_3d, "life"),
-    AssetIconOption("shoes", "运动鞋", R.drawable.fluent_running_shoe_3d, "life"),
-    AssetIconOption("wrench", "扳手", R.drawable.fluent_wrench_3d, "life"),
-    AssetIconOption("air_purifier", "空气净化器", R.drawable.suiren_air_purifier, "life"),
-    AssetIconOption("robot_vacuum", "扫地机器人", R.drawable.suiren_robot_vacuum, "life"),
-    AssetIconOption("fan", "风扇", R.drawable.suiren_fan, "life"),
-    AssetIconOption("humidifier", "加湿器", R.drawable.suiren_humidifier, "life"),
-    AssetIconOption("hair_dryer", "吹风机", R.drawable.suiren_hair_dryer, "life"),
-    AssetIconOption("bicycle", "自行车", R.drawable.fluent_bicycle_3d, "travel"),
-    AssetIconOption("backpack", "背包", R.drawable.fluent_backpack_3d, "travel"),
-    AssetIconOption("luggage", "行李箱", R.drawable.fluent_luggage_3d, "travel"),
-    AssetIconOption("car", "汽车", R.drawable.fluent_automobile_3d, "travel"),
-    AssetIconOption("motorcycle", "摩托车", R.drawable.fluent_motorcycle_3d, "travel"),
+    AssetIconOption("mini_pc", "copy_mini_pc", R.drawable.suiren_mini_pc, "digital"),
+    AssetIconOption("usb_hub", "copy_usb_hub", R.drawable.suiren_usb_hub, "digital"),
+    AssetIconOption("book", "copy_books", R.drawable.fluent_books_3d, "life"),
+    AssetIconOption("home", "copy_home", R.drawable.fluent_house_3d, "life"),
+    AssetIconOption("chair", "copy_chair", R.drawable.fluent_chair_3d, "life"),
+    AssetIconOption("sofa", "copy_sofa", R.drawable.fluent_couch_and_lamp_3d, "life"),
+    AssetIconOption("lamp", "copy_light_bulb", R.drawable.fluent_light_bulb_3d, "life"),
+    AssetIconOption("glasses", "copy_glasses", R.drawable.fluent_glasses_3d, "life"),
+    AssetIconOption("shoes", "copy_running_shoes", R.drawable.fluent_running_shoe_3d, "life"),
+    AssetIconOption("wrench", "copy_wrench", R.drawable.fluent_wrench_3d, "life"),
+    AssetIconOption("air_purifier", "copy_air_purifier", R.drawable.suiren_air_purifier, "life"),
+    AssetIconOption("robot_vacuum", "copy_robot_vacuum", R.drawable.suiren_robot_vacuum, "life"),
+    AssetIconOption("fan", "copy_fan", R.drawable.suiren_fan, "life"),
+    AssetIconOption("humidifier", "copy_humidifier", R.drawable.suiren_humidifier, "life"),
+    AssetIconOption("hair_dryer", "copy_hair_dryer", R.drawable.suiren_hair_dryer, "life"),
+    AssetIconOption("bicycle", "copy_bicycle", R.drawable.fluent_bicycle_3d, "travel"),
+    AssetIconOption("backpack", "copy_backpack", R.drawable.fluent_backpack_3d, "travel"),
+    AssetIconOption("luggage", "copy_luggage", R.drawable.fluent_luggage_3d, "travel"),
+    AssetIconOption("car", "copy_car", R.drawable.fluent_automobile_3d, "travel"),
+    AssetIconOption("motorcycle", "copy_motorcycle", R.drawable.fluent_motorcycle_3d, "travel"),
 )
 
 // Unknown keys remain stored; only their visual representation falls back.
@@ -143,7 +147,7 @@ internal fun AssetIconPicker(
 ) {
     var draftKey by rememberSaveable(selectedKey) { mutableStateOf(selectedKey) }
     var category by rememberSaveable { mutableStateOf("all") }
-    val categories = listOf("all" to "全部", "digital" to "数码", "life" to "生活", "travel" to "出行")
+    val categories = listOf("all" to uiText(CopyR.string.copy_all), "digital" to uiText(CopyR.string.copy_electronics), "life" to uiText(CopyR.string.copy_everyday), "travel" to uiText(CopyR.string.copy_travel))
     val visible = assetIconOptions.filter { category == "all" || it.category == category }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -154,18 +158,18 @@ internal fun AssetIconPicker(
     ) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onDismiss, modifier = Modifier.width(64.dp)) { Text("取消") }
-                Text("选择资产图标", modifier = Modifier.weight(1f), textAlign = TextAlign.Center, fontSize = 16.sp)
+                TextButton(onClick = onDismiss, modifier = Modifier.width(64.dp)) { Text(uiText(CopyR.string.copy_cancel)) }
+                Text(uiText(CopyR.string.copy_choose_asset_icon), modifier = Modifier.weight(1f), textAlign = TextAlign.Center, fontSize = 16.sp)
                 Button(
                     onClick = { onSelected(draftKey) },
                     modifier = Modifier.width(64.dp),
                     shape = RoundedCornerShape(10.dp),
                     contentPadding = PaddingValues(horizontal = 8.dp),
                 ) {
-                    Text("确定", maxLines = 1)
+                    Text(uiText(CopyR.string.copy_ok), maxLines = 1)
                 }
             }
-            Text("选中后点击确定。", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(uiText(CopyR.string.copy_select_an_icon_then_tap_ok), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 categories.forEach { (key, label) ->
                     Box(
@@ -197,6 +201,7 @@ internal fun AssetIconPicker(
                 ) {
                     items(visible, key = { it.key }) { option ->
                         val isSelected = draftKey == option.key
+                        val optionDescription = uiText(option.label)
                         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                             Surface(
                                 onClick = { draftKey = option.key },
@@ -204,7 +209,7 @@ internal fun AssetIconPicker(
                                 border = if (isSelected) BorderStroke(1.dp, MaterialTheme.colorScheme.secondary) else null,
                                 shape = RoundedCornerShape(14.dp),
                                 modifier = Modifier.size(54.dp).semantics {
-                                    contentDescription = option.label
+                                    contentDescription = optionDescription
                                     selected = isSelected
                                     role = Role.RadioButton
                                 },

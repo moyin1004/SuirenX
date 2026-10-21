@@ -89,7 +89,7 @@ class RemoteAssetSyncStore @Inject constructor(
     suspend fun get(id: String): Result<Asset> = attempt {
         val serverUrl = cacheKey()
         database.assets().getById(serverUrl, id)?.takeUnless { it.deletedAt != null }?.let(::toDomain)
-            ?: error("未找到资产")
+            ?: error("error_asset_not_found")
     }
 
     suspend fun create(input: NewAsset): Result<Asset> = attempt {
@@ -131,7 +131,7 @@ class RemoteAssetSyncStore @Inject constructor(
     override suspend fun getExpiry(id: String): Result<ExpiryItem> = attempt {
         val serverUrl = cacheKey()
         database.expiry().getById(serverUrl, id)?.takeUnless { it.deletedAt != null }?.let(::toExpiryDomain)
-            ?: error("未找到用品")
+            ?: error("error_expiry_not_found")
     }
 
     override suspend fun createExpiry(item: NewExpiryItem): Result<ExpiryItem> = attempt {
@@ -164,7 +164,7 @@ class RemoteAssetSyncStore @Inject constructor(
     override suspend fun updateExpiry(id: String, item: NewExpiryItem): Result<ExpiryItem> = attempt {
         val serverUrl = cacheKey()
         val current = cachedExpiryOrPull(serverUrl, id)
-        check(current.archivedAt == null) { "归档用品请先恢复" }
+        check(current.archivedAt == null) { "error_expiry_restore_first" }
         val updated = current.copy(
             name = item.name.trim(), category = item.category.trim(), packageExpiryDate = item.packageExpiryDate,
             openedDate = item.openedDate, openedValidityDays = item.openedValidityDays,
@@ -178,7 +178,7 @@ class RemoteAssetSyncStore @Inject constructor(
     override suspend fun updateExpiryStatus(id: String, status: ExpiryItemStatus): Result<ExpiryItem> = attempt {
         val serverUrl = cacheKey()
         val current = cachedExpiryOrPull(serverUrl, id)
-        check(current.archivedAt == null) { "归档用品请先恢复" }
+        check(current.archivedAt == null) { "error_expiry_restore_first" }
         val updated = current.copy(status = status, syncVersion = current.syncVersion + 1, updatedAt = Instant.now(clock))
         enqueueExpiry(serverUrl, updated, false, current.syncVersion)
         flushOrKeepExpiry(serverUrl, id, updated)
@@ -213,9 +213,9 @@ class RemoteAssetSyncStore @Inject constructor(
         val serverUrl = cacheKey()
         syncMutex.withLock {
             val conflict = database.conflicts().getAll(serverUrl).firstOrNull { it.assetId == assetId }
-                ?: error("未找到同步冲突")
+                ?: error("error_conflict_not_found")
             when (resolution) {
-                SyncConflictResolution.KeepBoth -> error("请通过本地同步处理冲突")
+                SyncConflictResolution.KeepBoth -> error("error_conflict_use_local_sync")
                 SyncConflictResolution.KeepRemote -> {
                     if (conflict.remotePayloadJson.isBlank()) {
                         database.assets().delete(serverUrl, assetId)
@@ -268,9 +268,9 @@ class RemoteAssetSyncStore @Inject constructor(
         val serverUrl = cacheKey()
         syncMutex.withLock {
             val conflict = database.expiryConflicts().getAll(serverUrl).firstOrNull { it.expiryId == expiryId }
-                ?: error("未找到用品同步冲突")
+                ?: error("error_expiry_conflict_not_found")
             when (resolution) {
-                SyncConflictResolution.KeepBoth -> error("请通过本地同步处理冲突")
+                SyncConflictResolution.KeepBoth -> error("error_conflict_use_local_sync")
                 SyncConflictResolution.KeepRemote -> {
                     if (conflict.remotePayloadJson.isBlank()) {
                         database.expiry().delete(serverUrl, expiryId)
@@ -317,7 +317,7 @@ class RemoteAssetSyncStore @Inject constructor(
     suspend fun update(id: String, input: NewAsset): Result<Asset> = attempt {
         val serverUrl = cacheKey()
         val current = cachedOrPull(serverUrl, id)
-        check(!current.isArchived) { "归档资产请先恢复" }
+        check(!current.isArchived) { "error_asset_restore_first" }
         val updated = current.copy(
             name = input.name.trim(), priceCents = input.priceCents, purchaseDate = input.purchaseDate,
             iconKey = input.iconKey, purchaseChannel = input.purchaseChannel,
@@ -331,7 +331,7 @@ class RemoteAssetSyncStore @Inject constructor(
     suspend fun updateStatus(id: String, status: AssetStatus, retiredDate: LocalDate?): Result<Asset> = attempt {
         val serverUrl = cacheKey()
         val current = cachedOrPull(serverUrl, id)
-        check(!current.isArchived) { "归档资产请先恢复" }
+        check(!current.isArchived) { "error_asset_restore_first" }
         val updated = current.copy(
             status = status, retiredDate = retiredDate, syncVersion = current.syncVersion + 1,
             updatedAt = Instant.now(clock),
@@ -353,7 +353,7 @@ class RemoteAssetSyncStore @Inject constructor(
 
     private suspend fun cachedOrPull(serverUrl: String, id: String): Asset {
         return database.assets().getById(serverUrl, id)?.takeUnless { it.deletedAt != null }?.let(::toDomain)
-            ?: error("未找到资产")
+            ?: error("error_asset_not_found")
     }
 
     private suspend fun flushOrKeep(serverUrl: String, id: String, optimistic: Asset): Asset {
@@ -362,7 +362,7 @@ class RemoteAssetSyncStore @Inject constructor(
 
     private suspend fun cachedExpiryOrPull(serverUrl: String, id: String): ExpiryItem {
         return database.expiry().getById(serverUrl, id)?.takeUnless { it.deletedAt != null }?.let(::toExpiryDomain)
-            ?: error("未找到用品")
+            ?: error("error_expiry_not_found")
     }
 
     private suspend fun flushOrKeepExpiry(serverUrl: String, id: String, optimistic: ExpiryItem): ExpiryItem {
@@ -401,18 +401,18 @@ class RemoteAssetSyncStore @Inject constructor(
     }
 
     private fun cacheKey(): String {
-        check(auth.state.value.authenticated && auth.state.value.username.isNotBlank()) { "请先登录服务器账号" }
+        check(auth.state.value.authenticated && auth.state.value.username.isNotBlank()) { "error_auth_sign_in_first" }
         return "${apiProvider.currentUrl()}|${auth.state.value.username}"
     }
 
     private suspend fun sync(serverUrl: String) {
-        check(syncMutex.tryLock()) { "同步正在进行，请稍后重试" }
+        check(syncMutex.tryLock()) { "error_sync_busy_retry" }
         try {
             val completed = withTimeoutOrNull(60_000) {
                 syncLocked(serverUrl)
                 true
             } ?: false
-            if (!completed) throw IOException("同步超时，待同步数据已保留，请重试")
+            if (!completed) throw IOException("error_sync_timeout_retry")
         } finally {
             syncMutex.unlock()
         }
@@ -683,6 +683,6 @@ class RemoteAssetSyncStore @Inject constructor(
     }
 }
 
-class SyncConflictException(val assetId: String, val conflict: SyncConflict) : IllegalStateException("资产发生同步冲突：$assetId")
+class SyncConflictException(val assetId: String, val conflict: SyncConflict) : IllegalStateException("error_asset_conflict")
 
-class SyncExpiryConflictException(val expiryId: String) : IllegalStateException("用品发生同步冲突：$expiryId")
+class SyncExpiryConflictException(val expiryId: String) : IllegalStateException("error_expiry_conflict")

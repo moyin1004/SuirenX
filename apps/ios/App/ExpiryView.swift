@@ -1,15 +1,17 @@
 import SwiftUI
 import SuirenCore
 
-private enum ExpiryFilter: String, CaseIterable { case all = "全部", pending = "待处理", expired = "已过期", soon = "临期", normal = "正常", inactive = "已结束", archived = "已归档" }
+private enum ExpiryFilter: String, CaseIterable { case all, pending, expired, soon, normal, inactive, archived
+    var title: String { switch self { case .all: return L10n.text("ui.all"); case .pending: return L10n.text("ui.pending"); case .expired: return L10n.text("ui.expired"); case .soon: return L10n.text("ui.due_soon"); case .normal: return L10n.text("ui.normal"); case .inactive: return L10n.text("ui.finished"); case .archived: return L10n.text("ui.archived") } }
+}
 func expiryStatus(_ item: ExpiryItem, soonDays: Int) -> String {
-    if item.archivedAt != nil { return "已归档" }
+    if item.archivedAt != nil { return L10n.text("ui.archived") }
     switch item.bucket(soonDays: soonDays) {
-    case .expired: return "已过期 \(item.actualExpiryDate.distance(to: .today)) 天"
-    case .today: return "今天到期"
-    case .soon: return "\(LocalDay.today.distance(to: item.actualExpiryDate)) 天后到期"
-    case .normal: return "正常 · \(LocalDay.today.distance(to: item.actualExpiryDate)) 天后到期"
-    case .inactive: return item.status == .usedUp ? "已用完" : "已丢弃"
+    case .expired: return L10n.count("ui.expired_days_ago", item.actualExpiryDate.distance(to: .today))
+    case .today: return L10n.text("ui.expires_today")
+    case .soon: return L10n.count("ui.expires_in_days", LocalDay.today.distance(to: item.actualExpiryDate))
+    case .normal: return L10n.count("ui.normal_expires_in_days", LocalDay.today.distance(to: item.actualExpiryDate))
+    case .inactive: return item.status == .usedUp ? L10n.text("ui.used_up") : L10n.text("ui.discarded")
     }
 }
 struct ExpiryView: View {
@@ -41,32 +43,32 @@ struct ExpiryView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                PageHeading(title: "用品 / 保质期", subtitle: "包装日期与开封期限，取更早的日期。")
+                PageHeading(title: L10n.text("ui.supplies_expiry"), subtitle: L10n.text("ui.the_earlier_of_the_package_expiry_and_the_opened_validity"))
                 VStack(spacing: 12) {
-                    HStack { Text("\(model.pendingExpiry)").font(.largeTitle.monospacedDigit()); Text("项待处理").foregroundStyle(.secondary); Spacer(); Text("临期 \(model.settings.soonDays) 天").font(.caption).foregroundStyle(.secondary) }
+                    HStack { Text(L10n.count("count.pending", model.pendingExpiry)).font(.title2.monospacedDigit()); Spacer(); Text(L10n.count("ui.due_soon_within_days", model.settings.soonDays)).font(.caption).foregroundStyle(.secondary) }
                     Divider()
                     HStack {
-                        expiryCount("已过期", buckets: [.expired]); Spacer(); expiryCount("临期", buckets: [.today, .soon]); Spacer(); expiryCount("正常", buckets: [.normal])
+                        expiryCount(L10n.text("ui.expired"), buckets: [.expired]); Spacer(); expiryCount(L10n.text("ui.due_soon"), buckets: [.today, .soon]); Spacer(); expiryCount(L10n.text("ui.normal"), buckets: [.normal])
                     }
                 }.sxCard()
-                ScrollView(.horizontal, showsIndicators: false) { HStack { ForEach(ExpiryFilter.allCases, id: \.self) { f in Chip(title: f.rawValue, selected: filter == f) { filter = f } } } }
+                ScrollView(.horizontal, showsIndicators: false) { HStack { ForEach(ExpiryFilter.allCases, id: \.self) { f in Chip(title: f.title, selected: filter == f) { filter = f } } } }
                 HStack {
                     Image(systemName: "magnifyingglass")
-                    TextField("搜索用品、分类或位置", text: $search).accessibilityIdentifier("expiry.search")
-                    Menu { Button("全部分类") { category = "" }; ForEach(Array(Set(model.expiry.map(\.category))).sorted(), id: \.self) { c in Button(c) { category = c } } } label: { Label(category.isEmpty ? "分类" : category, systemImage: "line.3.horizontal.decrease") }.font(.caption).frame(minHeight: 44)
+                    TextField(L10n.text("ui.search_supplies_categories_or_locations"), text: $search).accessibilityIdentifier("expiry.search")
+                    Menu { Button(L10n.text("ui.all_categories")) { category = "" }; ForEach(Array(Set(model.expiry.map(\.category))).sorted(), id: \.self) { c in Button(c) { category = c } } } label: { Label(category.isEmpty ? L10n.text("ui.category") : category, systemImage: "line.3.horizontal.decrease") }.font(.caption).frame(minHeight: 44)
                 }.padding(.horizontal, 12).background(Palette.surface, in: RoundedRectangle(cornerRadius: 12))
-                if visible.isEmpty { EmptyState(title: "暂无用品", detail: "添加用品，或调整筛选条件。") }
+                if visible.isEmpty { EmptyState(title: L10n.text("ui.no_supplies_yet"), detail: L10n.text("ui.add_supplies_or_adjust_the_filters")) }
                 ForEach(visible) { item in
                     NavigationLink(value: RecordDestination.expiry(item.id)) {
                         HStack(alignment: .top, spacing: 12) {
                             Image(systemName: "shippingbox").padding(12).background(Palette.inset, in: RoundedRectangle(cornerRadius: 12))
-                            VStack(alignment: .leading, spacing: 7) { Text(item.name).font(.subheadline.weight(.semibold)); Text([item.category, item.location].filter { !$0.isEmpty }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary); Text("实际到期 \(item.actualExpiryDate.rawValue)").font(.caption).monospacedDigit() }
+                            VStack(alignment: .leading, spacing: 7) { Text(item.name).font(.subheadline.weight(.semibold)); Text([item.category, item.location].filter { !$0.isEmpty }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary); Text(L10n.text("ui.actual_expiry" , String(describing: DisplayFormatting.day(item.actualExpiryDate)))).font(.caption).monospacedDigit() }
                             Spacer(minLength: 4); Text(expiryStatus(item, soonDays: model.settings.soonDays)).font(.caption2).foregroundStyle(item.bucket(soonDays: model.settings.soonDays) == .expired ? Color.red : .secondary)
                         }.sxCard().contentShape(Rectangle())
                     }.buttonStyle(.plain)
                 }
             }.sxPage()
-        }.navigationTitle("用品期限").toolbar { ToolbarItem(placement: .topBarTrailing) { Button { adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("新增用品").accessibilityIdentifier("expiry.add") } }
+        }.navigationTitle(L10n.text("ui.supply_expiry")).toolbar { ToolbarItem(placement: .topBarTrailing) { Button { adding = true } label: { Image(systemName: "plus") }.accessibilityLabel(L10n.text("ui.add_supply")).accessibilityIdentifier("expiry.add") } }
             .sheet(isPresented: $adding) { ExpiryEditor() }.refreshable { await model.refresh() }
     }
     private func expiryCount(_ title: String, buckets: [ExpiryBucket]) -> some View {
@@ -88,29 +90,29 @@ struct ExpiryDetailView: View {
                     VStack(alignment: .leading, spacing: 16) {
                         PageHeading(title: item.name, subtitle: expiryStatus(item, soonDays: model.settings.soonDays))
                         VStack(spacing: 8) {
-                            InfoRow(label: "分类", value: item.category)
-                            InfoRow(label: "包装到期日", value: item.packageExpiryDate.rawValue)
-                            InfoRow(label: "开封日期", value: item.openedDate?.rawValue ?? "")
-                            InfoRow(label: "开封后有效天数", value: item.openedValidityDays.map(String.init) ?? "")
-                            InfoRow(label: "实际到期日", value: item.actualExpiryDate.rawValue)
-                            InfoRow(label: "位置", value: item.location)
-                            InfoRow(label: "备注", value: item.notes)
-                            InfoRow(label: "创建时间", value: item.createdAt)
-                            InfoRow(label: "更新时间", value: item.updatedAt)
+                            InfoRow(label: L10n.text("ui.category"), value: item.category)
+                            InfoRow(label: L10n.text("ui.package_expiry_date"), value: DisplayFormatting.day(item.packageExpiryDate))
+                            InfoRow(label: L10n.text("ui.opened_date"), value: item.openedDate.map { DisplayFormatting.day($0) } ?? "")
+                            InfoRow(label: L10n.text("ui.days_valid_after_opening"), value: item.openedValidityDays.map(String.init) ?? "")
+                            InfoRow(label: L10n.text("ui.actual_expiry_date"), value: DisplayFormatting.day(item.actualExpiryDate))
+                            InfoRow(label: L10n.text("ui.location"), value: item.location)
+                            InfoRow(label: L10n.text("ui.notes"), value: item.notes)
+                            InfoRow(label: L10n.text("ui.created_at"), value: DisplayFormatting.timestamp(item.createdAt))
+                            InfoRow(label: L10n.text("ui.updated_at"), value: DisplayFormatting.timestamp(item.updatedAt))
                         }.sxCard()
                         if item.archivedAt == nil {
-                            Button("编辑用品") { editing = true }.buttonStyle(PrimaryButtonStyle())
+                            Button(L10n.text("ui.edit_supply")) { editing = true }.buttonStyle(PrimaryButtonStyle())
                             ForEach(ExpiryStatus.allCases, id: \.self) { status in
-                                if item.status != status { Button(status == .inUse ? "重新使用" : status == .usedUp ? "标为已用完" : "标为已丢弃") { Task { var e = item; e.status = status; await model.mutate { try await model.store.saveExpiry(e) } } }.frame(maxWidth: .infinity, minHeight: 44) }
+                                if item.status != status { Button(status == .inUse ? L10n.text("ui.use_again") : status == .usedUp ? L10n.text("ui.mark_as_used_up") : L10n.text("ui.mark_as_discarded")) { Task { var e = item; e.status = status; await model.mutate { try await model.store.saveExpiry(e) } } }.frame(maxWidth: .infinity, minHeight: 44) }
                             }
-                        } else { Text("已归档，恢复后可编辑。").font(.subheadline).foregroundStyle(.secondary) }
-                        Button(item.archivedAt == nil ? "归档记录" : "恢复记录") { Task { await model.mutate { try await model.store.archive(kind: "expiry", id: id, archived: item.archivedAt == nil) } } }.frame(maxWidth: .infinity, minHeight: 44)
-                        Button("删除用品", role: .destructive) { deleting = true }.frame(maxWidth: .infinity, minHeight: 44)
+                        } else { Text(L10n.text("ui.archived_restore_before_editing")).font(.subheadline).foregroundStyle(.secondary) }
+                        Button(item.archivedAt == nil ? L10n.text("ui.archive_record") : L10n.text("ui.restore_record")) { Task { await model.mutate { try await model.store.archive(kind: "expiry", id: id, archived: item.archivedAt == nil) } } }.frame(maxWidth: .infinity, minHeight: 44)
+                        Button(L10n.text("ui.delete_supply"), role: .destructive) { deleting = true }.frame(maxWidth: .infinity, minHeight: 44)
                     }.sxPage()
                 }.sheet(isPresented: $editing) { ExpiryEditor(item: item) }
-            } else { EmptyState(title: "记录已删除") }
-        }.navigationTitle("用品详情")
-            .confirmationDialog("删除用品？", isPresented: $deleting, titleVisibility: .visible) { Button("确认删除", role: .destructive) { Task { if await model.mutate({ try await model.store.delete(kind: "expiry", id: id) }) { dismiss() } } } } message: { Text("将移除本机记录，并在开启同步后同步删除。若需可恢复，请使用归档。") }
+            } else { EmptyState(title: L10n.text("ui.record_deleted")) }
+        }.navigationTitle(L10n.text("ui.supply_details"))
+            .confirmationDialog(L10n.text("ui.delete_this_supply"), isPresented: $deleting, titleVisibility: .visible) { Button(L10n.text("ui.confirm_deletion"), role: .destructive) { Task { if await model.mutate({ try await model.store.delete(kind: "expiry", id: id) }) { dismiss() } } } } message: { Text(L10n.text("ui.removes_the_local_record_and_syncs_its_deletion_when_sync")) }
     }
 }
 
@@ -132,26 +134,26 @@ private struct ExpiryEditor: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("基本信息") { TextField("名称", text: $item.name).accessibilityIdentifier("expiry.name"); TextField("分类", text: $item.category).accessibilityIdentifier("expiry.category"); TextField("位置（可选）", text: $item.location) }
-                Section("期限") {
-                    DateField(label: "包装到期日", value: $item.packageExpiryDate)
-                    Toggle("已开封", isOn: $opened)
-                    if opened { DateField(label: "开封日期", value: $openedDate, range: Date.distantPast...LocalDay.today.date.addingTimeInterval(86399)); TextField("开封后有效天数", text: $days).keyboardType(.numberPad) }
-                    Text("实际到期日为包装日期与开封有效期的较早日期，开封日计为第 1 天。").font(.caption).foregroundStyle(.secondary)
+                Section(L10n.text("ui.basic_details")) { TextField(L10n.text("ui.name"), text: $item.name).accessibilityIdentifier("expiry.name"); TextField(L10n.text("ui.category"), text: $item.category).accessibilityIdentifier("expiry.category"); TextField(L10n.text("ui.location_optional"), text: $item.location) }
+                Section(L10n.text("ui.expiry")) {
+                    DateField(label: L10n.text("ui.package_expiry_date"), value: $item.packageExpiryDate)
+                    Toggle(L10n.text("ui.opened"), isOn: $opened)
+                    if opened { DateField(label: L10n.text("ui.opened_date"), value: $openedDate, range: Date.distantPast...LocalDay.today.date.addingTimeInterval(86399)); TextField(L10n.text("ui.days_valid_after_opening"), text: $days).keyboardType(.numberPad) }
+                    Text(L10n.text("ui.actual_expiry_is_the_earlier_of_package_expiry_and_opened")).font(.caption).foregroundStyle(.secondary)
                 }
-                Section("备注") { TextField("备注（可选）", text: $item.notes, axis: .vertical).lineLimit(4...8) }
+                Section(L10n.text("ui.notes")) { TextField(L10n.text("ui.notes_optional"), text: $item.notes, axis: .vertical).lineLimit(4...8) }
                 if let validation { Text(validation).foregroundStyle(.red) }
             }.scrollDismissesKeyboard(.immediately).frame(maxWidth: 640).frame(maxWidth: .infinity).sxNavigationBackground()
-                .navigationTitle(isNew ? "新增用品" : "编辑用品").navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(saving) }; ToolbarItem(placement: .confirmationAction) { Button(saving ? "保存中" : "保存") { save() }.keyboardShortcut("s", modifiers: .command).disabled(saving).accessibilityIdentifier("expiry.save") } }
+                .navigationTitle(isNew ? L10n.text("ui.add_supply") : L10n.text("ui.edit_supply")).navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L10n.text("ui.cancel")) { dismiss() }.disabled(saving) }; ToolbarItem(placement: .confirmationAction) { Button(saving ? L10n.text("ui.saving_") : L10n.text("ui.save")) { save() }.keyboardShortcut("s", modifiers: .command).disabled(saving).accessibilityIdentifier("expiry.save") } }
         }.interactiveDismissDisabled(saving)
     }
     private func save() {
         do {
             item.openedDate = opened ? openedDate : nil; item.openedValidityDays = opened ? Int(days) : nil
-            if opened && (item.openedValidityDays == nil || openedDate > .today || openedDate > item.packageExpiryDate) { throw SuirenError("请检查有效天数；开封日不能晚于今天或包装到期日") }
+            if opened && (item.openedValidityDays == nil || openedDate > .today || openedDate > item.packageExpiryDate) { throw AppPresentationError("ui.check_the_validity_period_the_opened_date_cannot_be_after") }
             try item.validate(); saving = true; validation = nil
             Task { if await model.mutate({ try await model.store.saveExpiry(item) }) { dismiss() }; saving = false }
-        } catch { validation = error.localizedDescription }
+        } catch { validation = L10n.error(error) }
     }
 }

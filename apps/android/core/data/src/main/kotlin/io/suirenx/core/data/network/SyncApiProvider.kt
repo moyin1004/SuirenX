@@ -16,7 +16,7 @@ class SyncApiProvider @Inject constructor(
     private val json: Json,
 ) {
     fun current(): SyncApi {
-        val url = checkNotNull(backends.settings.value?.activeUrl) { "请先配置后端地址" }
+        val url = checkNotNull(backends.settings.value?.activeUrl) { "error_backend_required" }
         return Retrofit.Builder()
             .baseUrl(url)
             .client(client)
@@ -25,5 +25,5 @@ class SyncApiProvider @Inject constructor(
             .create(SyncApi::class.java)
     }
 
-    fun currentUrl(): String = checkNotNull(backends.settings.value?.activeUrl) { "请先配置后端地址" }
+    fun currentUrl(): String = checkNotNull(backends.settings.value?.activeUrl) { "error_backend_required" }
 }

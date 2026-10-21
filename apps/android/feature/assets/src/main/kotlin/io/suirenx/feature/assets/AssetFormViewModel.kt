@@ -1,5 +1,6 @@
 package io.suirenx.feature.assets
 
+import io.suirenx.core.model.UserFacingErrors
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -142,7 +143,7 @@ class AssetFormViewModel @Inject constructor(
                 notes = state.notes, tags = state.tags,
             ).toNewAsset()
         } catch (error: IllegalArgumentException) {
-            uiState.update { it.copy(errorMessage = error.message) }
+            uiState.update { it.copy(errorMessage = UserFacingErrors.codeOrFallback(error.message, "error_asset_save_failed")) }
             return
         }
         uiState.update { it.copy(isSaving = true, errorMessage = null) }
@@ -156,7 +157,7 @@ class AssetFormViewModel @Inject constructor(
                 },
                 onFailure = { error ->
                     uiState.update {
-                        it.copy(isSaving = false, errorMessage = "保存失败，请检查网络和服务后重试")
+                        it.copy(isSaving = false, errorMessage = "error_asset_save_failed")
                     }
                 },
             )

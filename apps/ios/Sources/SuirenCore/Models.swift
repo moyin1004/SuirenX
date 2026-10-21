@@ -1,10 +1,5 @@
 import Foundation
 
-public struct SuirenError: LocalizedError, Equatable {
-    public let message: String
-    public init(_ message: String) { self.message = message }
-    public var errorDescription: String? { message }
-}
 
 /// A Gregorian date without timezone or time-of-day. Wire and backup representation is YYYY-MM-DD.
 public struct LocalDay: RawRepresentable, Codable, Hashable, Comparable, Sendable {
@@ -32,7 +27,7 @@ public struct LocalDay: RawRepresentable, Codable, Hashable, Comparable, Sendabl
     public static func < (lhs: Self, rhs: Self) -> Bool { lhs.rawValue < rhs.rawValue }
     public init(from decoder: Decoder) throws {
         let value = try decoder.singleValueContainer().decode(String.self)
-        guard let day = Self(rawValue: value) else { throw SuirenError("无效日期：\(value)") }; self = day
+        guard let day = Self(rawValue: value) else { throw SuirenError(.invalid_date, arguments: [String(describing: value)]) }; self = day
     }
     public func encode(to encoder: Encoder) throws { var c = encoder.singleValueContainer(); try c.encode(rawValue) }
 }
@@ -69,11 +64,11 @@ public struct Asset: Codable, Identifiable, Equatable, Sendable {
     }
     public func validate(on today: LocalDay = .today, importing: Bool = false) throws {
         guard !id.isEmpty, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              priceCents >= 0, salePriceCents == nil || salePriceCents! >= 0, importing || purchaseDate <= today else { throw SuirenError("请检查名称、金额和购买日期") }
-        guard importing || warrantyEndDate == nil || warrantyEndDate! >= purchaseDate else { throw SuirenError("保修截止日不能早于购买日期") }
+              priceCents >= 0, salePriceCents == nil || salePriceCents! >= 0, importing || purchaseDate <= today else { throw SuirenError(.check_the_name_amount_and_purchase_date) }
+        guard importing || warrantyEndDate == nil || warrantyEndDate! >= purchaseDate else { throw SuirenError(.warranty_end_date_cannot_be_before_the_purchase_date) }
         guard (status == .active && retiredDate == nil) ||
-                (status == .retired && retiredDate != nil && retiredDate! >= purchaseDate && (importing || retiredDate! <= today)) else { throw SuirenError("退役日期必须在购买日至今天之间") }
-        guard notes.utf16.count <= 2000, tags.count <= 20, tags.allSatisfy({ !$0.isEmpty && $0.utf16.count <= 30 }) else { throw SuirenError("备注最多 2000 字，标签最多 20 个且每个最多 30 字") }
+                (status == .retired && retiredDate != nil && retiredDate! >= purchaseDate && (importing || retiredDate! <= today)) else { throw SuirenError(.retirement_date_must_be_between_the_purchase_date_and_today) }
+        guard notes.utf16.count <= 2000, tags.count <= 20, tags.allSatisfy({ !$0.isEmpty && $0.utf16.count <= 30 }) else { throw SuirenError(.notes_can_contain_up_to_2_000_utf_16_code) }
         try validateTimestamps([createdAt, updatedAt, archivedAt ?? ""])
     }
     enum CodingKeys: String, CodingKey { case id, name, salePriceCents, priceCents, purchaseDate, status, retiredDate, archivedAt, iconKey, purchaseChannel, warrantyEndDate, notes, tags, createdAt, updatedAt }
@@ -83,7 +78,7 @@ public struct Asset: Codable, Identifiable, Equatable, Sendable {
         salePriceCents = try c.decodeIfPresent(Int64.self, forKey: .salePriceCents)
         priceCents = try c.decode(Int64.self, forKey: .priceCents); purchaseDate = try c.decode(LocalDay.self, forKey: .purchaseDate)
         let raw = try c.decodeIfPresent(String.self, forKey: .status) ?? "Active"
-        guard let s = AssetStatus(rawValue: raw) ?? (raw == "ACTIVE" ? .active : raw == "RETIRED" ? .retired : nil) else { throw SuirenError("未知资产状态") }; status = s
+        guard let s = AssetStatus(rawValue: raw) ?? (raw == "ACTIVE" ? .active : raw == "RETIRED" ? .retired : nil) else { throw SuirenError(.unknown_asset_status) }; status = s
         retiredDate = try c.decodeIfPresent(LocalDay.self, forKey: .retiredDate); archivedAt = try c.decodeIfPresent(String.self, forKey: .archivedAt)
         iconKey = try c.decodeIfPresent(String.self, forKey: .iconKey) ?? "devices"; purchaseChannel = try c.decodeIfPresent(String.self, forKey: .purchaseChannel)
         warrantyEndDate = try c.decodeIfPresent(LocalDay.self, forKey: .warrantyEndDate); notes = try c.decodeIfPresent(String.self, forKey: .notes) ?? ""
@@ -121,8 +116,8 @@ public struct ExpiryItem: Codable, Identifiable, Equatable, Sendable {
     }
     public func validate() throws {
         guard !id.isEmpty, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, name.utf16.count <= 200,
-              !category.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, category.utf16.count <= 100, location.utf16.count <= 200, notes.utf16.count <= 2000 else { throw SuirenError("请检查用品名称、分类、位置和备注") }
-        guard (openedDate == nil) == (openedValidityDays == nil), openedValidityDays == nil || (1...Int(Int32.max)).contains(openedValidityDays!) else { throw SuirenError("开封日期与有效天数须同时填写，有效天数须为正整数") }
+              !category.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, category.utf16.count <= 100, location.utf16.count <= 200, notes.utf16.count <= 2000 else { throw SuirenError(.check_the_supply_name_category_location_and_notes) }
+        guard (openedDate == nil) == (openedValidityDays == nil), openedValidityDays == nil || (1...Int(Int32.max)).contains(openedValidityDays!) else { throw SuirenError(.provide_both_the_opened_date_and_validity_period_the_validity) }
         try validateTimestamps([createdAt, updatedAt, archivedAt ?? ""])
     }
     enum CodingKeys: String, CodingKey { case id, name, category, packageExpiryDate, openedDate, openedValidityDays, location, notes, status, archivedAt, createdAt, updatedAt }
@@ -141,16 +136,16 @@ public func timestamp() -> String { ISO8601DateFormatter().string(from: Date()) 
 func validateTimestamps(_ values: [String]) throws {
     for value in values where !value.isEmpty {
         let f = ISO8601DateFormatter(); f.formatOptions.insert(.withFractionalSeconds)
-        guard f.date(from: value) != nil || ISO8601DateFormatter().date(from: value) != nil else { throw SuirenError("时间戳无效") }
+        guard f.date(from: value) != nil || ISO8601DateFormatter().date(from: value) != nil else { throw SuirenError(.invalid_timestamp) }
     }
 }
 
 public enum Money {
     public static func parse(_ input: String) throws -> Int64 {
         let value = input.trimmingCharacters(in: .whitespaces)
-        guard value.range(of: #"^\d+(\.\d{1,2})?$"#, options: .regularExpression) != nil else { throw SuirenError("金额须为非负数字，最多两位小数") }
+        guard value.range(of: #"^\d+(\.\d{1,2})?$"#, options: .regularExpression) != nil else { throw SuirenError(.enter_a_nonnegative_amount_with_at_most_two_decimal_places) }
         let parts = value.split(separator: "."), fraction = parts.count == 2 ? String(parts[1]).padding(toLength: 2, withPad: "0", startingAt: 0) : "00"
-        guard let cents = Int64(String(parts[0]) + fraction) else { throw SuirenError("金额过大") }; return cents
+        guard let cents = Int64(String(parts[0]) + fraction) else { throw SuirenError(.amount_is_too_large) }; return cents
     }
     public static func text(_ cents: Int64) -> String { "\(cents / 100).\(String(format: "%02lld", cents % 100))" }
 }
@@ -162,7 +157,7 @@ public struct ServerAddress: Codable, Equatable, Identifiable, Sendable {
     public init(url: String, name: String) { self.url = url; self.name = name }
     public static func normalize(_ input: String, allowHTTP: Bool = false) throws -> String {
         var raw = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty, !raw.contains("\\"), raw.rangeOfCharacter(from: .whitespacesAndNewlines) == nil else { throw SuirenError("请输入有效服务器地址") }
+        guard !raw.isEmpty, !raw.contains("\\"), raw.rangeOfCharacter(from: .whitespacesAndNewlines) == nil else { throw SuirenError(.enter_a_valid_server_address) }
         if !raw.contains("://") {
             let host = raw.split(separator: "/").first!.split(separator: ":").first.map(String.init) ?? ""
             let local = host == "localhost" || raw.hasPrefix("[") || host.range(of: #"^[0-9.]+$"#, options: .regularExpression) != nil
@@ -170,14 +165,14 @@ public struct ServerAddress: Codable, Equatable, Identifiable, Sendable {
         }
         guard var c = URLComponents(string: raw), let host = c.host, !host.isEmpty, c.user == nil, c.password == nil,
               c.query == nil, c.fragment == nil, c.scheme?.lowercased() == "https" || (allowHTTP && c.scheme?.lowercased() == "http"),
-              c.port == nil || (1...65535).contains(c.port!) else { throw SuirenError("地址无效；正式版本须使用 HTTPS，不能含凭据、查询参数或片段") }
+              c.port == nil || (1...65535).contains(c.port!) else { throw SuirenError(.invalid_address_release_builds_require_https_without_credentials_query_parameters) }
         if host.range(of: #"^\d+\.\d+\.\d+\.\d+$"#, options: .regularExpression) != nil {
-            guard host.split(separator: ".").allSatisfy({ Int($0).map { (0...255).contains($0) } ?? false }) else { throw SuirenError("IPv4 地址无效") }
+            guard host.split(separator: ".").allSatisfy({ Int($0).map { (0...255).contains($0) } ?? false }) else { throw SuirenError(.invalid_ipv4_address) }
         }
         c.scheme = c.scheme?.lowercased(); c.host = host.lowercased()
         if (c.scheme == "https" && c.port == 443) || (c.scheme == "http" && c.port == 80) { c.port = nil }
         if !c.path.hasSuffix("/") { c.path += "/" }
-        guard let result = c.url?.absoluteString else { throw SuirenError("服务器地址无效") }; return result
+        guard let result = c.url?.absoluteString else { throw SuirenError(.invalid_server_address) }; return result
     }
 }
 
@@ -195,11 +190,11 @@ public struct AppSettings: Codable, Equatable, Sendable {
 public enum AccountValidation {
     public static let passwordHint = "8–72 个字符，仅限英文字母、数字、半角符号和空格；不支持中文或换行，无大小写、数字组合要求。"
     public static func validate(username: String, password: String, confirmation: String? = nil) throws {
-        guard !username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, username.trimmingCharacters(in: .whitespacesAndNewlines).utf8.count <= 100 else { throw SuirenError("账号不能为空且最多 100 个 UTF-8 字节") }
-        guard !password.isEmpty else { throw SuirenError("请输入密码") }
+        guard !username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, username.trimmingCharacters(in: .whitespacesAndNewlines).utf8.count <= 100 else { throw SuirenError(.account_is_required_and_must_be_at_most_100_utf) }
+        guard !password.isEmpty else { throw SuirenError(.enter_a_password) }
         if let confirmation {
-            guard (8...72).contains(password.utf8.count), password.utf8.allSatisfy({ (32...126).contains($0) }) else { throw SuirenError(passwordHint) }
-            guard password == confirmation else { throw SuirenError("两次密码不一致") }
+            guard (8...72).contains(password.utf8.count), password.utf8.allSatisfy({ (32...126).contains($0) }) else { throw SuirenError(.password_8_72_characters_english_letters_digits_ascii_symbols_and_spaces) }
+            guard password == confirmation else { throw SuirenError(.passwords_do_not_match) }
         }
     }
 }

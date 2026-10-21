@@ -17,7 +17,7 @@ final class SQLiteDatabase {
     init(url: URL) throws {
         if url.path != ":memory:" { try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true) }
         guard sqlite3_open_v2(url.path, &handle, SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK else {
-            sqlite3_close(handle); handle = nil; throw SuirenError("打开本机数据库失败")
+            sqlite3_close(handle); handle = nil; throw SuirenError(.could_not_open_the_local_database)
         }
         do {
             try execute("PRAGMA foreign_keys=ON")
@@ -26,7 +26,7 @@ final class SQLiteDatabase {
             // Immutable v1 migration. Future changes append a new version, never reset data.
             try execute("CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY)")
             let version = try scalar("SELECT COALESCE(MAX(version),0) FROM schema_migrations")
-            guard version <= 1 else { throw SuirenError("数据库来自更新版本，无法降级打开") }
+            guard version <= 1 else { throw SuirenError(.this_database_is_from_a_newer_version_and_cannot_be) }
             if version == 0 {
                 try execute("BEGIN IMMEDIATE")
                 do {
@@ -40,28 +40,28 @@ final class SQLiteDatabase {
         } catch { sqlite3_close(handle); handle = nil; throw error }
     }
     deinit { sqlite3_close(handle) }
-    private func failure(_ context: String) -> SuirenError {
-        SuirenError("\(context)：\(handle.map { String(cString: sqlite3_errmsg($0)) } ?? "SQLite unavailable")")
+    private func failure(_ code: SuirenError.Code, arguments: [String] = []) -> SuirenError {
+        SuirenError(code, arguments: arguments, technicalDetail: handle.map { String(cString: sqlite3_errmsg($0)) })
     }
     private func execute(_ sql: String) throws {
-        guard sqlite3_exec(handle, sql, nil, nil, nil) == SQLITE_OK else { throw failure("本机数据库事务失败") }
+        guard sqlite3_exec(handle, sql, nil, nil, nil) == SQLITE_OK else { throw failure(.local_database_transaction_failed) }
     }
     private func scalar(_ sql: String) throws -> Int {
         var statement: OpaquePointer?
-        guard sqlite3_prepare_v2(handle, sql, -1, &statement, nil) == SQLITE_OK else { throw failure("读取数据库版本失败") }
+        guard sqlite3_prepare_v2(handle, sql, -1, &statement, nil) == SQLITE_OK else { throw failure(.could_not_read_the_database_version) }
         defer { sqlite3_finalize(statement) }
-        guard sqlite3_step(statement) == SQLITE_ROW else { throw failure("读取数据库版本失败") }
+        guard sqlite3_step(statement) == SQLITE_ROW else { throw failure(.could_not_read_the_database_version) }
         return Int(sqlite3_column_int(statement, 0))
     }
     private func rows<T: Decodable>(_ table: String, _: T.Type) throws -> [String: T] {
         var statement: OpaquePointer?
-        guard sqlite3_prepare_v2(handle, "SELECT id,payload FROM \(table)", -1, &statement, nil) == SQLITE_OK else { throw failure("读取 \(table) 失败") }
+        guard sqlite3_prepare_v2(handle, "SELECT id,payload FROM \(table)", -1, &statement, nil) == SQLITE_OK else { throw failure(.could_not_read, arguments: [String(describing: table)]) }
         defer { sqlite3_finalize(statement) }
         var result: [String: T] = [:]
         while true {
             let code = sqlite3_step(statement)
             if code == SQLITE_DONE { break }
-            guard code == SQLITE_ROW, let key = sqlite3_column_text(statement, 0), let bytes = sqlite3_column_blob(statement, 1) else { throw failure("读取 \(table) 失败") }
+            guard code == SQLITE_ROW, let key = sqlite3_column_text(statement, 0), let bytes = sqlite3_column_blob(statement, 1) else { throw failure(.could_not_read, arguments: [String(describing: table)]) }
             result[String(cString: key)] = try decoder.decode(T.self, from: Data(bytes: bytes, count: Int(sqlite3_column_bytes(statement, 1))))
         }
         return result
@@ -69,14 +69,14 @@ final class SQLiteDatabase {
     private func replace<T: Encodable>(_ table: String, _ values: [String: T]) throws {
         try execute("DELETE FROM \(table)")
         var statement: OpaquePointer?
-        guard sqlite3_prepare_v2(handle, "INSERT INTO \(table)(id,payload) VALUES(?,?)", -1, &statement, nil) == SQLITE_OK else { throw failure("保存 \(table) 失败") }
+        guard sqlite3_prepare_v2(handle, "INSERT INTO \(table)(id,payload) VALUES(?,?)", -1, &statement, nil) == SQLITE_OK else { throw failure(.could_not_save, arguments: [String(describing: table)]) }
         defer { sqlite3_finalize(statement) }
         for (id, value) in values {
             let data = try encoder.encode(value)
             let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-            guard sqlite3_bind_text(statement, 1, id, -1, transient) == SQLITE_OK else { throw failure("绑定记录编号失败") }
+            guard sqlite3_bind_text(statement, 1, id, -1, transient) == SQLITE_OK else { throw failure(.could_not_bind_the_record_id) }
             let code = data.withUnsafeBytes { sqlite3_bind_blob(statement, 2, $0.baseAddress, Int32($0.count), transient) }
-            guard code == SQLITE_OK, sqlite3_step(statement) == SQLITE_DONE else { throw failure("保存 \(table) 失败") }
+            guard code == SQLITE_OK, sqlite3_step(statement) == SQLITE_DONE else { throw failure(.could_not_save, arguments: [String(describing: table)]) }
             sqlite3_reset(statement); sqlite3_clear_bindings(statement)
         }
     }

@@ -136,37 +136,37 @@ class LocalBackupRepositoryImpl @Inject constructor(
         val backup = try {
             json.decodeFromString<LocalBackup>(content)
         } catch (error: SerializationException) {
-            throw IllegalArgumentException("备份文件格式无效或内容损坏", error)
+            throw IllegalArgumentException("error_backup_invalid", error)
         }
-        require(backup.format == LOCAL_BACKUP_FORMAT) { "不是 SuirenX 本地备份文件" }
-        require(backup.version == LOCAL_BACKUP_VERSION) { "不支持的备份版本" }
+        require(backup.format == LOCAL_BACKUP_FORMAT) { "error_backup_wrong_format" }
+        require(backup.version == LOCAL_BACKUP_VERSION) { "error_backup_version" }
         val ids = HashSet<String>()
         backup.assets.forEach { asset ->
-            require(asset.id.isNotBlank() && ids.add(asset.id)) { "备份包含重复或空的资产编号" }
-            require(asset.name.isNotBlank() && asset.priceCents >= 0 && (asset.salePriceCents == null || asset.salePriceCents >= 0)) { "备份包含无效资产资料" }
+            require(asset.id.isNotBlank() && ids.add(asset.id)) { "error_backup_asset_id" }
+            require(asset.name.isNotBlank() && asset.priceCents >= 0 && (asset.salePriceCents == null || asset.salePriceCents >= 0)) { "error_backup_asset_invalid" }
             val purchase = LocalDate.parse(asset.purchaseDate)
             val status = assetStatus(asset.status)
             val retired = asset.retiredDate?.let(LocalDate::parse)
             require(status == AssetStatus.Active && retired == null || status == AssetStatus.Retired && retired != null && retired >= purchase) {
-                "备份包含不一致的退役资料"
+                "error_backup_retirement"
             }
             asset.createdAt.takeIf(String::isNotBlank)?.let(Instant::parse)
             asset.updatedAt.takeIf(String::isNotBlank)?.let(Instant::parse)
             asset.archivedAt?.let(Instant::parse)
             asset.warrantyEndDate?.let(LocalDate::parse)
-            require(asset.tags.size <= 20 && asset.tags.all { it.length <= 30 }) { "备份包含过多或过长标签" }
-            require(asset.notes.length <= 2000) { "备份备注过长" }
+            require(asset.tags.size <= 20 && asset.tags.all { it.length <= 30 }) { "error_backup_tags" }
+            require(asset.notes.length <= 2000) { "error_backup_notes" }
         }
         val expiryIds = HashSet<String>()
         backup.expiryItems.forEach { item ->
-            require(item.id.isNotBlank() && expiryIds.add(item.id) && item.name.isNotBlank()) { "备份包含无效用品" }
+            require(item.id.isNotBlank() && expiryIds.add(item.id) && item.name.isNotBlank()) { "error_backup_expiry_invalid" }
             LocalDate.parse(item.packageExpiryDate)
             val opened = item.openedDate?.let(LocalDate::parse)
-            require((opened == null) == (item.openedValidityDays == null) && (item.openedValidityDays == null || item.openedValidityDays > 0)) { "备份包含不一致的开封期限" }
+            require((opened == null) == (item.openedValidityDays == null) && (item.openedValidityDays == null || item.openedValidityDays > 0)) { "error_backup_opened_period" }
             item.createdAt.takeIf(String::isNotBlank)?.let(Instant::parse)
             item.updatedAt.takeIf(String::isNotBlank)?.let(Instant::parse)
             item.archivedAt?.let(Instant::parse)
-            require(item.notes.length <= 2000) { "备份备注过长" }
+            require(item.notes.length <= 2000) { "error_backup_notes" }
             ExpiryItemStatus.valueOf(item.status)
         }
         return backup
@@ -199,7 +199,7 @@ class LocalBackupRepositoryImpl @Inject constructor(
     private fun assetStatus(value: String): AssetStatus = when (value) {
         "ACTIVE", "Active" -> AssetStatus.Active
         "RETIRED", "Retired" -> AssetStatus.Retired
-        else -> error("备份包含无效资产状态")
+        else -> error("error_backup_asset_status")
     }
 
     private suspend fun <T> attempt(block: suspend () -> T): Result<T> = try {

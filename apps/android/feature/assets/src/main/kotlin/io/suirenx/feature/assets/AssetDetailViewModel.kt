@@ -1,5 +1,6 @@
 package io.suirenx.feature.assets
 
+import io.suirenx.core.model.UserFacingErrors
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -109,7 +110,7 @@ class AssetDetailViewModel @Inject constructor(
                     },
                     onFailure = { error ->
                         if (error is CancellationException) throw error
-                        uiState.update { it.copy(deleteError = error.message ?: "删除失败，请重试") }
+                        uiState.update { it.copy(deleteError = UserFacingErrors.codeOrFallback(error.message, "error_delete_failed")) }
                     },
                 )
             } finally {
@@ -128,7 +129,7 @@ class AssetDetailViewModel @Inject constructor(
         val action = updateAssetSalePrice ?: return
         if (state.isSaving || !asset.isArchived) return
         val cents = try { parseSalePrice(state.salePriceInput) } catch (error: IllegalArgumentException) {
-            uiState.update { it.copy(salePriceError = error.message) }; return
+            uiState.update { it.copy(salePriceError = UserFacingErrors.codeOrFallback(error.message, "error_operation_failed")) }; return
         }
         loadJob?.cancel()
         uiState.update { it.copy(isSavingSalePrice = true, salePriceError = null) }
@@ -142,7 +143,7 @@ class AssetDetailViewModel @Inject constructor(
                     },
                     onFailure = { error ->
                         if (error is CancellationException) throw error
-                        uiState.update { it.copy(salePriceError = error.message ?: "卖出价格保存失败，请重试") }
+                        uiState.update { it.copy(salePriceError = UserFacingErrors.codeOrFallback(error.message, "error_sale_price_save_failed")) }
                     },
                 )
             } finally { uiState.update { it.copy(isSavingSalePrice = false) } }
@@ -180,12 +181,12 @@ class AssetDetailViewModel @Inject constructor(
         val date = if (target == AssetStatus.Retired) {
             try {
                 if (!state.retiredDateInput.matches(Regex("[0-9]{4}-[0-9]{2}-[0-9]{2}"))) {
-                    uiState.update { it.copy(statusError = "请输入有效日期，格式为 YYYY-MM-DD") }
+                    uiState.update { it.copy(statusError = "error_date_invalid") }
                     return
                 }
                 LocalDate.parse(state.retiredDateInput)
             } catch (_: DateTimeParseException) {
-                uiState.update { it.copy(statusError = "请输入有效日期，格式为 YYYY-MM-DD") }
+                uiState.update { it.copy(statusError = "error_date_invalid") }
                 return
             }
         } else null
@@ -205,8 +206,8 @@ class AssetDetailViewModel @Inject constructor(
                         uiState.update {
                             it.copy(
                                 isSavingStatus = false,
-                                statusError = if (error is IllegalArgumentException) error.message
-                                    else "状态保存失败，请检查网络、后端及退役日期后重试",
+                                statusError = if (error is IllegalArgumentException) UserFacingErrors.codeOrFallback(error.message, "error_operation_failed")
+                                    else "error_asset_status_save_failed",
                             )
                         }
                     },
@@ -245,7 +246,7 @@ class AssetDetailViewModel @Inject constructor(
                     },
                     onFailure = { error ->
                         if (error is CancellationException) throw error
-                        uiState.update { it.copy(archiveError = "保存失败，请检查网络或后端后重试") }
+                        uiState.update { it.copy(archiveError = "error_asset_archive_save_failed") }
                     },
                 )
             } finally {
@@ -274,7 +275,7 @@ class AssetDetailViewModel @Inject constructor(
                         uiState.update {
                             it.copy(
                                 isLoading = false,
-                                errorMessage = "无法加载资产，请检查网络或后端地址后重试",
+                                errorMessage = "error_asset_load_failed",
                             )
                         }
                     }
@@ -293,7 +294,7 @@ private object NoopDetailModes : StorageModeRepository {
 internal fun parseSalePrice(value: String): Long? {
     val amount = value.trim()
     if (amount.isEmpty()) return null
-    require(amount.matches(Regex("[0-9]+(\\.[0-9]{1,2})?"))) { "请输入非负金额，最多两位小数" }
+    require(amount.matches(Regex("[0-9]+(\\.[0-9]{1,2})?"))) { "error_amount_invalid" }
     return try { java.math.BigDecimal(amount).movePointRight(2).longValueExact() }
-    catch (_: ArithmeticException) { throw IllegalArgumentException("金额过大，请检查输入") }
+    catch (_: ArithmeticException) { throw IllegalArgumentException("error_amount_too_large") }
 }

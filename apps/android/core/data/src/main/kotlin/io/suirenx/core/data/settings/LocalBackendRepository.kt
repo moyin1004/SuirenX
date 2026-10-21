@@ -1,5 +1,7 @@
 package io.suirenx.core.data.settings
 
+import io.suirenx.core.model.UserFacingErrors
+
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.suirenx.core.data.BuildConfig
@@ -50,7 +52,7 @@ class LocalBackendRepository @Inject constructor(
         val server = BackendServer(url, name.trim().ifEmpty { url })
         val servers = current.servers.toMutableList()
         val index = servers.indexOfFirst { it.url == url }
-        if (index < 0) require(successfullyTested.contains(url)) { "请先测试服务器地址，连接成功后才能添加" }
+        if (index < 0) require(successfullyTested.contains(url)) { "error_backend_probe_required" }
         if (index < 0) servers.add(server) else servers[index] = server
         persist(BackendSettings(servers, url))
         if (index < 0) successfullyTested.remove(url)
@@ -62,10 +64,10 @@ class LocalBackendRepository @Inject constructor(
             val url = normalizeBackendAddress(address, BuildConfig.DEBUG)
             loadIfNeeded()
             val current = requireNotNull(settings.value)
-            if (originalUrl != null) require(current.servers.any { it.url == originalUrl }) { "该服务器已删除" }
-            require(current.servers.none { it.url == url && it.url != originalUrl }) { "该地址已存在，请编辑已有服务器" }
+            if (originalUrl != null) require(current.servers.any { it.url == originalUrl }) { "error_backend_deleted" }
+            require(current.servers.none { it.url == url && it.url != originalUrl }) { "error_backend_duplicate" }
             if (originalUrl == null || originalUrl != url) {
-                require(successfullyTested.contains(url)) { "请先测试服务器地址，连接成功后才能添加" }
+                require(successfullyTested.contains(url)) { "error_backend_probe_required" }
             }
             val server = BackendServer(url, name.trim().ifEmpty { url })
             val servers = if (originalUrl == null) current.servers + server else current.servers.map { if (it.url == originalUrl) server else it }
@@ -86,23 +88,23 @@ class LocalBackendRepository @Inject constructor(
                 .followRedirects(false)
                 .build()
             client.newCall(okhttp3.Request.Builder().url(url + "healthz").get().build()).execute().use { response ->
-                check(response.isSuccessful) { "连接测试失败：HTTP ${response.code}" }
+                check(response.isSuccessful) { "error_backend_http" }
                 val body = response.body?.string().orEmpty()
                 val healthy = runCatching { kotlinx.serialization.json.Json.parseToJsonElement(body)
                     .let { it as? kotlinx.serialization.json.JsonObject }?.get("status")?.toString() == "\"ok\"" }.getOrDefault(false)
-                check(healthy) { "服务有响应，但不是预期的健康接口" }
+                check(healthy) { "error_backend_health" }
                 successfullyTested.add(url)
-                Result.success("服务可达；账号登录和数据同步仍需单独验证")
+                Result.success("message_backend_reachable")
             }
         }
     } catch (error: CancellationException) { throw error }
     catch (error: Exception) {
         runCatching { normalizeBackendAddress(address, BuildConfig.DEBUG) }.getOrNull()?.let(successfullyTested::remove)
         val message = when (error) {
-            is javax.net.ssl.SSLException -> "证书验证失败，请检查 HTTPS 配置"
-            is java.net.SocketTimeoutException -> "连接超时，请检查地址和网络"
-            is java.io.IOException -> "无法连接，请检查服务器地址、端口和网络"
-            else -> error.message ?: "连接测试失败"
+            is javax.net.ssl.SSLException -> "error_backend_tls"
+            is java.net.SocketTimeoutException -> "error_backend_timeout"
+            is java.io.IOException -> "error_backend_network"
+            else -> UserFacingErrors.codeOrFallback(error.message, "error_backend_probe_failed")
         }
         Result.failure(IllegalStateException(message, error))
     }
@@ -110,14 +112,14 @@ class LocalBackendRepository @Inject constructor(
     override suspend fun select(url: String): Result<Unit> = perform {
         loadIfNeeded()
         val current = requireNotNull(settings.value)
-        require(current.servers.any { it.url == url }) { "该地址已不存在，请重新添加" }
+        require(current.servers.any { it.url == url }) { "error_backend_missing_readd" }
         persist(current.copy(activeUrl = url))
     }
 
     override suspend fun remove(url: String): Result<Unit> = perform {
         loadIfNeeded()
         val current = requireNotNull(settings.value)
-        require(current.servers.any { it.url == url }) { "该地址已不存在" }
+        require(current.servers.any { it.url == url }) { "error_backend_missing" }
         // Address configuration is independent from account login; removing a
         // saved address must not silently log the user out.
         persist(current.copy(
@@ -138,7 +140,7 @@ class LocalBackendRepository @Inject constructor(
     private fun persist(settings: BackendSettings) {
         val stored = StoredSettings(settings.servers.map { StoredServer(it.url, it.name) }, settings.activeUrl)
         check(preferences.edit().putString("settings", json.encodeToString(stored)).commit()) {
-            "无法保存地址，请重试"
+            "error_backend_save_failed"
         }
         mutableSettings.value = settings
     }

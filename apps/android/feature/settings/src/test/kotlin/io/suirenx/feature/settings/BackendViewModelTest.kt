@@ -103,13 +103,29 @@ class BackendViewModelTest {
         vm.onAuthPasswordChanged("password")
         vm.register("different")
         dispatcher.scheduler.advanceUntilIdle()
-        assertEquals("两次密码不一致", vm.uiState.value.authError)
+        assertEquals("error_auth_password_mismatch", vm.uiState.value.authError)
+        vm.onAuthConfirmationChanged("password")
         vm.register("password")
         dispatcher.scheduler.advanceUntilIdle()
         assertEquals(1, vm.uiState.value.authSuccessVersion)
         assertEquals("", vm.uiState.value.authPassword)
+        assertEquals("", vm.uiState.value.authConfirmation)
         assertNull(vm.uiState.value.authError)
         assertEquals(StorageMode.Local, vm.uiState.value.mode)
+    }
+
+    @Test fun accountDraftRetainsConfirmationUntilExplicitReset() {
+        vm.onAuthUsernameChanged("owner")
+        vm.onAuthPasswordChanged("password")
+        vm.onAuthConfirmationChanged("password")
+        vm.refreshLocalSummary()
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals("password", vm.uiState.value.authConfirmation)
+        assertEquals("password", vm.uiState.value.authPassword)
+        vm.resetAuthForm()
+        assertEquals("", vm.uiState.value.authConfirmation)
+        assertEquals("", vm.uiState.value.authPassword)
+        assertEquals("owner", vm.uiState.value.authUsername)
     }
 
     @Test fun connectionCannotChangeDuringLogin() {
@@ -143,7 +159,7 @@ class BackendViewModelTest {
         dispatcher.scheduler.advanceUntilIdle()
         vm.confirmMigration()
         dispatcher.scheduler.advanceUntilIdle()
-        assertEquals("连接服务器失败", vm.uiState.value.migrationError)
+        assertEquals("error_migration_failed", vm.uiState.value.migrationError)
         vm.removeServer("https://one.test/")
         dispatcher.scheduler.advanceUntilIdle()
         assertNull(vm.uiState.value.migrationError)
@@ -198,7 +214,7 @@ class BackendViewModelTest {
         vm.onAuthPasswordChanged("password")
         vm.login()
         dispatcher.scheduler.advanceUntilIdle()
-        assertEquals("当前已有登录账号，请先退出当前账号后再登录", vm.uiState.value.authError)
+        assertEquals("error_auth_logout_first", vm.uiState.value.authError)
         assertEquals("owner", vm.uiState.value.auth.username)
     }
 
@@ -227,7 +243,7 @@ class BackendViewModelTest {
         vm.confirmRestore()
         dispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals("恢复失败，原数据未改变", vm.uiState.value.backupError)
+        assertEquals("error_backup_restore_failed", vm.uiState.value.backupError)
         assertEquals(0, vm.uiState.value.backupSummary?.assetCount)
         assertEquals("valid backup", vm.uiState.value.backupContent)
         assertFalse(vm.uiState.value.backupBusy)

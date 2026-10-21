@@ -24,6 +24,7 @@ struct PasswordInput: UIViewRepresentable {
     }
     func updateUIView(_ view: UITextField, context: Context) {
         context.coordinator.parent = self
+        if view.placeholder != title { view.placeholder = title }
         if view.textContentType != contentType { view.textContentType = contentType }
         if view.isEnabled != context.environment.isEnabled { view.isEnabled = context.environment.isEnabled }
         if view.isSecureTextEntry != secure {

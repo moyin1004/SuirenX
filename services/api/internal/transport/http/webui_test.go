@@ -30,7 +30,7 @@ func TestWebClientAssetsAreEmbeddedWithSecurityHeaders(t *testing.T) {
 	for _, asset := range []struct {
 		path        string
 		contentType string
-	}{{"/web/app.js", "text/javascript; charset=utf-8"}, {"/web/app.css", "text/css; charset=utf-8"}} {
+	}{{"/web/app.js", "text/javascript; charset=utf-8"}, {"/web/app.css", "text/css; charset=utf-8"}, {"/web/i18n.js", "text/javascript; charset=utf-8"}, {"/web/zh-Hans.js", "text/javascript; charset=utf-8"}, {"/web/en.js", "text/javascript; charset=utf-8"}} {
 		response := request(s, "GET", asset.path, "")
 		if response.Code != 200 || response.Header().Get("Content-Type") != asset.contentType || response.Body.Len() == 0 {
 			t.Errorf("%s response: status=%d content-type=%q body=%d bytes", asset.path, response.Code, response.Header().Get("Content-Type"), response.Body.Len())

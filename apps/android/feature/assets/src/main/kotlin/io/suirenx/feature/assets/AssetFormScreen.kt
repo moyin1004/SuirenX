@@ -1,5 +1,9 @@
 package io.suirenx.feature.assets
 
+import io.suirenx.core.ui.R as CopyR
+import io.suirenx.core.ui.localization.uiText
+import io.suirenx.core.ui.localization.uiQuantity
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Row
@@ -77,10 +81,10 @@ fun AssetFormRoute(
     if (showDiscard) {
         AlertDialog(
             onDismissRequest = { showDiscard = false },
-            title = { Text("放弃未保存修改？") },
-            text = { Text("当前表单还有未保存内容，离开后这些修改会丢失。") },
-            confirmButton = { TextButton(onClick = { showDiscard = false; onClose() }) { Text("放弃修改") } },
-            dismissButton = { TextButton(onClick = { showDiscard = false }) { Text("继续编辑") } },
+            title = { Text(uiText(CopyR.string.copy_discard_unsaved_changes)) },
+            text = { Text(uiText(CopyR.string.copy_this_form_has_unsaved_changes_leaving_discards_them)) },
+            confirmButton = { TextButton(onClick = { showDiscard = false; onClose() }) { Text(uiText(CopyR.string.copy_discard_changes)) } },
+            dismissButton = { TextButton(onClick = { showDiscard = false }) { Text(uiText(CopyR.string.copy_keep_editing)) } },
         )
     }
     AssetFormScreen(
@@ -145,11 +149,11 @@ fun AssetFormScreen(
                 state.loadError -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            "无法加载资产，请检查网络或后端地址后重试",
+                            uiText(CopyR.string.copy_unable_to_load_asset_check_your_connection_and_server_address),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Spacer(Modifier.height(12.dp))
-                        Button(onClick = onClose) { Text("关闭") }
+                        Button(onClick = onClose) { Text(uiText(CopyR.string.copy_close)) }
                     }
                 }
                 else -> FormBody(state, onNameChanged, onPriceChanged, onPurchaseDateChanged, onPurchaseChannelChanged, onWarrantyEndDateChanged, onNotesChanged, onTagsChanged, onOpenIconPicker, onSave)
@@ -184,7 +188,7 @@ private fun FormTopBar(
             Box(contentAlignment = Alignment.Center) {
                 Icon(
                     imageVector = Icons.Default.Close,
-                    contentDescription = "关闭",
+                    contentDescription = uiText(CopyR.string.copy_close),
                     modifier = Modifier.size(22.dp),
                 )
             }
@@ -213,7 +217,7 @@ private fun FormTopBar(
                 } else {
                     Icon(
                         imageVector = Icons.Default.Check,
-                        contentDescription = "保存",
+                        contentDescription = uiText(CopyR.string.copy_save),
                         modifier = Modifier.size(24.dp),
                     )
                 }
@@ -245,7 +249,7 @@ private fun FormBody(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Spacer(Modifier.height(8.dp))
-        FormSection(title = "资产图标") {
+        FormSection(title = uiText(CopyR.string.copy_asset_icon)) {
             val option = assetIconOption(state.iconKey)
             Surface(
                 onClick = onOpenIconPicker,
@@ -261,14 +265,14 @@ private fun FormBody(
                 ) {
                     AssetCategoryIcon(option, modifier = Modifier.size(48.dp), glyphSize = 44.dp)
                     Column(Modifier.weight(1f)) {
-                        Text(option.label, fontSize = 14.sp)
-                        Text("当前仅支持内置图标", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(uiText(option.label), fontSize = 14.sp)
+                        Text(uiText(CopyR.string.copy_built_in_icons_only), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Text("更换", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(uiText(CopyR.string.copy_change), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
-        FormSection(title = "基本信息") {
+        FormSection(title = uiText(CopyR.string.copy_basic_details)) {
             OutlinedTextField(
                 value = state.name,
                 onValueChange = onNameChanged,
@@ -296,16 +300,16 @@ private fun FormBody(
                 value = state.purchaseChannel,
                 onValueChange = onPurchaseChannelChanged,
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("购买渠道（选填）") },
+                label = { Text(uiText(CopyR.string.copy_purchase_channel_optional)) },
                 singleLine = true,
                 enabled = !state.isSaving,
             )
         }
-        FormSection(title = "生命周期") {
+        FormSection(title = uiText(CopyR.string.copy_lifecycle)) {
             DateInputField(
                 value = state.warrantyEndDate,
                 onValueChange = onWarrantyEndDateChanged,
-                label = "保修截止日（选填）",
+                label = uiText(CopyR.string.copy_warranty_end_date_optional),
                 enabled = !state.isSaving,
                 allowEmpty = true,
             )
@@ -313,18 +317,18 @@ private fun FormBody(
                 value = state.tags,
                 onValueChange = onTagsChanged,
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("标签（选填，用逗号分隔）") },
-                supportingText = { Text("最多 20 个") },
+                label = { Text(uiText(CopyR.string.copy_tags_optional_comma_separated)) },
+                supportingText = { Text(uiText(CopyR.string.copy_up_to_20_tags)) },
                 singleLine = false,
                 enabled = !state.isSaving,
             )
         }
-        FormSection(title = "备注") {
+        FormSection(title = uiText(CopyR.string.copy_notes)) {
             OutlinedTextField(
                 value = state.notes,
                 onValueChange = onNotesChanged,
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("备注（选填）") },
+                label = { Text(uiText(CopyR.string.copy_notes_optional)) },
                 minLines = 3,
                 maxLines = 8,
                 enabled = !state.isSaving,
@@ -332,7 +336,7 @@ private fun FormBody(
         }
         state.errorMessage?.let { message ->
             Text(
-                text = message,
+                text = uiText(message),
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             )
@@ -340,7 +344,7 @@ private fun FormBody(
         Button(onClick = onSave, enabled = !state.isSaving, modifier = Modifier.fillMaxWidth().height(48.dp),
             shape = RoundedCornerShape(14.dp),
             colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary, contentColor = MaterialTheme.colorScheme.onSecondary)) {
-            Text(if (state.isSaving) "保存中…" else "保存资产")
+            Text(if (state.isSaving) uiText(CopyR.string.copy_saving) else uiText(CopyR.string.copy_save_asset))
         }
         Spacer(Modifier.height(24.dp))
     }
@@ -361,13 +365,13 @@ private fun DateInputField(
         onValueChange = onValueChange,
         modifier = modifier.fillMaxWidth(),
         label = { Text(label) },
-        supportingText = { Text(if (allowEmpty) "YYYY-MM-DD，可留空" else "YYYY-MM-DD") },
+        supportingText = { Text(if (allowEmpty) uiText(CopyR.string.copy_yyyy_mm_dd_optional) else "YYYY-MM-DD") },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
         enabled = enabled,
         singleLine = true,
         trailingIcon = {
             IconButton(onClick = { showPicker = true }, enabled = enabled) {
-                Icon(Icons.Default.DateRange, contentDescription = "选择日期")
+                Icon(Icons.Default.DateRange, contentDescription = uiText(CopyR.string.copy_choose_date))
             }
         },
     )
@@ -382,9 +386,9 @@ private fun DateInputField(
                         showPicker = false
                     },
                     enabled = pickerState.selectedDateMillis != null,
-                ) { Text("确定") }
+                ) { Text(uiText(CopyR.string.copy_ok)) }
             },
-            dismissButton = { TextButton(onClick = { showPicker = false }) { Text("取消") } },
+            dismissButton = { TextButton(onClick = { showPicker = false }) { Text(uiText(CopyR.string.copy_cancel)) } },
         ) { DatePicker(state = pickerState) }
     }
 }
@@ -427,7 +431,7 @@ private fun AssetFormScreenPreview() {
         AssetFormScreen(
             state = AssetFormUiState(
                 isEdit = true,
-                name = "机械键盘",
+                name = uiText(CopyR.string.copy_mechanical_keyboard),
                 price = "899.00",
                 purchaseDate = "2026-09-05",
             ),

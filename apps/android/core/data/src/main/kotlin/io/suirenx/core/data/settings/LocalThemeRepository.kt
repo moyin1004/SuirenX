@@ -19,7 +19,7 @@ class LocalThemeRepository @Inject constructor(@ApplicationContext context: Cont
         return Result.success(Unit)
     }
     override suspend fun select(theme: ThemeMode): Result<Unit> {
-        if (!preferences.edit().putString(KEY_THEME, theme.name).commit()) return Result.failure(IllegalStateException("无法保存主题设置"))
+        if (!preferences.edit().putString(KEY_THEME, theme.name).commit()) return Result.failure(IllegalStateException("error_theme_save_failed"))
         mutableTheme.value = theme
         return Result.success(Unit)
     }

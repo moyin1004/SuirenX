@@ -65,6 +65,84 @@ import XCTest
         }
         XCTAssertTrue(element.waitForExistence(timeout: 5)); XCTAssertTrue(element.isHittable)
     }
+    func testBilingualLocalizationKeepsUserDataAndNativePluralRules() {
+        verifyBilingualLocalization()
+    }
+    func testBilingualLocalizationAtLargestDynamicType() {
+        verifyBilingualLocalization(largeText: true)
+    }
+    private func verifyBilingualLocalization(largeText: Bool = false) {
+        let run = UUID().uuidString
+        func launchLanguage(_ language: String, locale: String) {
+            app = XCUIApplication()
+            app.launchArguments = ["-ui-testing", "-AppleLanguages", "(\(language))", "-AppleLocale", locale]
+            app.launchEnvironment["SUIRENX_TEST_RUN"] = run
+            if largeText { app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"] }
+            app.launch()
+            XCTAssertTrue(app.buttons["nav.assets"].waitForExistence(timeout: 15))
+        }
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .portrait
+        launchLanguage("en", locale: "en_US")
+        XCTAssertTrue(app.staticTexts["0 items need attention"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Assets and daily supplies are safely stored on this device."].exists)
+        app.buttons["nav.assets"].tap(); app.buttons["asset.add"].tap()
+        let name = app.textFields["asset.name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5)); name.tap(); name.typeText("Original user name")
+        XCUIDevice.shared.press(.home); app.activate()
+        XCTAssertEqual(name.value as? String, "Original user name", "Returning to the app keeps the unfinished draft")
+        app.buttons["asset.save"].tap()
+        let validation = app.staticTexts["Enter a nonnegative amount with at most two decimal places"]
+        reveal(validation); XCTAssertTrue(validation.exists)
+        let price = app.textFields["asset.price"]
+        // At accessibility text sizes the validation section is several screens below
+        // the amount field. Scroll the real Form until that field is realized again.
+        for _ in 0..<12 {
+            if price.exists && price.isHittable { break }
+            app.collectionViews.firstMatch.swipeDown()
+        }
+        XCTAssertTrue(price.waitForExistence(timeout: 5)); XCTAssertTrue(price.isHittable)
+        price.tap(); price.typeText("100")
+        saveEditor("asset.save")
+        reveal(record("Original user name"))
+        XCTAssertTrue(record("Original user name").exists)
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Held for 1 day")).firstMatch.exists)
+        XCTAssertFalse(app.alerts.firstMatch.exists, "Localized UI acceptance must not hide a credential or runtime error")
+        if largeText {
+            let window = app.windows.firstMatch.frame
+            for element in [record("Original user name"), app.buttons["asset.add"], app.buttons["asset.filter"], app.buttons["asset.tagFilter"]] {
+                XCTAssertGreaterThanOrEqual(element.frame.minX, window.minX - 1, "Large text must stay inside the viewport")
+                XCTAssertLessThanOrEqual(element.frame.maxX, window.maxX + 1, "Large text must stay inside the viewport")
+            }
+            XCTAssertEqual(app.buttons["nav.overview"].label, "Overview")
+            XCTAssertEqual(app.buttons["nav.settings"].label, "Settings")
+        }
+        shot("localization-english-asset-and-singular")
+        app.buttons["nav.settings"].tap()
+        let language = app.buttons["settings.row.language"]; reveal(language); language.tap()
+        XCTAssertTrue(app.staticTexts["English"].waitForExistence(timeout: 5))
+        XCUIDevice.shared.orientation = .landscapeLeft
+        XCTAssertTrue(app.buttons["language.openSettings"].waitForExistence(timeout: 5))
+        shot("localization-english-language-landscape")
+        XCUIDevice.shared.orientation = .portrait
+        app.buttons["language.openSettings"].tap()
+        app.activate()
+        XCTAssertTrue(app.buttons["language.openSettings"].waitForExistence(timeout: 5), "Returning from Settings preserves the navigation destination")
+        shot("localization-english-language-settings")
+        app.terminate()
+        launchLanguage("zh-Hans", locale: "zh_CN")
+        app.buttons["nav.assets"].tap()
+        reveal(record("Original user name"))
+        XCTAssertTrue(record("Original user name").exists, "Language changes never translate or discard user data")
+        XCTAssertTrue(app.staticTexts["资产概览"].exists)
+        shot("localization-chinese-user-data-preserved")
+        app.terminate()
+        launchLanguage("fr", locale: "fr_FR")
+        app.buttons["nav.assets"].tap()
+        XCTAssertTrue(app.staticTexts["资产概览"].waitForExistence(timeout: 5), "Unsupported languages fall back to the Chinese development language")
+        reveal(record("Original user name")); XCTAssertTrue(record("Original user name").exists)
+    }
+
     func testIPadWindowResizeAndDraftPersistence() throws {
         guard ProcessInfo.processInfo.environment["SUIRENX_IOS_WINDOWING_TESTS"] == "1" else { throw XCTSkip("Requires a dedicated iPadOS Windowed Apps environment; UI layout alone is not window-resize evidence") }
         launch()

@@ -1,5 +1,6 @@
 package io.suirenx.feature.settings
 
+import io.suirenx.core.model.UserFacingErrors
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -53,6 +54,7 @@ data class BackendUiState(
     val auth: AuthState = AuthState("", false),
     val authUsername: String = "",
     val authPassword: String = "",
+    val authConfirmation: String = "",
     val authBusy: Boolean = false,
     val authSuccessVersion: Int = 0,
     val authError: String? = null,
@@ -93,7 +95,7 @@ class BackendViewModel @Inject constructor(
             repository.settings.collect { settings ->
                 uiState.update {
                     if (it.settings?.activeUrl != settings?.activeUrl) it.copy(
-                        settings = settings, authUsername = "", authPassword = "", authError = null,
+                        settings = settings, authUsername = "", authPassword = "", authConfirmation = "", authError = null,
                         error = null, migrationError = null, migrationPreview = null, migrationResult = null,
                     ) else it.copy(settings = settings)
                 }
@@ -157,7 +159,7 @@ class BackendViewModel @Inject constructor(
         connectionTestJob?.cancel()
         val server = uiState.value.settings?.servers?.find { it.url == url }
         uiState.update { it.copy(inspectedServerUrl = url, editingServerUrl = url,
-            address = url, name = server?.name.orEmpty(), authUsername = it.accounts[url]?.username.orEmpty(), authPassword = "", authError = null,
+            address = url, name = server?.name.orEmpty(), authUsername = it.accounts[url]?.username.orEmpty(), authPassword = "", authConfirmation = "", authError = null,
             error = null, connectionTest = null, connectionTestAddress = null, connectionTestFailed = false, testingConnection = false) }
     }
     fun editServer(url: String?) {
@@ -174,7 +176,7 @@ class BackendViewModel @Inject constructor(
             repository.testConnection(testedAddress).fold(
                 onSuccess = { result -> uiState.update { current -> current.copy(testingConnection = false, connectionTest = result,
                     connectionTestAddress = testedAddress.takeIf { current.address.trim() == testedAddress }, connectionTestFailed = false) } },
-                onFailure = { error -> uiState.update { it.copy(testingConnection = false, connectionTest = error.message, connectionTestAddress = null, connectionTestFailed = true) } },
+                onFailure = { error -> uiState.update { it.copy(testingConnection = false, connectionTest = UserFacingErrors.codeOrFallback(error.message, "error_backend_probe_failed"), connectionTestAddress = null, connectionTestFailed = true) } },
             )
         }
     }
@@ -186,7 +188,7 @@ class BackendViewModel @Inject constructor(
             val addressChanged = state.editingServerUrl != null && state.address.trim() != state.editingServerUrl
             val requiresTest = state.editingServerUrl == null || addressChanged
             if (requiresTest && state.connectionTestAddress != state.address.trim()) {
-                return@perform Result.failure(IllegalStateException("请先测试当前服务器地址，连接成功后才能保存"))
+                return@perform Result.failure(IllegalStateException("error_backend_probe_before_save"))
             }
             if (editingCurrent && addressChanged) {
                 sync.cancelCurrent()
@@ -213,7 +215,7 @@ class BackendViewModel @Inject constructor(
             authRepository.initialize()
             uiState.update {
                 it.copy(
-                    authPassword = "", authError = null, error = null,
+                    authPassword = "", authConfirmation = "", authError = null, error = null,
                     migrationError = if (removingCurrent) null else it.migrationError,
                     migrationPreview = if (removingCurrent) null else it.migrationPreview,
                     migrationResult = if (removingCurrent) null else it.migrationResult,
@@ -227,7 +229,7 @@ class BackendViewModel @Inject constructor(
         modes.select(StorageMode.Local)
     }
     fun useRemote() = previewMigration()
-    fun cancelSync() { sync.cancelCurrent(); message("已停止此次请求，待同步数据保留") }
+    fun cancelSync() { sync.cancelCurrent(); message("message_sync_cancelled") }
     fun message(text: String) { uiState.update { it.copy(notice = text) } }
     fun refreshLocalSummary() {
         viewModelScope.launch {
@@ -242,8 +244,8 @@ class BackendViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val result = if (expiry) sync.resolveExpiryConflict(id, resolution) else sync.resolveConflict(id, resolution)
-                result.fold(onSuccess = { message("冲突已处理，其他记录继续同步"); schedule.onLocalChange() },
-                    onFailure = { error -> uiState.update { it.copy(error = error.message ?: "处理失败，请重试") } })
+                result.fold(onSuccess = { message("message_conflict_resolved"); schedule.onLocalChange() },
+                    onFailure = { error -> uiState.update { it.copy(error = UserFacingErrors.codeOrFallback(error.message, "error_conflict_resolution_failed")) } })
             } finally { uiState.update { it.copy(conflictBusy = false) } }
         }
     }
@@ -254,7 +256,7 @@ class BackendViewModel @Inject constructor(
         viewModelScope.launch {
             remoteImport.preview().fold(
                 onSuccess = { preview -> uiState.update { it.copy(migrationBusy = false, migrationPreview = preview) } },
-                onFailure = { error -> uiState.update { it.copy(migrationBusy = false, migrationError = error.message ?: "无法读取本地数据或服务器数据") } },
+                onFailure = { error -> uiState.update { it.copy(migrationBusy = false, migrationError = UserFacingErrors.codeOrFallback(error.message, "error_migration_preview_failed")) } },
             )
         }
     }
@@ -275,7 +277,7 @@ class BackendViewModel @Inject constructor(
                     dataChanges.notifyChanged()
                     schedule.onLocalChange()
                 },
-                onFailure = { error -> uiState.update { it.copy(migrationBusy = false, migrationError = error.message ?: "迁移失败；本地数据未改变") } },
+                onFailure = { error -> uiState.update { it.copy(migrationBusy = false, migrationError = UserFacingErrors.codeOrFallback(error.message, "error_migration_failed")) } },
             )
             } finally { uiState.update { it.copy(migrationBusy = false) } }
         }
@@ -283,8 +285,9 @@ class BackendViewModel @Inject constructor(
 
     fun onAuthUsernameChanged(value: String) { uiState.update { it.copy(authUsername = value, authError = null) } }
     fun onAuthPasswordChanged(value: String) { uiState.update { it.copy(authPassword = value, authError = null) } }
+    fun onAuthConfirmationChanged(value: String) { uiState.update { it.copy(authConfirmation = value, authError = null) } }
     fun resetAuthForm() {
-        if (!uiState.value.authBusy) uiState.update { it.copy(authPassword = "", authError = null) }
+        if (!uiState.value.authBusy) uiState.update { it.copy(authPassword = "", authConfirmation = "", authError = null) }
     }
     fun register(confirmation: String) {
         val state = uiState.value
@@ -305,9 +308,9 @@ class BackendViewModel @Inject constructor(
                 modes.select(StorageMode.Local).getOrThrow()
                 authRepository.logout()
             }.fold(
-                onSuccess = { uiState.update { it.copy(authBusy = false, authUsername = "", authPassword = "", authError = null,
+                onSuccess = { uiState.update { it.copy(authBusy = false, authUsername = "", authPassword = "", authConfirmation = "", authError = null,
                     error = null, migrationError = null, migrationPreview = null, migrationResult = null) } },
-                onFailure = { error -> uiState.update { it.copy(authBusy = false, authError = error.message ?: "退出登录失败") } },
+                onFailure = { error -> uiState.update { it.copy(authBusy = false, authError = UserFacingErrors.codeOrFallback(error.message, "error_logout_failed")) } },
             )
         }
     }
@@ -317,7 +320,7 @@ class BackendViewModel @Inject constructor(
         val target = state.inspectedServerUrl ?: state.settings?.activeUrl ?: return
         if (state.authBusy || state.busy) return
         if (state.auth.authenticated || state.accounts.isNotEmpty()) {
-            uiState.update { it.copy(authError = "当前已有登录账号，请先退出当前账号后再登录") }
+            uiState.update { it.copy(authError = "error_auth_logout_first") }
             return
         }
         accountValidation(state.authUsername, state.authPassword)?.let { reason ->
@@ -331,9 +334,9 @@ class BackendViewModel @Inject constructor(
                 }
                 action(target, state.authUsername, state.authPassword)
             }.fold(
-                onSuccess = { uiState.update { it.copy(authBusy = false, authPassword = "", authError = null,
+                onSuccess = { uiState.update { it.copy(authBusy = false, authPassword = "", authConfirmation = "", authError = null,
                     migrationError = null, error = null, authSuccessVersion = it.authSuccessVersion + 1) } },
-                onFailure = { error -> uiState.update { it.copy(authBusy = false, authError = error.message ?: "账号操作失败") } },
+                onFailure = { error -> uiState.update { it.copy(authBusy = false, authError = UserFacingErrors.codeOrFallback(error.message, "error_auth_operation_failed")) } },
             )
         }
     }
@@ -353,7 +356,7 @@ class BackendViewModel @Inject constructor(
                     events.tryEmit(BackendEvent.ExportBackup(content))
                 },
                 onFailure = { error ->
-                    uiState.update { it.copy(backupBusy = false, backupError = error.message ?: "备份失败，请重试") }
+                    uiState.update { it.copy(backupBusy = false, backupError = UserFacingErrors.codeOrFallback(error.message, "error_backup_failed")) }
                 },
             )
         }
@@ -365,7 +368,7 @@ class BackendViewModel @Inject constructor(
         viewModelScope.launch {
             backups.inspect(content).fold(
                 onSuccess = { summary -> uiState.update { it.copy(backupBusy = false, backupSummary = summary, backupContent = content) } },
-                onFailure = { error -> uiState.update { it.copy(backupBusy = false, backupError = error.message ?: "备份文件无效") } },
+                onFailure = { error -> uiState.update { it.copy(backupBusy = false, backupError = UserFacingErrors.codeOrFallback(error.message, "error_backup_invalid")) } },
             )
         }
     }
@@ -382,9 +385,9 @@ class BackendViewModel @Inject constructor(
                     uiState.update { it.copy(backupBusy = false, backupSummary = null, backupContent = null) }
                     dataChanges.notifyChanged()
                     schedule.onLocalChange()
-                    events.tryEmit(BackendEvent.Message("已恢复 ${summary.assetCount} 件资产、${summary.expiryItemCount} 件用品"))
+                    events.tryEmit(BackendEvent.Message("message_backup_restored"))
                 },
-                onFailure = { uiState.update { it.copy(backupBusy = false, backupError = "恢复失败，原数据未改变") } },
+                onFailure = { uiState.update { it.copy(backupBusy = false, backupError = "error_backup_restore_failed") } },
             )
         }
     }
@@ -403,7 +406,7 @@ class BackendViewModel @Inject constructor(
                     uiState.update { it.copy(busy = false) }
                 },
                 onFailure = { error ->
-                    uiState.update { it.copy(busy = false, error = error.message ?: "无法读取或保存地址，请重试") }
+                    uiState.update { it.copy(busy = false, error = UserFacingErrors.codeOrFallback(error.message, "error_backend_settings_failed")) }
                 },
             )
         }

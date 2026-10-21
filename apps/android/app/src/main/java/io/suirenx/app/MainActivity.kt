@@ -1,5 +1,9 @@
 package io.suirenx.app
 
+import io.suirenx.core.ui.R as CopyR
+import io.suirenx.core.ui.localization.uiText
+import io.suirenx.core.ui.localization.uiQuantity
+
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -85,6 +89,10 @@ private object Routes {
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(io.suirenx.core.ui.localization.LanguageSettings.wrapContext(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -211,10 +219,10 @@ private enum class HomeTab(
     // Material Symbols Rounded codepoints; see core/ui MaterialSymbol.
     val glyph: String,
 ) {
-    Overview("tab/overview", "总览", "\uE9B2"),
-    Assets("tab/assets", "资产", "\uE326"), // home
-    Tools("tab/tools", "工具", "\uE4FB"), // auto_graph
-    Settings("tab/settings", "设置", "\uE8B8"), // settings
+    Overview("tab/overview", "copy_overview", "\uE9B2"),
+    Assets("tab/assets", "copy_assets", "\uE326"), // home
+    Tools("tab/tools", "copy_tools", "\uE4FB"), // auto_graph
+    Settings("tab/settings", "copy_settings", "\uE8B8"), // settings
 }
 
 @Composable
@@ -285,7 +293,7 @@ private fun FloatingTabBar(
                 color = MaterialTheme.colorScheme.secondary, contentColor = MaterialTheme.colorScheme.onSecondary,
                 shadowElevation = 8.dp, modifier = Modifier.size(54.dp)) {
                 Box(contentAlignment = Alignment.Center) {
-                    MaterialSymbol(glyph = "\uE145", contentDescription = "新增资产", size = 26.dp)
+                    MaterialSymbol(glyph = "\uE145", contentDescription = uiText(CopyR.string.copy_add_asset), size = 26.dp)
                 }
             }
         }
@@ -333,10 +341,10 @@ private fun TabItem(
             // Filled glyph for the selected tab; compensate for the gear's
             // optical size to keep the four tabs visually balanced.
             if (tab == HomeTab.Assets) {
-                Icon(SuirenIcons.AssetBox, contentDescription = tab.label, tint = contentColor, modifier = Modifier.size(20.dp))
+                Icon(SuirenIcons.AssetBox, contentDescription = uiText(tab.label), tint = contentColor, modifier = Modifier.size(20.dp))
             } else MaterialSymbol(
                 glyph = tab.glyph,
-                contentDescription = tab.label,
+                contentDescription = uiText(tab.label),
                 tint = contentColor,
                 filled = selected,
                 size = 20.dp,
@@ -344,7 +352,7 @@ private fun TabItem(
                     .scale(if (tab == HomeTab.Settings) 1.1f else 1f),
             )
         }
-        Text(text = tab.label, fontSize = 10.sp, lineHeight = 14.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal, color = contentColor)
+        Text(text = uiText(tab.label), fontSize = 10.sp, lineHeight = 14.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal, color = contentColor)
     }
 }
 

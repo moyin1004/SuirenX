@@ -87,7 +87,8 @@ class AccountScreenTest {
                         onRetry = {}, onUseLocal = {}, onUseRemote = {},
                         onAuthUsernameChanged = { state.value = state.value.copy(authUsername = it) },
                         onAuthPasswordChanged = { state.value = state.value.copy(authPassword = it) },
-                        onResetAuthForm = { state.value = state.value.copy(authPassword = "") },
+                        onAuthConfirmationChanged = { state.value = state.value.copy(authConfirmation = it) },
+                        onResetAuthForm = { state.value = state.value.copy(authPassword = "", authConfirmation = "") },
                     )
                 }
             }
@@ -107,7 +108,9 @@ class AccountScreenTest {
         composeRule.onNodeWithContentDescription("隐藏密码").performClick()
         composeRule.onNode(password).assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Password))
         composeRule.onNodeWithText("注册").performClick()
-        composeRule.onNodeWithText(RegistrationPasswordHint).assertIsDisplayed()
+        composeRule.onNodeWithText(InstrumentationRegistry.getInstrumentation().targetContext.getString(
+            io.suirenx.core.ui.R.string.error_auth_password_rules,
+        )).assertIsDisplayed()
         composeRule.onNode(password).performTextInput("12345678")
         composeRule.onNode(hasSetTextAction() and hasText("确认密码")).performTextInput("12345678")
         composeRule.onAllNodesWithText("注册").onLast().assertIsEnabled()

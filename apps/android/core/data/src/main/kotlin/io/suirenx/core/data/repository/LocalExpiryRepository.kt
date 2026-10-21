@@ -28,7 +28,7 @@ class LocalExpiryRepository @Inject constructor(
     override suspend fun list(includeArchived: Boolean) = attempt {
         dao.getAll().map(::toDomain).filter { includeArchived || it.archivedAt == null }
     }
-    override suspend fun get(id: String) = attempt { toDomain(dao.getById(id) ?: error("未找到用品")) }
+    override suspend fun get(id: String) = attempt { toDomain(dao.getById(id) ?: error("error_expiry_not_found")) }
     override suspend fun create(item: NewExpiryItem) = attempt {
         val now = Instant.now(clock)
         val saved = ExpiryItem(UUID.randomUUID().toString(), item.name.trim(), item.category.trim(), item.packageExpiryDate, item.openedDate, item.openedValidityDays, item.location.trim(), item.notes.trim(), createdAt = now, updatedAt = now)
@@ -37,23 +37,23 @@ class LocalExpiryRepository @Inject constructor(
         saved
     }
     override suspend fun update(id: String, item: NewExpiryItem) = attempt {
-        val current = dao.getById(id)?.let(::toDomain) ?: error("未找到用品")
-        check(current.archivedAt == null) { "归档用品请先恢复" }
+        val current = dao.getById(id)?.let(::toDomain) ?: error("error_expiry_not_found")
+        check(current.archivedAt == null) { "error_expiry_restore_first" }
         val updated = current.copy(name = item.name.trim(), category = item.category.trim(), packageExpiryDate = item.packageExpiryDate, openedDate = item.openedDate, openedValidityDays = item.openedValidityDays, location = item.location.trim(), notes = item.notes.trim(), updatedAt = Instant.now(clock))
         dao.update(updated.toEntity())
         journal.expiry(updated)
         updated
     }
     override suspend fun updateStatus(id: String, status: ExpiryItemStatus) = attempt {
-        val current = dao.getById(id)?.let(::toDomain) ?: error("未找到用品")
-        check(current.archivedAt == null) { "归档用品请先恢复" }
+        val current = dao.getById(id)?.let(::toDomain) ?: error("error_expiry_not_found")
+        check(current.archivedAt == null) { "error_expiry_restore_first" }
         val updated = current.copy(status = status, updatedAt = Instant.now(clock))
         dao.update(updated.toEntity())
         journal.expiry(updated)
         updated
     }
     override suspend fun updateArchive(id: String, archive: Boolean) = attempt {
-        val current = dao.getById(id)?.let(::toDomain) ?: error("未找到用品")
+        val current = dao.getById(id)?.let(::toDomain) ?: error("error_expiry_not_found")
         val updated = current.copy(archivedAt = if (archive) current.archivedAt ?: Instant.now(clock) else null, updatedAt = Instant.now(clock))
         dao.update(updated.toEntity())
         journal.expiry(updated)

@@ -1,5 +1,11 @@
 package io.suirenx.feature.settings
 
+import io.suirenx.core.ui.R as CopyR
+import io.suirenx.core.ui.localization.uiText
+import io.suirenx.core.ui.localization.uiQuantity
+
+import io.suirenx.core.ui.localization.LanguagePicker
+import io.suirenx.core.ui.localization.languagePreferenceLabel
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
@@ -62,6 +68,7 @@ fun BackendSettingsScreen(
     onSoonDaysChanged: (Int) -> Unit = {},
     onAuthUsernameChanged: (String) -> Unit = {},
     onAuthPasswordChanged: (String) -> Unit = {},
+    onAuthConfirmationChanged: (String) -> Unit = {},
     onRegister: (String) -> Unit = {},
     onResetAuthForm: () -> Unit = {},
     onLogin: () -> Unit = {},
@@ -86,7 +93,7 @@ fun BackendSettingsScreen(
     var addingServer by rememberSaveable { mutableStateOf(false) }
     var deletingServer by remember { mutableStateOf(false) }
     var registering by rememberSaveable { mutableStateOf(false) }
-    var confirmPassword by remember { mutableStateOf("") }
+    val confirmPassword = state.authConfirmation
     var passwordVisible by remember { mutableStateOf(false) }
     var authReturnPage by rememberSaveable { mutableStateOf("account") }
     var seenAuthSuccess by rememberSaveable { mutableStateOf(state.authSuccessVersion) }
@@ -95,8 +102,8 @@ fun BackendSettingsScreen(
     val activeServer = state.settings?.servers?.find { it.url == state.settings?.activeUrl }
     val accountSummary = when {
         state.auth.authenticated -> state.auth.username
-        activeServer == null -> "未登录 · 尚未配置服务器"
-        else -> "未登录"
+        activeServer == null -> uiText(CopyR.string.copy_signed_out_no_server_configured)
+        else -> uiText(CopyR.string.copy_signed_out)
     }
     var seenServerSave by rememberSaveable { mutableStateOf(state.serverSavedVersion) }
     LaunchedEffect(state.serverSavedVersion) {
@@ -115,26 +122,26 @@ fun BackendSettingsScreen(
     LaunchedEffect(state.authSuccessVersion) {
         if (state.authSuccessVersion != seenAuthSuccess) {
             seenAuthSuccess = state.authSuccessVersion
-            confirmPassword = ""; passwordVisible = false; registering = false
+            onAuthConfirmationChanged(""); passwordVisible = false; registering = false
             if (page == "auth") page = authReturnPage
         }
     }
     LaunchedEffect(page) {
-        if (page != "auth") { confirmPassword = ""; passwordVisible = false; onResetAuthForm() }
+        if (page != "auth") { onAuthConfirmationChanged(""); passwordVisible = false; onResetAuthForm() }
     }
     val enabled = state.mode == StorageMode.Remote
     val count = state.syncStatus.conflicts.size + state.syncStatus.expiryConflicts.size
     val statusTitle = when {
-        state.syncStatus.syncing -> "同步中"
-        !enabled -> "同步未开启"
-        state.syncStatus.needsLogin -> "账号校验失败"
-        !state.auth.authenticated -> "需要登录"
-        state.syncStatus.waitingForNetwork -> "等待网络"
-        state.syncStatus.error != null -> "同步未完成"
-        count > 0 -> "$count 项冲突待处理"
-        state.syncStatus.pendingOperations > 0 -> "等待同步"
-        state.syncStatus.lastSyncedAt != null -> "已同步"
-        else -> "等待首次同步"
+        state.syncStatus.syncing -> uiText(CopyR.string.copy_syncing)
+        !enabled -> uiText(CopyR.string.copy_sync_is_off)
+        state.syncStatus.needsLogin -> uiText(CopyR.string.copy_account_verification_failed)
+        !state.auth.authenticated -> uiText(CopyR.string.copy_sign_in_required)
+        state.syncStatus.waitingForNetwork -> uiText(CopyR.string.copy_waiting_for_network)
+        state.syncStatus.error != null -> uiText(CopyR.string.copy_sync_did_not_finish)
+        count > 0 -> uiQuantity(CopyR.plurals.copy_count_conflicts, count)
+        state.syncStatus.pendingOperations > 0 -> uiText(CopyR.string.copy_waiting_to_sync)
+        state.syncStatus.lastSyncedAt != null -> uiText(CopyR.string.copy_synced)
+        else -> uiText(CopyR.string.copy_waiting_for_first_sync)
     }
     val parent = when (page) {
         "auth" -> authReturnPage
@@ -166,39 +173,45 @@ fun BackendSettingsScreen(
     Column(modifier.fillMaxSize().statusBarsPadding().imePadding().padding(horizontal = 16.dp)) {
         Column(Modifier.weight(1f).verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             if (page != "home") Spacer(Modifier.height(0.dp))
-            if (page == "home" && onExit == null) SuirenHeader(title = "设置") else TextButton(onClick = goBack) {
-                Text("‹  " + if (exitsToOverview) "总览" else when(parent) { "server" -> "服务器地址"; "server-detail" -> "服务器详情"; "sync" -> "同步设置"; "conflicts" -> "冲突列表"; else -> "设置" })
+            if (page == "home" && onExit == null) SuirenHeader(title = uiText(CopyR.string.copy_settings)) else TextButton(onClick = goBack) {
+                Text("‹  " + if (exitsToOverview) uiText(CopyR.string.copy_overview) else when(parent) { "server" -> uiText(CopyR.string.copy_server_addresses); "server-detail" -> uiText(CopyR.string.copy_server_details); "sync" -> uiText(CopyR.string.copy_sync_settings); "conflicts" -> uiText(CopyR.string.copy_conflicts_conflicts); else -> uiText(CopyR.string.copy_settings) })
             }
             when (page) {
                 "home" -> {
-                    Text("数据始终保存在本机，同步由你决定。", fontSize = 13.sp, lineHeight = 21.sp,
+                    Text(uiText(CopyR.string.copy_your_data_stays_on_this_device_you_decide_when_to), fontSize = 13.sp, lineHeight = 21.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 12.dp))
                     SettingsHomeGroup {
-                        SettingsHomeLink("账号", accountSummary, Icons.Outlined.AccountCircle) { page = "account" }
+                        SettingsHomeLink(uiText(CopyR.string.copy_account), accountSummary, Icons.Outlined.AccountCircle) { page = "account" }
                         HorizontalDivider()
-                        SettingsHomeLink("同步设置", statusTitle, Icons.Outlined.Refresh) { page = "sync" }
+                        SettingsHomeLink(uiText(CopyR.string.copy_sync_settings), statusTitle, Icons.Outlined.Refresh) { page = "sync" }
                     }
                     SettingsHomeGroup {
-                        SettingsHomeLink("备份与恢复", "导出、预览和安全恢复本机数据", SuirenIcons.Backup) { page = "backup" }
+                        SettingsHomeLink(uiText(CopyR.string.copy_backup_and_restore), uiText(CopyR.string.copy_export_preview_and_safely_restore_local_data), SuirenIcons.Backup) { page = "backup" }
                         HorizontalDivider()
-                        SettingsHomeLink("外观", themeLabel(themeMode), SuirenIcons.Appearance) { page = "appearance" }
+                        SettingsHomeLink(uiText(CopyR.string.copy_appearance), themeLabel(themeMode), SuirenIcons.Appearance) { page = "appearance" }
                         HorizontalDivider()
-                        SettingsHomeLink("用品临期提醒", "提前 ${state.soonDays} 天标记临期", Icons.Outlined.DateRange) { page = "reminders" }
+                        SettingsHomeLink(uiText(CopyR.string.language_title), languagePreferenceLabel(), SuirenIcons.Appearance) { page = "language" }
+                        HorizontalDivider()
+                        SettingsHomeLink(uiText(CopyR.string.copy_expiry_preferences), uiQuantity(CopyR.plurals.copy_mark_items_as_expiring_count_days_ahead, state.soonDays), Icons.Outlined.DateRange) { page = "reminders" }
                     }
                     SettingsHomeGroup {
-                        SettingsHomeLink("服务器地址", activeServer?.url ?: "未选择 · 可选", SuirenIcons.Server) { onEditServer(null); page = "server" }
+                        SettingsHomeLink(uiText(CopyR.string.copy_server_addresses), activeServer?.url ?: uiText(CopyR.string.copy_not_selected_optional), SuirenIcons.Server) { onEditServer(null); page = "server" }
                         HorizontalDivider()
-                        SettingsHomeLink("关于", "个人工具箱 · 资产与用品管理", Icons.Outlined.Info) { page = "about" }
+                        SettingsHomeLink(uiText(CopyR.string.copy_about), uiText(CopyR.string.copy_personal_toolbox_assets_and_essentials), Icons.Outlined.Info) { page = "about" }
                     }
                 }
+                "language" -> {
+                    PageTitle(uiText(CopyR.string.language_title), uiText(CopyR.string.language_description))
+                    SettingsCard { LanguagePicker() }
+                }
                 "account" -> {
-                    PageTitle("账号", "像普通应用一样管理当前登录账号。")
+                    PageTitle(uiText(CopyR.string.copy_account), uiText(CopyR.string.copy_manage_your_signed_in_account))
                     SettingsCard {
-                        Fact("当前账号", if (state.auth.authenticated) state.auth.username else "未登录")
+                        Fact(uiText(CopyR.string.copy_current_account), if (state.auth.authenticated) state.auth.username else uiText(CopyR.string.copy_signed_out))
                         if (state.auth.authenticated) {
-                            SecondaryAction("退出登录", !connectionBusy) { confirmation = "logout" }
+                            SecondaryAction(uiText(CopyR.string.copy_sign_out), !connectionBusy) { confirmation = "logout" }
                         } else if (activeServer != null) {
-                            SecondaryAction("登录 / 注册", !connectionBusy) {
+                            SecondaryAction(uiText(CopyR.string.copy_sign_in_register), !connectionBusy) {
                                 onOpenServer(activeServer.url)
                                 authReturnPage = "account"
                                 onResetAuthForm()
@@ -206,24 +219,24 @@ fun BackendSettingsScreen(
                                 page = "auth"
                             }
                         } else {
-                            Caption("尚未配置服务器地址。可在设置页靠后的“服务器地址”中单独配置，然后回来登录。")
+                            Caption(uiText(CopyR.string.copy_no_server_configured_add_one_under_server_addresses_in_settings))
                         }
                         state.authError?.let { ErrorNote(it) }
                     }
-                    SettingsCard { Caption("同一时间只能登录一个账号。要使用其他账号，请先退出当前账号；服务器地址与账号独立管理。") }
+                    SettingsCard { Caption(uiText(CopyR.string.copy_only_one_account_can_be_signed_in_sign_out_before)) }
                 }
                 "sync" -> {
                     if (!enabled) {
-                        PageTitle("本机数据已准备好", "没有网络也能新增、编辑、归档和查看资产与用品。", "同步未开启")
+                        PageTitle(uiText(CopyR.string.copy_local_data_is_ready), uiText(CopyR.string.copy_add_edit_archive_and_view_your_records_without_a_network), uiText(CopyR.string.copy_sync_is_off))
                         SettingsCard {
-                            Text("资产和用品始终存本机", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-                            Caption("服务器仅负责多端同步，不会替代本机数据。")
+                            Text(uiText(CopyR.string.copy_records_always_stay_on_this_device), fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                            Caption(uiText(CopyR.string.copy_the_server_syncs_devices_your_local_database_remains_the_source))
                             state.migrationError?.let { ErrorNote(it) }
                             PrimaryAction(
                                 when {
-                                    state.auth.authenticated -> "预览并开启同步"
-                                    activeServer != null -> "账号设置"
-                                    else -> "返回设置"
+                                    state.auth.authenticated -> uiText(CopyR.string.copy_preview_and_enable_sync)
+                                    activeServer != null -> uiText(CopyR.string.copy_account_settings)
+                                    else -> uiText(CopyR.string.copy_back_to_settings)
                                 },
                                 enabled = !state.migrationBusy,
                             ) {
@@ -235,60 +248,60 @@ fun BackendSettingsScreen(
                             }
                         }
                     } else {
-                        PageTitle("把同步交给后台", "本机始终是资产和用品的事实来源，服务器只负责多端同步。")
+                        PageTitle(uiText(CopyR.string.copy_sync_in_the_background), uiText(CopyR.string.copy_your_local_database_is_the_source_of_truth_the_server))
                         SettingsCard {
-                            Caption("当前状态")
+                            Caption(uiText(CopyR.string.copy_current_status))
                             Text(statusTitle, fontSize = 21.sp, fontWeight = FontWeight.SemiBold)
-                            Caption("同步不会阻止本地编辑，冲突只暂停对应记录。")
+                            Caption(uiText(CopyR.string.copy_keep_editing_locally_a_conflict_only_pauses_its_affected_record))
                             if (state.syncStatus.syncing) LinearProgressIndicator(Modifier.fillMaxWidth())
                             listOfNotNull(state.syncStatus.error, state.error, state.migrationError).distinct().forEach { ErrorNote(it) }
                             HorizontalDivider()
-                            Caption("上次成功：${lastSyncLabel(state.syncStatus)}")
-                            SecondaryAction("当前服务器") {
+                            Caption(uiText(CopyR.string.copy_last_success_count, lastSyncLabel(state.syncStatus)))
+                            SecondaryAction(uiText(CopyR.string.copy_current_server)) {
                                 state.settings?.activeUrl?.let { onOpenServer(it); page = "server-detail" } ?: run { onEditServer(null); page = "server" }
                             }
                         }
                         SyncStatistics(state.syncStatus)
-                        GroupTitle("同步方式")
+                        GroupTitle(uiText(CopyR.string.copy_sync_mode))
                         SettingsCard {
-                            Choice("每次修改后同步", "短暂合并连续修改后尽快后台发送，仍可随时立即同步。", state.syncSchedule == SyncSchedule.OnChange) { onSyncSchedule(SyncSchedule.OnChange) }
-                            Choice("定时同步", "约按所选频率运行，受网络和省电策略影响。", state.syncSchedule != SyncSchedule.OnChange) { if (state.syncSchedule == SyncSchedule.OnChange) onSyncSchedule(SyncSchedule.Hourly) }
+                            Choice(uiText(CopyR.string.copy_sync_after_changes), uiText(CopyR.string.copy_nearby_changes_are_combined_before_sending_manual_sync_is_always), state.syncSchedule == SyncSchedule.OnChange) { onSyncSchedule(SyncSchedule.OnChange) }
+                            Choice(uiText(CopyR.string.copy_periodic_sync), uiText(CopyR.string.copy_runs_approximately_at_the_selected_interval_subject_to_network_and), state.syncSchedule != SyncSchedule.OnChange) { if (state.syncSchedule == SyncSchedule.OnChange) onSyncSchedule(SyncSchedule.Hourly) }
                         }
                         if (state.syncSchedule != SyncSchedule.OnChange) {
-                            GroupTitle("定时频率")
+                            GroupTitle(uiText(CopyR.string.copy_requested_interval))
                             SettingsCard {
                                 SyncSchedule.entries.filter { it != SyncSchedule.OnChange }.forEach { option ->
-                                    Choice(option.label, "后台调度可能受网络和省电策略影响", state.syncSchedule == option) { onSyncSchedule(option) }
+                                    Choice(uiText(option.label), uiText(CopyR.string.copy_network_and_battery_restrictions_may_delay_background_sync), state.syncSchedule == option) { onSyncSchedule(option) }
                                 }
                             }
                         }
-                        GroupTitle("处理与状态")
+                        GroupTitle(uiText(CopyR.string.copy_actions_and_status))
                         SettingsCard {
                             when {
-                                state.syncStatus.syncing -> SettingsLink("停止此次请求", "保留待发送批次，可以稍后重试", onClick = onCancelSync)
-                                state.syncStatus.needsLogin -> Caption("当前服务器无法验证已登录账号。请到设置首页的“账号”中先注销，再重新登录；账号信息不会因切换地址自动清除。")
-                                !state.auth.authenticated -> SettingsLink("账号设置", "登录后可预览并开启同步") { page = "account" }
-                                else -> SettingsLink(if (state.syncStatus.error == null) "立即同步" else "重试同步", "始终保留的手动同步入口", onClick = onSyncNow)
+                                state.syncStatus.syncing -> SettingsLink(uiText(CopyR.string.copy_stop_this_request), uiText(CopyR.string.copy_pending_batches_are_retained_for_retry), onClick = onCancelSync)
+                                state.syncStatus.needsLogin -> Caption(uiText(CopyR.string.copy_this_server_cannot_verify_your_account_sign_out_under_account))
+                                !state.auth.authenticated -> SettingsLink(uiText(CopyR.string.copy_account_settings), uiText(CopyR.string.copy_sign_in_to_preview_and_enable_sync)) { page = "account" }
+                                else -> SettingsLink(if (state.syncStatus.error == null) uiText(CopyR.string.copy_sync_now) else uiText(CopyR.string.copy_retry_sync), uiText(CopyR.string.copy_manual_sync_is_always_available), onClick = onSyncNow)
                             }
                             HorizontalDivider()
-                            SettingsLink("冲突处理", "$count 项待处理 · 只暂停冲突记录") { page = "conflicts" }
+                            SettingsLink(uiText(CopyR.string.copy_resolve_conflicts), uiQuantity(CopyR.plurals.copy_count_conflicts_other_records_continue_syncing, count)) { page = "conflicts" }
                             HorizontalDivider()
-                            SettingsLink("暂停同步", "暂停网络同步，不影响本机编辑") { confirmation = "pause" }
+                            SettingsLink(uiText(CopyR.string.copy_pause_sync), uiText(CopyR.string.copy_pause_network_sync_and_keep_editing_locally)) { confirmation = "pause" }
                         }
                     }
                 }
                 "server" -> {
-                    PageTitle("服务器地址", "添加或修改地址前需通过该地址的健康测试。测试不登录，也不上传。")
+                    PageTitle(uiText(CopyR.string.copy_server_addresses), uiText(CopyR.string.copy_test_the_exact_address_before_adding_or_changing_it_tests))
                     state.settings?.servers.orEmpty().forEach { server ->
                         SettingsCard(Modifier.clickable(enabled = !connectionBusy) {
                             onOpenServer(server.url); page = "server-detail"
                         }) {
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Text(server.name.ifBlank { "未命名服务器" }, Modifier.weight(1f), fontWeight = FontWeight.Medium)
+                                Text(server.name.ifBlank { uiText(CopyR.string.copy_unnamed_server) }, Modifier.weight(1f), fontWeight = FontWeight.Medium)
                                 if (server.url == state.settings?.activeUrl) {
                                     Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.secondary) {
-                                        Text("当前选择", Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                                        Text(uiText(CopyR.string.copy_selected), Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
                                             fontSize = 12.sp, color = MaterialTheme.colorScheme.onSecondary)
                                     }
                                 }
@@ -297,84 +310,84 @@ fun BackendSettingsScreen(
                         }
                     }
                     if (state.settings?.servers.orEmpty().isEmpty()) SettingsCard {
-                        Text("尚无服务器", fontWeight = FontWeight.Medium)
-                        Caption("离线功能可直接使用。")
+                        Text(uiText(CopyR.string.copy_no_servers_yet), fontWeight = FontWeight.Medium)
+                        Caption(uiText(CopyR.string.copy_offline_features_are_ready_to_use))
                     }
-                    PrimaryAction("添加服务器", !connectionBusy) { onEditServer(null); addingServer = true }
+                    PrimaryAction(uiText(CopyR.string.copy_add_server), !connectionBusy) { onEditServer(null); addingServer = true }
                 }
                 "server-detail" -> {
                     val server = inspectedServer
                     if (server != null) {
-                        Text("服务器详情", fontSize = 29.sp, fontWeight = FontWeight.SemiBold)
+                        Text(uiText(CopyR.string.copy_server_details), fontSize = 29.sp, fontWeight = FontWeight.SemiBold)
                         ServerEditorFields(state, server, onAddressChanged, onNameChanged,
                             onTestConnection, onSave, onSelect, { deletingServer = true })
                     }
                 }
                 "auth" -> {
-                    PageTitle(if (registering) "注册同步账号" else "登录燧人同步", "当前服务器")
+                    PageTitle(if (registering) uiText(CopyR.string.copy_register_a_sync_account) else uiText(CopyR.string.copy_sign_in_to_suirenx_sync), uiText(CopyR.string.copy_current_server))
                     val validation = accountValidation(state.authUsername, state.authPassword, if (registering) confirmPassword else null)
                     SettingsCard {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilterChip(!registering, { registering = false; confirmPassword = ""; onResetAuthForm() }, { Text("登录") }, enabled = !connectionBusy)
-                            FilterChip(registering, { registering = true; confirmPassword = ""; onResetAuthForm() }, { Text("注册") }, enabled = !connectionBusy)
+                            FilterChip(!registering, { registering = false; onAuthConfirmationChanged(""); onResetAuthForm() }, { Text(uiText(CopyR.string.copy_sign_in)) }, enabled = !connectionBusy)
+                            FilterChip(registering, { registering = true; onAuthConfirmationChanged(""); onResetAuthForm() }, { Text(uiText(CopyR.string.copy_register)) }, enabled = !connectionBusy)
                         }
-                        OutlinedTextField(state.authUsername, onAuthUsernameChanged, Modifier.fillMaxWidth(), label = { Text("账号") }, singleLine = true, enabled = !connectionBusy)
-                        AccountPasswordField(state.authPassword, onAuthPasswordChanged, "密码", passwordVisible, !connectionBusy,
+                        OutlinedTextField(state.authUsername, onAuthUsernameChanged, Modifier.fillMaxWidth(), label = { Text(uiText(CopyR.string.copy_account)) }, singleLine = true, enabled = !connectionBusy)
+                        AccountPasswordField(state.authPassword, onAuthPasswordChanged, uiText(CopyR.string.copy_password), passwordVisible, !connectionBusy,
                             onToggleVisibility = { passwordVisible = !passwordVisible })
-                        Caption(if (registering) RegistrationPasswordHint else "请输入已有账号的密码。")
-                        if (registering) AccountPasswordField(confirmPassword, { confirmPassword = it }, "确认密码", passwordVisible, !connectionBusy,
+                        Caption(if (registering) uiText(RegistrationPasswordHint) else uiText(CopyR.string.copy_enter_your_existing_account_password))
+                        if (registering) AccountPasswordField(confirmPassword, onAuthConfirmationChanged, uiText(CopyR.string.copy_confirm_password), passwordVisible, !connectionBusy,
                             onToggleVisibility = { passwordVisible = !passwordVisible })
-                        validation?.let { Caption(it) }
-                        PrimaryAction(if (state.authBusy) "处理中…" else if (registering) "注册" else "登录",
+                        validation?.let { Caption(uiText(it)) }
+                        PrimaryAction(if (state.authBusy) uiText(CopyR.string.copy_working) else if (registering) uiText(CopyR.string.copy_register) else uiText(CopyR.string.copy_sign_in),
                             enabled = !connectionBusy && validation == null && inspectedServer != null && !state.auth.authenticated,
                             onClick = { if (registering) onRegister(confirmPassword) else onLogin() })
                         listOfNotNull(state.authError, state.error, state.migrationError).distinct().forEach { ErrorNote(it) }
 
                     }
-                    Caption("登录成功后仍需确认同步范围。不会因登录自动上传本机数据。")
+                    Caption(uiText(CopyR.string.copy_review_and_enable_sync_after_signing_in_signing_in_never))
                 }
                 "conflicts" -> {
-                    PageTitle("待处理冲突", "仅暂停冲突记录，其他资产和用品继续同步。")
-                    if (count == 0) SettingsCard { Text("没有待处理的冲突"); Caption("如双方修改同一条记录，会在这里保留两个版本供你选择。") }
+                    PageTitle(uiText(CopyR.string.copy_conflicts), uiText(CopyR.string.copy_only_conflicting_records_pause_other_assets_and_items_continue_syncing))
+                    if (count == 0) SettingsCard { Text(uiText(CopyR.string.copy_no_conflicts)); Caption(uiText(CopyR.string.copy_if_a_record_changes_on_both_sides_both_versions_are)) }
                     state.syncStatus.conflicts.forEach { conflict -> SettingsCard { SettingsLink(conflict.local.name, conflictDescription(conflict.localDeleted, conflict.remoteDeleted, conflict.remoteUnavailable)) { conflictId = conflict.assetId; expiryConflict = false; page = "conflict" } } }
                     state.syncStatus.expiryConflicts.forEach { conflict -> SettingsCard { SettingsLink(conflict.localName, conflictDescription(conflict.localDeleted, conflict.remoteDeleted, conflict.remoteUnavailable)) { conflictId = conflict.expiryId; expiryConflict = true; page = "conflict" } } }
                 }
                 "conflict" -> {
-                    PageTitle(a?.local?.name ?: e?.localName ?: "冲突已处理", "先看字段差异，再选择整条记录的处理方式。")
-                    if (!conflictExists) PrimaryAction("返回冲突列表") { page = "conflicts" }
+                    PageTitle(a?.local?.name ?: e?.localName ?: uiText(CopyR.string.copy_conflict_resolved), uiText(CopyR.string.copy_compare_the_fields_then_choose_how_to_resolve_the_record))
+                    if (!conflictExists) PrimaryAction(uiText(CopyR.string.copy_back_to_conflicts)) { page = "conflicts" }
                     else if (unavailable) SettingsCard {
-                        Text("无法读取另一端快照")
-                        Caption("这是归属或权限冲突，不代表记录已删除。不会显示其他账号的内容。")
-                        PrimaryAction("检查账号与服务器") { page = "server" }
+                        Text(uiText(CopyR.string.copy_remote_snapshot_unavailable))
+                        Caption(uiText(CopyR.string.copy_this_is_an_ownership_or_permission_conflict_not_a_deleted))
+                        PrimaryAction(uiText(CopyR.string.copy_check_account_and_server)) { page = "server" }
                     } else {
                         ConflictVersions(a, e)
-                        Caption("当前同步协议未提供可核实的双方修改时间；不按设备时间自动选择版本。")
+                        Caption(uiText(CopyR.string.copy_the_protocol_provides_no_verified_edit_times_for_both_sides))
                         SettingsCard {
                             val busy = state.conflictBusy || state.syncStatus.syncing
-                            ChoiceAction(if(localDeleted) "保留本机删除" else "保留本机", "使用本机版本；若另一端再次变化，会重新提示。", !busy) { resolution = SyncConflictResolution.KeepLocal }
-                            ChoiceAction(if(remoteDeleted) "保留另一端删除" else "保留另一端", "应用另一端版本，替换这条本机记录。", !busy) { resolution = SyncConflictResolution.KeepRemote }
-                            ChoiceAction(if(localDeleted || remoteDeleted) "将修改版另存一份" else "两份都保留", "保留原记录的另一端版本，将本机修改另存为副本；删除冲突保留删除并另存修改。", !busy) { resolution = SyncConflictResolution.KeepBoth }
+                            ChoiceAction(if(localDeleted) uiText(CopyR.string.copy_keep_local_deletion) else uiText(CopyR.string.copy_keep_local), uiText(CopyR.string.copy_use_the_local_version_you_will_be_prompted_again_if), !busy) { resolution = SyncConflictResolution.KeepLocal }
+                            ChoiceAction(if(remoteDeleted) uiText(CopyR.string.copy_keep_remote_deletion) else uiText(CopyR.string.copy_keep_remote), uiText(CopyR.string.copy_replace_this_local_record_with_the_remote_version), !busy) { resolution = SyncConflictResolution.KeepRemote }
+                            ChoiceAction(if(localDeleted || remoteDeleted) uiText(CopyR.string.copy_save_the_edited_version_as_a_copy) else uiText(CopyR.string.copy_keep_both), uiText(CopyR.string.copy_keep_the_remote_version_and_save_local_edits_as_a), !busy) { resolution = SyncConflictResolution.KeepBoth }
                         }
                     }
                 }
                 "backup" -> {
-                    PageTitle("备份与恢复", "本机完整 JSON，包含归档资产和用品，不含账号凭证。")
+                    PageTitle(uiText(CopyR.string.copy_backup_and_restore), uiText(CopyR.string.copy_complete_local_json_including_archived_assets_and_expiry_items_no))
                     SettingsCard {
-                        state.localSummary?.let { Fact("资产（含归档）", "${it.assetCount} 项"); Fact("用品", "${it.expiryItemCount} 项") }
-                        PrimaryAction(if(state.backupBusy) "处理中…" else "导出本机备份", !state.backupBusy, onExportBackup)
-                        SecondaryAction("从文件恢复", !state.backupBusy, onImportBackup)
+                        state.localSummary?.let { Fact(uiText(CopyR.string.copy_assets_including_archived), uiQuantity(CopyR.plurals.copy_count_items, it.assetCount)); Fact(uiText(CopyR.string.copy_items), uiQuantity(CopyR.plurals.copy_count_items, it.expiryItemCount)) }
+                        PrimaryAction(if(state.backupBusy) uiText(CopyR.string.copy_working) else uiText(CopyR.string.copy_export_local_backup), !state.backupBusy, onExportBackup)
+                        SecondaryAction(uiText(CopyR.string.copy_restore_from_file), !state.backupBusy, onImportBackup)
                     }
-                    Caption("恢复前先校验文件并预览数量，确认后自动备份当前数据，再恢复；失败会保留原数据。")
+                    Caption(uiText(CopyR.string.copy_validate_the_file_and_preview_record_counts_first_after_confirmation))
                     state.backupError?.let { ErrorNote(it) }
                 }
                 "appearance" -> {
-                    PageTitle("外观", "选择适合你的显示方式。")
+                    PageTitle(uiText(CopyR.string.copy_appearance), uiText(CopyR.string.copy_choose_how_the_app_looks))
                     SettingsCard { ThemeMode.entries.forEach { mode -> Choice(themeLabel(mode), "", themeMode == mode) { onThemeModeChanged(mode) } } }
                 }
                 "reminders" -> {
-                    PageTitle("用品临期提醒", "在用品列表中提前标记需要关注的记录。")
+                    PageTitle(uiText(CopyR.string.copy_expiry_preferences), uiText(CopyR.string.copy_mark_upcoming_expiry_dates_in_the_item_list))
                     SettingsCard { SoonDaysSetting(state.soonDays, onSoonDaysChanged) }
-                    Caption("此设置控制应用内临期状态，不会开启系统推送通知。")
+                    Caption(uiText(CopyR.string.copy_this_controls_in_app_expiry_status_it_does_not_enable))
                 }
                 "about" -> {
                     val context = LocalContext.current
@@ -389,16 +402,16 @@ fun BackendSettingsScreen(
                         @Suppress("DEPRECATION")
                         packageInfo.versionCode.toLong()
                     }
-                    PageTitle("燧人", "把日常工具放在一起。")
-                    SettingsCard { Text("个人工具箱"); Caption("记录资产、计算持有成本，管理用品与到期时间。数据始终保存在本机，可选多端同步。") }
+                    PageTitle(uiText(CopyR.string.copy_suirenx), uiText(CopyR.string.copy_your_everyday_tools_together))
+                    SettingsCard { Text(uiText(CopyR.string.copy_personal_toolbox)); Caption(uiText(CopyR.string.copy_track_assets_calculate_ownership_costs_and_manage_expiry_dates_data)) }
                     SettingsCard {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Caption("版本号")
-                            Text(packageInfo.versionName ?: "未知", modifier = Modifier.testTag("about.version"))
+                            Caption(uiText(CopyR.string.copy_version))
+                            Text(packageInfo.versionName ?: uiText(CopyR.string.copy_unknown), modifier = Modifier.testTag("about.version"))
                         }
                         HorizontalDivider()
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Caption("Build 号")
+                            Caption(uiText(CopyR.string.copy_build))
                             Text(buildNumber.toString(), modifier = Modifier.testTag("about.build"))
                         }
                         DevelopmentBuildRows(buildInfo)
@@ -407,31 +420,31 @@ fun BackendSettingsScreen(
             }
             // Errors are rendered once at the action/status card that owns them.
             if (page == "conflict") state.error?.let { ErrorNote(it) }
-            state.notice?.let { Caption(it) }
+            state.notice?.let { Caption(uiText(it)) }
             Spacer(Modifier.height(108.dp))
         }
     }
     state.migrationPreview?.let { preview ->
-        AlertDialog(onDismissRequest = { if(!state.migrationBusy) onCancelMigration() }, title = { Text("先确认要同步什么") }, text = {
+        AlertDialog(onDismissRequest = { if(!state.migrationBusy) onCancelMigration() }, title = { Text(uiText(CopyR.string.copy_review_before_syncing)) }, text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Fact("资产（含归档）", "${preview.localAssetCount} 项")
-                Fact("用品", "${preview.localExpiryCount} 项")
-                Fact("同步账号", state.auth.username)
-                Fact("服务器", state.settings?.activeUrl.orEmpty())
-                Caption("开启同步前先自动备份。本机数据将同步到上方目标；更换服务器后重新建立同步基线，同 ID 差异交由你处理。地址变更不清除账号信息；新服务器校验失败时请先注销账号。")
+                Fact(uiText(CopyR.string.copy_assets_including_archived), uiQuantity(CopyR.plurals.copy_count_items, preview.localAssetCount))
+                Fact(uiText(CopyR.string.copy_items), uiQuantity(CopyR.plurals.copy_count_items, preview.localExpiryCount))
+                Fact(uiText(CopyR.string.copy_sync_account), state.auth.username)
+                Fact(uiText(CopyR.string.copy_server), state.settings?.activeUrl.orEmpty())
+                Caption(uiText(CopyR.string.copy_a_safety_backup_is_created_first_local_data_will_sync))
                 state.migrationError?.let { ErrorNote(it) }
             }
-        }, confirmButton = { TextButton(onClick = { onConfirmMigration(); page = "sync" }, enabled = !state.migrationBusy) { Text(if(state.migrationBusy) "同步中…" else "确认并开启同步") } }, dismissButton = { TextButton(onClick = onCancelMigration, enabled = !state.migrationBusy) { Text("取消") } })
+        }, confirmButton = { TextButton(onClick = { onConfirmMigration(); page = "sync" }, enabled = !state.migrationBusy) { Text(if(state.migrationBusy) uiText(CopyR.string.copy_syncing_syncing) else uiText(CopyR.string.copy_confirm_and_enable_sync)) } }, dismissButton = { TextButton(onClick = onCancelMigration, enabled = !state.migrationBusy) { Text(uiText(CopyR.string.copy_cancel)) } })
     }
     state.backupSummary?.let { summary ->
-        AlertDialog(onDismissRequest = { if(!state.backupBusy) onCancelRestore() }, title = { Text("恢复预览") }, text = {
+        AlertDialog(onDismissRequest = { if(!state.backupBusy) onCancelRestore() }, title = { Text(uiText(CopyR.string.copy_restore_preview)) }, text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Fact("备份中的资产", "${summary.assetCount} 项")
-                Fact("备份中的用品", "${summary.expiryItemCount} 项")
-                Caption("文件校验通过。确认后将替换本机当前数据，恢复前会自动备份。")
+                Fact(uiText(CopyR.string.copy_assets_in_backup), uiQuantity(CopyR.plurals.copy_count_items, summary.assetCount))
+                Fact(uiText(CopyR.string.copy_items_in_backup), uiQuantity(CopyR.plurals.copy_count_items, summary.expiryItemCount))
+                Caption(uiText(CopyR.string.copy_file_validation_passed_confirming_replaces_local_data_after_creating_a))
                 state.backupError?.let { ErrorNote(it) }
             }
-        }, confirmButton = { TextButton(onClick = { confirmation = "restore" }, enabled = !state.backupBusy) { Text(if(state.backupBusy) "恢复中…" else "继续恢复") } }, dismissButton = { TextButton(onClick = onCancelRestore, enabled = !state.backupBusy) { Text("取消") } })
+        }, confirmButton = { TextButton(onClick = { confirmation = "restore" }, enabled = !state.backupBusy) { Text(if(state.backupBusy) uiText(CopyR.string.copy_restoring) else uiText(CopyR.string.copy_continue_restore)) } }, dismissButton = { TextButton(onClick = onCancelRestore, enabled = !state.backupBusy) { Text(uiText(CopyR.string.copy_cancel)) } })
     }
     if (addingServer) {
         val editorBusy = connectionBusy || state.testingConnection
@@ -447,8 +460,8 @@ fun BackendSettingsScreen(
                 .padding(horizontal = 16.dp).padding(bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = { addingServer = false; onEditServer(null) }, enabled = !editorBusy) { Text("取消") }
-                    Text("添加服务器", fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+                    TextButton(onClick = { addingServer = false; onEditServer(null) }, enabled = !editorBusy) { Text(uiText(CopyR.string.copy_cancel)) }
+                    Text(uiText(CopyR.string.copy_add_server), fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
                 }
                 ServerEditorFields(state, null, onAddressChanged, onNameChanged, onTestConnection,
                     onSave, onSelect, {})
@@ -457,26 +470,26 @@ fun BackendSettingsScreen(
     }
     if (deletingServer && inspectedServer != null) {
         AlertDialog(onDismissRequest = { if (!connectionBusy) deletingServer = false },
-            title = { Text("删除此地址？") },
-            text = { Text("仅删除连接配置。账号、本机业务数据和同步记录保留；删除当前地址将暂停同步且不自动选择其他地址。") },
+            title = { Text(uiText(CopyR.string.copy_delete_this_address)) },
+            text = { Text(uiText(CopyR.string.copy_only_the_connection_is_removed_account_local_data_and_sync)) },
             confirmButton = { TextButton(onClick = { onDeleteServer(inspectedServer.url); deletingServer = false },
-                enabled = !connectionBusy, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("确认删除地址") } },
-            dismissButton = { TextButton(onClick = { deletingServer = false }, enabled = !connectionBusy) { Text("取消") } })
+                enabled = !connectionBusy, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text(uiText(CopyR.string.copy_delete_address_delete_address)) } },
+            dismissButton = { TextButton(onClick = { deletingServer = false }, enabled = !connectionBusy) { Text(uiText(CopyR.string.copy_cancel)) } })
     }
-    resolution?.let { choice -> AlertDialog(onDismissRequest = { resolution = null }, title = { Text("确认处理此记录？") }, text = { Text(if(choice == SyncConflictResolution.KeepBoth) "将创建修改版副本，保留两份内容。" else "未选择的版本将被替换；此操作只影响当前记录。") }, confirmButton = { TextButton(onClick = { onResolveConflict(conflictId, expiryConflict, choice); resolution = null }, enabled = conflictExists && !state.conflictBusy && !unavailable) { Text("确认处理") } }, dismissButton = { TextButton(onClick = { resolution = null }) { Text("取消") } }) }
-    confirmation?.let { action -> AlertDialog(onDismissRequest = { confirmation = null }, title = { Text(when(action) { "restore" -> "替换本机数据？"; "pause" -> "暂停同步？"; "logout" -> "退出同步账号？"; else -> "切换同步连接？" }) }, text = { Text(when(action) {
-        "restore" -> "会先自动备份当前资产和用品，再恢复所选文件。此操作会替换本机记录。"
-        else -> "网络同步将停止，本机数据与待发送修改保留。登录后可预览并开启同步到新目标。"
+    resolution?.let { choice -> AlertDialog(onDismissRequest = { resolution = null }, title = { Text(uiText(CopyR.string.copy_resolve_this_record)) }, text = { Text(if(choice == SyncConflictResolution.KeepBoth) uiText(CopyR.string.copy_the_edited_version_is_saved_as_a_copy_keeping_both) else uiText(CopyR.string.copy_the_unselected_version_is_replaced_only_this_record_is_affected)) }, confirmButton = { TextButton(onClick = { onResolveConflict(conflictId, expiryConflict, choice); resolution = null }, enabled = conflictExists && !state.conflictBusy && !unavailable) { Text(uiText(CopyR.string.copy_confirm_resolution)) } }, dismissButton = { TextButton(onClick = { resolution = null }) { Text(uiText(CopyR.string.copy_cancel)) } }) }
+    confirmation?.let { action -> AlertDialog(onDismissRequest = { confirmation = null }, title = { Text(when(action) { "restore" -> uiText(CopyR.string.copy_replace_local_data); "pause" -> uiText(CopyR.string.copy_pause_sync_pause_sync); "logout" -> uiText(CopyR.string.copy_sign_out_of_sync); else -> uiText(CopyR.string.copy_change_sync_connection) }) }, text = { Text(when(action) {
+        "restore" -> uiText(CopyR.string.copy_a_safety_backup_is_created_before_restoring_the_selected_file)
+        else -> uiText(CopyR.string.copy_network_sync_stops_local_data_and_pending_edits_are_retained)
     }) }, confirmButton = { TextButton(onClick = {
         when(action) { "restore" -> onConfirmRestore(); "pause" -> onUseLocal(); "logout" -> onLogout() }
         confirmation = null
-    }) { Text("确认") } }, dismissButton = { TextButton(onClick = { confirmation = null }) { Text("取消") } }) }
+    }) { Text(uiText(CopyR.string.copy_confirm)) } }, dismissButton = { TextButton(onClick = { confirmation = null }) { Text(uiText(CopyR.string.copy_cancel)) } }) }
 }
 
 @Composable
 internal fun SoonDaysSetting(value: Int, onValueChanged: (Int) -> Unit) {
     var text by rememberSaveable(value) { mutableStateOf(value.toString()) }
-    OutlinedTextField(text, { next -> if(next.length <= 2 && next.all(Char::isDigit)) { text = next; next.toIntOrNull()?.takeIf { it in 1..30 }?.let(onValueChanged) } }, Modifier.fillMaxWidth(), label = { Text("提前天数（1–30）") }, supportingText = { Text("当前设置：提前 $value 天标记临期") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), isError = text.toIntOrNull() !in 1..30)
+    OutlinedTextField(text, { next -> if(next.length <= 2 && next.all(Char::isDigit)) { text = next; next.toIntOrNull()?.takeIf { it in 1..30 }?.let(onValueChanged) } }, Modifier.fillMaxWidth(), label = { Text(uiText(CopyR.string.copy_days_ahead_1_30)) }, supportingText = { Text(uiQuantity(CopyR.plurals.copy_current_setting_mark_expiry_count_days_ahead, value)) }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), isError = text.toIntOrNull() !in 1..30)
 }
 
 @Preview(showBackground = true)
@@ -505,7 +518,7 @@ private fun AccountPasswordField(
         trailingIcon = {
             IconButton(onClick = onToggleVisibility, enabled = enabled) {
                 Icon(if (visible) SuirenIcons.VisibilityOff else SuirenIcons.Visibility,
-                    contentDescription = if (visible) "隐藏密码" else "显示密码")
+                    contentDescription = if (visible) uiText(CopyR.string.copy_hide_password) else uiText(CopyR.string.copy_show_password))
             }
         },
     )
@@ -517,12 +530,12 @@ internal fun DevelopmentBuildRows(buildInfo: InstalledBuildInfo?) {
     if (buildInfo?.isDevelopment == true) {
         HorizontalDivider()
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Caption("代码")
+            Caption(uiText(CopyR.string.copy_commit))
             Text(buildInfo.code, modifier = Modifier.testTag("about.code"))
         }
         HorizontalDivider()
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Caption("打包时间")
+            Caption(uiText(CopyR.string.copy_build_time))
             Text(buildInfo.localTime, modifier = Modifier.testTag("about.builtAt"))
         }
     }

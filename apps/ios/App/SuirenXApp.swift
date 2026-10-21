@@ -12,9 +12,9 @@ import SuirenCore
                     RootView().environmentObject(model)
                         .onChange(of: phase) { _, new in model.sceneChanged(new) }
                 } else if let startupError {
-                    ContentUnavailableView { Label("本机数据暂时无法打开", systemImage: "externaldrive.badge.exclamationmark") }
-                        description: { Text(startupError) } actions: { Button("重试") { Task { await bootstrap() } } }
-                } else { ProgressView("正在打开本机数据").task { await bootstrap() } }
+                    ContentUnavailableView { Label(L10n.text("ui.local_data_cannot_be_opened_right_now"), systemImage: "externaldrive.badge.exclamationmark") }
+                        description: { Text(startupError) } actions: { Button(L10n.text("ui.retry")) { Task { await bootstrap() } } }
+                } else { ProgressView(L10n.text("ui.opening_local_data")).task { await bootstrap() } }
             }
             .tint(.primary)
         }
@@ -25,7 +25,7 @@ import SuirenCore
     }
     @MainActor private func bootstrap() async {
         do { let current = try await loadModel(); current.sceneChanged(.active) }
-        catch { startupError = error.localizedDescription }
+        catch { startupError = L10n.error(error) }
     }
     @MainActor private func loadModel() async throws -> AppModel {
         if let model { return model }

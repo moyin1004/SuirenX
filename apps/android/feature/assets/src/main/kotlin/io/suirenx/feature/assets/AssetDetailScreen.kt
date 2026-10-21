@@ -1,5 +1,13 @@
 package io.suirenx.feature.assets
 
+import io.suirenx.core.ui.localization.moneyFormat
+import io.suirenx.core.ui.localization.moneyText
+import io.suirenx.core.ui.localization.dateText
+
+import io.suirenx.core.ui.R as CopyR
+import io.suirenx.core.ui.localization.uiText
+import io.suirenx.core.ui.localization.uiQuantity
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
@@ -121,13 +129,13 @@ fun AssetDetailScreen(
     if (state.deleteConfirmation) {
         AlertDialog(
             onDismissRequest = { if (!state.isSaving) onDismissDelete() },
-            title = { Text("删除资产？") },
+            title = { Text(uiText(CopyR.string.copy_delete_this_asset)) },
             text = { Column {
-                Text("删除“${state.asset?.name.orEmpty()}”后无法在列表中恢复。已同步的数据将在下次同步时通知其他设备。")
-                state.deleteError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                Text(uiText(CopyR.string.copy_count_cannot_be_restored_from_the_list_after_deletion_synced, state.asset?.name.orEmpty()))
+                state.deleteError?.let { Text(uiText(it), color = MaterialTheme.colorScheme.error) }
             } },
-            confirmButton = { TextButton(onClick = onConfirmDelete, enabled = !state.isSaving) { Text("删除", color = MaterialTheme.colorScheme.error) } },
-            dismissButton = { TextButton(onClick = onDismissDelete, enabled = !state.isSaving) { Text("取消") } },
+            confirmButton = { TextButton(onClick = onConfirmDelete, enabled = !state.isSaving) { Text(uiText(CopyR.string.copy_delete), color = MaterialTheme.colorScheme.error) } },
+            dismissButton = { TextButton(onClick = onDismissDelete, enabled = !state.isSaving) { Text(uiText(CopyR.string.copy_cancel)) } },
         )
     }
     if (state.statusTarget != null) {
@@ -168,11 +176,11 @@ fun AssetDetailScreen(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            state.errorMessage,
+                            uiText(state.errorMessage),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Spacer(Modifier.height(12.dp))
-                        Button(onClick = onRetry) { Text("重试") }
+                        Button(onClick = onRetry) { Text(uiText(CopyR.string.copy_retry)) }
                     }
                 }
                 state.asset != null -> {
@@ -181,15 +189,15 @@ fun AssetDetailScreen(
                         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             androidx.compose.material3.OutlinedTextField(
                                 value = state.salePriceInput, onValueChange = onSalePriceChange,
-                                label = { Text("卖出价格（可选）") }, placeholder = { Text("留空表示未填写") },
+                                label = { Text(uiText(CopyR.string.copy_sale_price_optional)) }, placeholder = { Text(uiText(CopyR.string.copy_leave_blank_if_not_provided)) },
                                 enabled = !state.isSaving, singleLine = true, isError = state.salePriceError != null,
                                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
                                 modifier = Modifier.fillMaxWidth(),
                             )
-                            Text(state.salePriceError ?: "支持 0 和两位小数；留空保存可清除。其它资料请恢复后编辑。", style = MaterialTheme.typography.bodySmall,
+                            Text(state.salePriceError?.let { uiText(it) } ?: uiText(CopyR.string.copy_zero_and_up_to_two_decimal_places_are_supported_save), style = MaterialTheme.typography.bodySmall,
                                 color = if (state.salePriceError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                             Button(onClick = onSaveSalePrice, enabled = !state.isSaving, modifier = Modifier.fillMaxWidth()) {
-                                Text(if (state.isSavingSalePrice) "保存中…" else "保存卖出价格")
+                                Text(if (state.isSavingSalePrice) uiText(CopyR.string.copy_saving) else uiText(CopyR.string.copy_save_sale_price))
                             }
                         }
                     }
@@ -198,10 +206,10 @@ fun AssetDetailScreen(
                             Button(onClick = onEdit, enabled = !state.isSaving, modifier = Modifier.weight(1f).height(48.dp),
                                 shape = RoundedCornerShape(14.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary, contentColor = MaterialTheme.colorScheme.onSecondary)) {
-                                Text("编辑资产")
+                                Text(uiText(CopyR.string.copy_edit_asset))
                             }
                             OutlinedButton(onClick = onChangeStatus, enabled = !state.isSaving, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(14.dp)) {
-                                Text(if (state.asset.status == AssetStatus.Active) "退役" else "恢复服役")
+                                Text(if (state.asset.status == AssetStatus.Active) uiText(CopyR.string.copy_retire) else uiText(CopyR.string.copy_reactivate))
                             }
                         }
                     }
@@ -210,10 +218,10 @@ fun AssetDetailScreen(
                         enabled = !state.isSaving,
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp),
                     ) {
-                        Text(if (state.asset.isArchived) "恢复到资产列表" else "归档资产")
+                        Text(if (state.asset.isArchived) uiText(CopyR.string.copy_unarchive_asset) else uiText(CopyR.string.copy_archive_asset))
                     }
                     TextButton(onClick = onDelete, enabled = !state.isSaving, modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
-                        Text("删除资产", color = MaterialTheme.colorScheme.error)
+                        Text(uiText(CopyR.string.copy_delete_asset), color = MaterialTheme.colorScheme.error)
                     }
                 }
             }
@@ -256,22 +264,22 @@ private fun StatusChangeDialog(
                         onDateChange(Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().toString())
                     }
                     showDatePicker = false
-                }, enabled = dateState.selectedDateMillis != null && !state.isSaving) { Text("确定") }
+                }, enabled = dateState.selectedDateMillis != null && !state.isSaving) { Text(uiText(CopyR.string.copy_ok)) }
             },
-            dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("取消") } },
+            dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text(uiText(CopyR.string.copy_cancel)) } },
         ) { DatePicker(state = dateState, showModeToggle = false) }
     }
     AlertDialog(
         onDismissRequest = { if (!state.isSaving) onDismiss() },
-        title = { Text(if (retiring) "标记为已退役" else "恢复服役") },
+        title = { Text(if (retiring) uiText(CopyR.string.copy_retire_asset) else uiText(CopyR.string.copy_reactivate)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    if (retiring) "持有天数和日均成本将计算到退役当天。"
-                    else "将清除退役日期，按购买日至今天重新计算持有天数和日均成本。",
+                    if (retiring) uiText(CopyR.string.copy_held_days_and_cost_per_day_include_the_retirement_date)
+                    else uiText(CopyR.string.copy_clear_the_retirement_date_and_calculate_held_days_and_cost),
                 )
                 if (retiring) {
-                    Text("退役日期", style = MaterialTheme.typography.labelMedium)
+                    Text(uiText(CopyR.string.copy_retirement_date), style = MaterialTheme.typography.labelMedium)
                     OutlinedButton(
                         onClick = { showDatePicker = true },
                         enabled = !state.isSaving,
@@ -279,20 +287,20 @@ private fun StatusChangeDialog(
                         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
                     ) {
                         Text(state.retiredDateInput, modifier = Modifier.weight(1f))
-                        Icon(Icons.Default.DateRange, contentDescription = "选择退役日期")
+                        Icon(Icons.Default.DateRange, contentDescription = uiText(CopyR.string.copy_choose_retirement_date))
                     }
-                    Text("购买日期：${state.asset?.purchaseDate}", style = MaterialTheme.typography.bodySmall)
+                    Text(uiText(CopyR.string.copy_purchased_count, state.asset?.purchaseDate), style = MaterialTheme.typography.bodySmall)
                 }
-                state.statusError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                state.statusError?.let { Text(uiText(it), color = MaterialTheme.colorScheme.error) }
             }
         },
         confirmButton = {
             TextButton(onClick = onSave, enabled = !state.isSaving) {
-                Text(if (state.isSaving) "保存中…" else "确认")
+                Text(if (state.isSaving) uiText(CopyR.string.copy_saving) else uiText(CopyR.string.copy_confirm))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !state.isSaving) { Text("取消") }
+            TextButton(onClick = onDismiss, enabled = !state.isSaving) { Text(uiText(CopyR.string.copy_cancel)) }
         },
     )
 }
@@ -307,23 +315,23 @@ private fun ArchiveChangeDialog(
     AlertDialog(
         onDismissRequest = { if (!state.isSaving) onDismiss() },
         containerColor = MaterialTheme.colorScheme.surface,
-        title = { Text(if (archiving) "归档资产" else "恢复资产") },
+        title = { Text(if (archiving) uiText(CopyR.string.copy_archive_asset) else uiText(CopyR.string.copy_unarchive_asset_unarchive_asset)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    if (archiving) "归档后不再显示在日常列表和总览中。原有数据会保留，可随时从「已归档」恢复。"
-                    else "将恢复到原来的服役状态，重新显示在资产列表和总览中。",
+                    if (archiving) uiText(CopyR.string.copy_archived_assets_are_excluded_from_everyday_lists_and_totals_data)
+                    else uiText(CopyR.string.copy_restore_its_previous_lifecycle_status_and_include_it_in_asset),
                 )
-                state.archiveError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                state.archiveError?.let { Text(uiText(it), color = MaterialTheme.colorScheme.error) }
             }
         },
         confirmButton = {
             TextButton(onClick = onSave, enabled = !state.isSaving) {
-                Text(if (state.isSaving) "保存中…" else if (archiving) "确认归档" else "确认恢复")
+                Text(if (state.isSaving) uiText(CopyR.string.copy_saving) else if (archiving) uiText(CopyR.string.copy_confirm_archive) else uiText(CopyR.string.copy_confirm_unarchive))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !state.isSaving) { Text("取消") }
+            TextButton(onClick = onDismiss, enabled = !state.isSaving) { Text(uiText(CopyR.string.copy_cancel)) }
         },
     )
 }
@@ -343,13 +351,13 @@ private fun DetailTopBar(
     ) {
         TextButton(onClick = onBack) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(20.dp))
-            Text("资产", modifier = Modifier.padding(start = 6.dp))
+            Text(uiText(CopyR.string.copy_assets), modifier = Modifier.padding(start = 6.dp))
         }
         Spacer(Modifier.weight(1f))
         if (editEnabled) {
             CircleBarButton(
                 onClick = onEdit,
-                contentDescription = "编辑资产",
+                contentDescription = uiText(CopyR.string.copy_edit_asset),
             ) {
                 Icon(
                     imageVector = Icons.Default.Edit,
@@ -383,7 +391,7 @@ private fun CircleBarButton(
 
 @Composable
 private fun AssetDetailContent(asset: Asset, modifier: Modifier = Modifier) {
-    val currency = NumberFormat.getCurrencyInstance(Locale.CHINA)
+    val currency = moneyFormat()
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -403,11 +411,11 @@ private fun AssetDetailContent(asset: Asset, modifier: Modifier = Modifier) {
         Spacer(Modifier.height(10.dp))
         StatusChip(asset.status)
         Spacer(Modifier.height(14.dp))
-        Text(currency.format(asset.priceCents / 100.0), fontSize = 24.sp, lineHeight = 30.sp, fontFamily = SuirenNumberFont, letterSpacing = (-0.48).sp, fontWeight = FontWeight.Normal)
-        Text("购入价格", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+        Text(currency.format(java.math.BigDecimal.valueOf(asset.priceCents, 2)), fontSize = 24.sp, lineHeight = 30.sp, fontFamily = SuirenNumberFont, letterSpacing = (-0.48).sp, fontWeight = FontWeight.Normal)
+        Text(uiText(CopyR.string.copy_purchase_price_purchase_price), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
         if (asset.isArchived) {
             Spacer(Modifier.height(10.dp))
-            Text("已归档", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(uiText(CopyR.string.copy_archived), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(Modifier.height(20.dp))
         Row(
@@ -416,35 +424,35 @@ private fun AssetDetailContent(asset: Asset, modifier: Modifier = Modifier) {
         ) {
             MetricTile(
                 value = "${asset.heldDays}",
-                label = "持有天数",
+                label = uiText(CopyR.string.copy_held_days),
                 modifier = Modifier.weight(1f),
             )
             MetricTile(
-                value = currency.format(asset.dailyCostCents / 100.0),
-                label = "日均成本",
+                value = currency.format(java.math.BigDecimal.valueOf(asset.dailyCostCents, 2)),
+                label = uiText(CopyR.string.copy_cost_per_day),
                 modifier = Modifier.weight(1f),
             )
             MetricTile(
                 value = warrantyLabel(asset),
-                label = "保修状态",
+                label = uiText(CopyR.string.copy_warranty_status),
                 modifier = Modifier.weight(1f),
             )
         }
         Spacer(Modifier.height(16.dp))
         InfoCard(
             rows = (listOf(
-                "购买日期" to asset.purchaseDate.toString(),
+                uiText(CopyR.string.copy_purchase_date) to dateText(asset.purchaseDate),
             ) + if (asset.status == AssetStatus.Retired) {
-                listOf("退役日期" to (asset.retiredDate?.toString() ?: "未记录"))
+                listOf(uiText(CopyR.string.copy_retirement_date) to (asset.retiredDate?.let { dateText(it) } ?: uiText(CopyR.string.copy_not_recorded)))
             } else emptyList()) + asset.archivedAt?.let {
-                listOf("归档日期" to it.atZone(ZoneId.systemDefault()).toLocalDate().toString())
+                listOf(uiText(CopyR.string.copy_archive_date) to dateText(it.atZone(ZoneId.systemDefault()).toLocalDate()))
             }.orEmpty(),
         )
         val metadata = buildList {
-            asset.purchaseChannel?.takeIf(String::isNotBlank)?.let { add("购买渠道" to it) }
-            asset.warrantyEndDate?.let { add("保修截止日" to it.toString()) }
-            if (asset.tags.isNotEmpty()) add("标签" to asset.tags.joinToString("、"))
-            asset.notes.takeIf(String::isNotBlank)?.let { add("备注" to it) }
+            asset.purchaseChannel?.takeIf(String::isNotBlank)?.let { add(uiText(CopyR.string.copy_purchase_channel) to it) }
+            asset.warrantyEndDate?.let { add(uiText(CopyR.string.copy_warranty_end_date_warranty_end_date) to dateText(it)) }
+            if (asset.tags.isNotEmpty()) add(uiText(CopyR.string.copy_tags) to asset.tags.joinToString("、"))
+            asset.notes.takeIf(String::isNotBlank)?.let { add(uiText(CopyR.string.copy_notes) to it) }
         }
         if (metadata.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))
@@ -454,12 +462,13 @@ private fun AssetDetailContent(asset: Asset, modifier: Modifier = Modifier) {
     }
 }
 
+@Composable
 private fun warrantyLabel(asset: Asset): String {
     val warrantyEndDate = asset.warrantyEndDate
     return when {
-        warrantyEndDate == null -> "未设置"
-        warrantyEndDate.isBefore(LocalDate.now()) -> "已到期"
-        else -> "有效"
+        warrantyEndDate == null -> uiText(CopyR.string.copy_not_set)
+        warrantyEndDate.isBefore(LocalDate.now()) -> uiText(CopyR.string.copy_expired_expired)
+        else -> uiText(CopyR.string.copy_valid)
     }
 }
 
@@ -506,7 +515,7 @@ private fun StatusChip(status: AssetStatus, modifier: Modifier = Modifier) {
         contentColor = if (active) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
     ) {
         Text(
-            text = if (active) "服役中" else "已退役",
+            text = if (active) uiText(CopyR.string.copy_active) else uiText(CopyR.string.copy_retired),
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
             fontSize = 14.sp,
         )

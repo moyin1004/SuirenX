@@ -1,5 +1,9 @@
 package io.suirenx.feature.tools
 
+import io.suirenx.core.ui.R as CopyR
+import io.suirenx.core.ui.localization.uiText
+import io.suirenx.core.ui.localization.uiQuantity
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -32,10 +36,10 @@ fun ToolsRoute(
             .padding(horizontal = 16.dp).padding(bottom = 110.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        SuirenHeader(title = "工具")
+        SuirenHeader(title = uiText(CopyR.string.copy_tools))
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("把日常工具放在一起", fontSize = 29.sp, lineHeight = 36.sp, fontWeight = FontWeight.SemiBold)
-            Text("从一个工具开始，后续可以继续扩展你的个人工作流。", fontSize = 13.sp, lineHeight = 21.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(uiText(CopyR.string.copy_your_everyday_tools_together_your_everyday_tools_together), fontSize = 29.sp, lineHeight = 36.sp, fontWeight = FontWeight.SemiBold)
+            Text(uiText(CopyR.string.copy_start_with_one_tool_and_grow_your_personal_workflow), fontSize = 13.sp, lineHeight = 21.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Column(Modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Surface(
@@ -44,17 +48,17 @@ fun ToolsRoute(
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 color = MaterialTheme.colorScheme.surface,
             ) {
-                ToolEntry("用品 / 保质期", "管理耗材、用品和临近到期提醒", pendingCount?.let { "$it 项待处理" } ?: "查看提醒", SuirenIcons.AssetBox, true)
+                ToolEntry(uiText(CopyR.string.copy_expiry_items), uiText(CopyR.string.copy_manage_essentials_and_upcoming_expiry_dates), pendingCount?.let { uiQuantity(CopyR.plurals.copy_count_need_attention, it) } ?: uiText(CopyR.string.copy_view_reminders), SuirenIcons.AssetBox, true)
             }
             Surface(
                 shape = RoundedCornerShape(16.dp),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 color = lerp(MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.surfaceVariant, 0.24f),
             ) {
-                ToolEntry("更多工具", "以后会在这里加入新的生活与工作工具", "即将加入", Icons.Default.Refresh, false)
+                ToolEntry(uiText(CopyR.string.copy_more_tools), uiText(CopyR.string.copy_more_everyday_tools_will_appear_here), uiText(CopyR.string.copy_coming_later), Icons.Default.Refresh, false)
             }
         }
-        Text("工具是独立入口；用品 / 保质期总览也会出现在首页，方便快速查看。", fontSize = 11.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(uiText(CopyR.string.copy_tools_have_their_own_entry_expiry_summaries_also_appear_on), fontSize = 11.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

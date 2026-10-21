@@ -1,5 +1,9 @@
 package io.suirenx.feature.settings
 
+import io.suirenx.core.ui.R as CopyR
+import io.suirenx.core.ui.localization.uiText
+import io.suirenx.core.ui.localization.uiQuantity
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
@@ -28,7 +32,9 @@ internal fun ServerEditorFields(
     val busy = state.busy || state.authBusy || state.migrationBusy || state.testingConnection
     val tested = state.connectionTestAddress == state.address.trim() && !state.connectionTestFailed
     val renamed = server != null && state.address.trim() == server.url && state.name != server.name
-    GroupTitle("地址信息")
+    val nameDescription = uiText(CopyR.string.copy_name_optional)
+    val addressDescription = uiText(CopyR.string.copy_domain_or_ip_address)
+    GroupTitle(uiText(CopyR.string.copy_address_details))
     SettingsCard(compact = true) {
         val colors = TextFieldDefaults.colors(
             focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
@@ -36,34 +42,34 @@ internal fun ServerEditorFields(
             focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
             disabledIndicatorColor = Color.Transparent,
         )
-        TextField(state.name, onNameChanged, Modifier.fillMaxWidth().testTag("server.name").semantics { contentDescription = "名称（可选）" },
-            placeholder = { Text("名称（可选）") }, singleLine = true, enabled = !busy, colors = colors)
+        TextField(state.name, onNameChanged, Modifier.fillMaxWidth().testTag("server.name").semantics { contentDescription = nameDescription },
+            placeholder = { Text(uiText(CopyR.string.copy_name_optional)) }, singleLine = true, enabled = !busy, colors = colors)
         HorizontalDivider()
-        TextField(state.address, onAddressChanged, Modifier.fillMaxWidth().testTag("server.address").semantics { contentDescription = "域名或 IP 地址" },
-            placeholder = { Text("域名或 IP 地址") }, singleLine = true, enabled = !busy,
+        TextField(state.address, onAddressChanged, Modifier.fillMaxWidth().testTag("server.address").semantics { contentDescription = addressDescription },
+            placeholder = { Text(uiText(CopyR.string.copy_domain_or_ip_address)) }, singleLine = true, enabled = !busy,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri), colors = colors)
     }
     SettingsCard(compact = true) {
         TextButton(onClick = { onTestConnection(state.address) }, enabled = !busy,
-            modifier = Modifier.fillMaxWidth()) { Text(if (state.testingConnection) "测试中…" else "测试连接") }
+            modifier = Modifier.fillMaxWidth()) { Text(if (state.testingConnection) uiText(CopyR.string.copy_testing) else uiText(CopyR.string.copy_test_connection)) }
         ConnectionTestResult(state)
-        Caption("测试成功仅表示此健康接口可达，不代表账号或同步已验证。")
+        Caption(uiText(CopyR.string.copy_a_successful_test_only_confirms_reachability_it_does_not_verify))
     }
     SettingsCard(compact = true) {
         TextButton(onClick = onSave, enabled = !busy && state.address.isNotBlank() && (tested || renamed),
-            modifier = Modifier.fillMaxWidth()) { Text(if (state.busy) "保存中…" else "保存") }
+            modifier = Modifier.fillMaxWidth()) { Text(if (state.busy) uiText(CopyR.string.copy_saving) else uiText(CopyR.string.copy_save)) }
         state.error?.let { ErrorNote(it) }
     }
     if (server != null) {
         val selected = state.settings?.activeUrl == server.url
         SettingsCard(compact = true) {
             TextButton(onClick = { onSelect(server.url) }, enabled = !busy && !selected,
-                modifier = Modifier.fillMaxWidth()) { Text(if (selected) "已选择此服务器" else "选择此服务器") }
-            Caption("选择地址会暂停同步，不会清除账号或自动上传。")
+                modifier = Modifier.fillMaxWidth()) { Text(if (selected) uiText(CopyR.string.copy_selected_server) else uiText(CopyR.string.copy_select_server)) }
+            Caption(uiText(CopyR.string.copy_selecting_an_address_pauses_sync_your_account_stays_signed_in))
         }
         SettingsCard(compact = true) {
             TextButton(onClick = onDelete, enabled = !busy, modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("删除地址") }
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text(uiText(CopyR.string.copy_delete_address)) }
         }
     }
 }

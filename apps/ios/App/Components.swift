@@ -39,7 +39,7 @@ struct PageHeading: View {
 }
 struct InfoRow: View {
     let label: String; let value: String
-    var body: some View { LabeledContent { Text(value.isEmpty ? "未填写" : value).multilineTextAlignment(.trailing).textSelection(.enabled) } label: { Text(label).foregroundStyle(.secondary) }.font(.subheadline).padding(.vertical, 4) }
+    var body: some View { LabeledContent { Text(value.isEmpty ? L10n.text("ui.not_provided") : value).multilineTextAlignment(.trailing).textSelection(.enabled) } label: { Text(label).foregroundStyle(.secondary) }.font(.subheadline).padding(.vertical, 4) }
 }
 struct Chip: View {
     let title: String; var selected = false; let action: () -> Void
@@ -55,34 +55,51 @@ struct AssetImage: View {
     var body: some View { Image(AssetIcon.find(key).image).resizable().scaledToFit().frame(width: size, height: size).padding(7).background(Palette.inset, in: RoundedRectangle(cornerRadius: 14)).accessibilityLabel(AssetIcon.find(key).label) }
 }
 func currency(_ cents: Decimal) -> String {
-    let f = NumberFormatter(); f.numberStyle = .decimal; f.minimumFractionDigits = 2; f.maximumFractionDigits = 2
-    return "¥" + (f.string(from: (cents / 100) as NSDecimalNumber) ?? "0.00")
+    DisplayFormatting.currency(cents: cents)
 }
 struct SummaryCard: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let assets: [Asset]; var totalCount: Int?; var compact = false
     var body: some View {
         let summary = AssetSummary(assets)
         VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 7) { Circle().fill(Palette.accent).frame(width: 6, height: 6); Text("资产概览").font(.caption.weight(.semibold)); if let totalCount { Text("\(summary.count)/\(totalCount)").font(.caption.monospacedDigit()).foregroundStyle(.secondary) } }
-            HStack(alignment: .firstTextBaseline, spacing: 16) {
-                amount("总资产金额", currency(summary.totalCents), large: true)
-                Spacer(minLength: 0); amount("日均成本", currency(summary.dailyCents), large: false)
+            HStack(spacing: 7) { Circle().fill(Palette.accent).frame(width: 6, height: 6); Text(L10n.text("ui.asset_overview")).font(.caption.weight(.semibold)); if let totalCount { Text("\(summary.count)/\(totalCount)").font(.caption.monospacedDigit()).foregroundStyle(.secondary) } }
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 16) {
+                    amount(L10n.text("ui.total_purchase_amount"), currency(summary.totalCents), large: true)
+                    amount(L10n.text("ui.daily_cost"), currency(summary.dailyCents), large: false)
+                }
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 16) {
+                    amount(L10n.text("ui.total_purchase_amount"), currency(summary.totalCents), large: true)
+                    Spacer(minLength: 0); amount(L10n.text("ui.daily_cost"), currency(summary.dailyCents), large: false)
+                }
             }
             if !compact {
-                ViewThatFits(in: .horizontal) {
-                    HStack { metric("服役中", "\(summary.active)"); Spacer(); metric("已退役", "\(summary.retired)"); Spacer(); metric("最长持有天", "\(summary.longestDays)") }
-                    VStack(alignment: .leading, spacing: 8) { metric("服役中", "\(summary.active)"); metric("已退役", "\(summary.retired)"); metric("最长持有天", "\(summary.longestDays)") }
+                Group {
+                    if dynamicTypeSize.isAccessibilitySize {
+                        VStack(alignment: .leading, spacing: 8) {
+                            metric(L10n.text("ui.active"), "\(summary.active)")
+                            metric(L10n.text("ui.retired"), "\(summary.retired)")
+                            metric(L10n.text("ui.longest_held_days"), "\(summary.longestDays)")
+                        }.frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        ViewThatFits(in: .horizontal) {
+                            HStack { metric(L10n.text("ui.active"), "\(summary.active)"); Spacer(); metric(L10n.text("ui.retired"), "\(summary.retired)"); Spacer(); metric(L10n.text("ui.longest_held_days"), "\(summary.longestDays)") }
+                            VStack(alignment: .leading, spacing: 8) { metric(L10n.text("ui.active"), "\(summary.active)"); metric(L10n.text("ui.retired"), "\(summary.retired)"); metric(L10n.text("ui.longest_held_days"), "\(summary.longestDays)") }
+                        }
+                    }
                 }.padding(10).frame(maxWidth: .infinity).background(Palette.inset, in: RoundedRectangle(cornerRadius: 12))
             }
         }.sxCard()
     }
     private func amount(_ label: String, _ value: String, large: Bool) -> some View {
-        VStack(alignment: large ? .leading : .trailing, spacing: 8) {
+        VStack(alignment: large || dynamicTypeSize.isAccessibilitySize ? .leading : .trailing, spacing: 8) {
             Text(label).font(.caption).foregroundStyle(.secondary)
             Text(value).font(.system(large ? .title : .title2, design: .monospaced).weight(.medium)).lineLimit(1).minimumScaleFactor(0.4).accessibilityLabel("\(label) \(value)")
         }
     }
-    private func metric(_ label: String, _ value: String) -> some View { HStack(spacing: 4) { Text(label).foregroundStyle(.secondary); Text(value).fontWeight(.semibold).monospacedDigit() }.font(.caption2).fixedSize() }
+    private func metric(_ label: String, _ value: String) -> some View { HStack(spacing: 4) { Text(label).foregroundStyle(.secondary); Text(value).fontWeight(.semibold).monospacedDigit() }.font(.caption2).fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: true) }
 }
 struct DateField: View {
     let label: String; @Binding var value: LocalDay; var range: ClosedRange<Date>? = nil

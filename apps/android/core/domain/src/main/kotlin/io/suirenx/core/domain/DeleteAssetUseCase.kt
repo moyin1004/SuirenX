@@ -4,7 +4,7 @@ import javax.inject.Inject
 
 class DeleteAssetUseCase @Inject constructor(private val repository: AssetRepository) {
     suspend operator fun invoke(id: String): Result<Unit> {
-        if (id.isBlank()) return Result.failure(IllegalArgumentException("缺少资产编号"))
+        if (id.isBlank()) return Result.failure(IllegalArgumentException("error_asset_id_required"))
         return repository.deleteAsset(id)
     }
 }

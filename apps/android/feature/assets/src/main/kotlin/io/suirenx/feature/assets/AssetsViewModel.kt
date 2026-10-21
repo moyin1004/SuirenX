@@ -24,17 +24,17 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 enum class AssetFilter(val label: String, val status: AssetStatus?) {
-    All("全部", null),
-    Active("服役中", AssetStatus.Active),
-    Retired("已退役", AssetStatus.Retired),
-    Archived("已归档", null),
+    All("copy_all", null),
+    Active("copy_active", AssetStatus.Active),
+    Retired("copy_retired", AssetStatus.Retired),
+    Archived("copy_archived", null),
 }
 
 enum class AssetSort(val label: String) {
-    PurchaseDate("购买日期"),
-    Price("购买金额"),
-    DailyCost("日均成本"),
-    HeldDays("持有天数"),
+    PurchaseDate("copy_purchase_date"),
+    Price("copy_purchase_price"),
+    DailyCost("copy_cost_per_day"),
+    HeldDays("copy_held_days"),
 }
 
 data class AssetOverview(
@@ -155,7 +155,7 @@ class AssetsViewModel @Inject constructor(
                         it.copy(
                             isLoading = false,
                             isRefreshing = false,
-                            errorMessage = "无法读取本机数据，请重试",
+                            errorMessage = "error_local_read_failed",
                         )
                     }
                 },
